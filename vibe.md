@@ -1,2 +1,0 @@
-Often during debugging, pentesting, and hardware testing, it is necessary to hook up subsystems on different subnets.  This had traditionally been done with SSH tunnels, VPNs, necat, and other ad-hoc tools.  Those tools often break or misbehave during testing and then valuable work time is replaced with debugging those tools.  This project aims to replace those tools with a more stable infrastructure.
-
