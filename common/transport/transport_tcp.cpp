@@ -1,8 +1,8 @@
 #include "common/transport/transport_tcp.hpp"
 
 #include <limits>
-#include <string>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace rsp::transport {
@@ -36,34 +36,33 @@ TcpConnection::TcpConnection(rsp::os::SocketHandle socketHandle) : socketHandle_
 }
 
 TcpConnection::~TcpConnection() {
-    if (rsp::os::isValidSocket(socketHandle_)) {
-        rsp::os::closeSocket(socketHandle_);
-    }
-}
-
-TcpConnection::TcpConnection(TcpConnection&& other) noexcept : socketHandle_(other.socketHandle_) {
-    other.socketHandle_ = rsp::os::invalidSocket();
-}
-
-TcpConnection& TcpConnection::operator=(TcpConnection&& other) noexcept {
-    if (this != &other) {
-        if (rsp::os::isValidSocket(socketHandle_)) {
-            rsp::os::closeSocket(socketHandle_);
-        }
-
-        socketHandle_ = other.socketHandle_;
-        other.socketHandle_ = rsp::os::invalidSocket();
-    }
-
-    return *this;
+    close();
 }
 
 int TcpConnection::send(const rsp::Buffer& data) {
+    std::lock_guard<std::mutex> lock(socketMutex_);
+    if (!rsp::os::isValidSocket(socketHandle_)) {
+        return -1;
+    }
+
     return rsp::os::sendSocket(socketHandle_, data.data(), data.size());
 }
 
 int TcpConnection::recv(rsp::Buffer& buffer) {
+    std::lock_guard<std::mutex> lock(socketMutex_);
+    if (!rsp::os::isValidSocket(socketHandle_)) {
+        return -1;
+    }
+
     return rsp::os::recvSocket(socketHandle_, buffer.data(), buffer.size());
+}
+
+void TcpConnection::close() {
+    std::lock_guard<std::mutex> lock(socketMutex_);
+    if (rsp::os::isValidSocket(socketHandle_)) {
+        rsp::os::closeSocket(socketHandle_);
+        socketHandle_ = rsp::os::invalidSocket();
+    }
 }
 
 TcpTransport::TcpTransport() : listener_(rsp::os::invalidSocket()), listening_(false) {
@@ -73,44 +72,85 @@ TcpTransport::TcpTransport() : listener_(rsp::os::invalidSocket()), listening_(f
 }
 
 TcpTransport::~TcpTransport() {
-    stopListening();
+    stop();
     rsp::os::shutdownSockets();
 }
 
 bool TcpTransport::listen(const std::string& parameters) {
-    if (listening_) {
-        return false;
-    }
-
     std::string bindAddress;
     uint16_t port = 0;
     if (!parseEndpoint(parameters, bindAddress, port)) {
         return false;
     }
 
-    listener_ = rsp::os::createTcpListener(bindAddress, port, 16);
-    if (!rsp::os::isValidSocket(listener_)) {
+    const rsp::os::SocketHandle listener = rsp::os::createTcpListener(bindAddress, port, 16);
+    if (!rsp::os::isValidSocket(listener)) {
         return false;
     }
 
-    listening_ = true;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (listening_) {
+            rsp::os::closeSocket(listener);
+            return false;
+        }
+
+        listener_ = listener;
+        listening_ = true;
+    }
+
     acceptThread_ = std::thread(&TcpTransport::acceptLoop, this);
     return true;
 }
 
-std::shared_ptr<Connection> TcpTransport::connect(const std::string& parameters) {
+ConnectionHandle TcpTransport::connect(const std::string& parameters) {
     std::string address;
     uint16_t port = 0;
     if (!parseEndpoint(parameters, address, port)) {
         return nullptr;
     }
 
-    const rsp::os::SocketHandle socketHandle = rsp::os::connectTcp(address, port);
-    if (!rsp::os::isValidSocket(socketHandle)) {
+    ConnectionHandle newConnection = connectParsed(address, port);
+    if (newConnection == nullptr) {
         return nullptr;
     }
 
-    return std::make_shared<TcpConnection>(socketHandle);
+    ConnectionHandle previousConnection;
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    lastParameters_ = parameters;
+    previousConnection = activeConnection_;
+    activeConnection_ = newConnection;
+
+    if (previousConnection != nullptr && previousConnection != newConnection) {
+        previousConnection->close();
+    }
+
+    return newConnection;
+}
+
+ConnectionHandle TcpTransport::reconnect() {
+    std::string parameters;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        parameters = lastParameters_;
+    }
+
+    if (parameters.empty()) {
+        return nullptr;
+    }
+
+    return connect(parameters);
+}
+
+void TcpTransport::stop() {
+    stopListening();
+    stopConnection();
+}
+
+ConnectionHandle TcpTransport::connection() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return activeConnection_;
 }
 
 bool TcpTransport::parseEndpoint(const std::string& parameters, std::string& address, uint16_t& port) {
@@ -124,11 +164,17 @@ bool TcpTransport::parseEndpoint(const std::string& parameters, std::string& add
 }
 
 void TcpTransport::stopListening() {
-    listening_ = false;
+    rsp::os::SocketHandle listener = rsp::os::invalidSocket();
 
-    if (rsp::os::isValidSocket(listener_)) {
-        rsp::os::closeSocket(listener_);
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        listening_ = false;
+        listener = listener_;
         listener_ = rsp::os::invalidSocket();
+    }
+
+    if (rsp::os::isValidSocket(listener)) {
+        rsp::os::closeSocket(listener);
     }
 
     if (acceptThread_.joinable()) {
@@ -136,15 +182,48 @@ void TcpTransport::stopListening() {
     }
 }
 
+void TcpTransport::stopConnection() {
+    ConnectionHandle activeConnection;
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        activeConnection = std::move(activeConnection_);
+    }
+
+    if (activeConnection != nullptr) {
+        activeConnection->close();
+    }
+}
+
 void TcpTransport::acceptLoop() {
-    while (listening_) {
-        const rsp::os::SocketHandle acceptedSocket = rsp::os::acceptSocket(listener_);
+    while (true) {
+        rsp::os::SocketHandle listener = rsp::os::invalidSocket();
+
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (!listening_) {
+                break;
+            }
+
+            listener = listener_;
+        }
+
+        const rsp::os::SocketHandle acceptedSocket = rsp::os::acceptSocket(listener);
         if (!rsp::os::isValidSocket(acceptedSocket)) {
             continue;
         }
 
         notifyNewConnection(std::make_shared<TcpConnection>(acceptedSocket));
     }
+}
+
+ConnectionHandle TcpTransport::connectParsed(const std::string& address, uint16_t port) {
+    const rsp::os::SocketHandle socketHandle = rsp::os::connectTcp(address, port);
+    if (!rsp::os::isValidSocket(socketHandle)) {
+        return nullptr;
+    }
+
+    return std::make_shared<TcpConnection>(socketHandle);
 }
 
 }  // namespace rsp::transport

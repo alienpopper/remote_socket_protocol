@@ -3,8 +3,8 @@
 #include "common/transport/transport.hpp"
 #include "os/os_socket.hpp"
 
-#include <atomic>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 namespace rsp::transport {
@@ -17,17 +17,16 @@ public:
     TcpConnection(const TcpConnection&) = delete;
     TcpConnection& operator=(const TcpConnection&) = delete;
 
-    TcpConnection(TcpConnection&& other) noexcept;
-    TcpConnection& operator=(TcpConnection&& other) noexcept;
-
     int send(const rsp::Buffer& data) override;
     int recv(rsp::Buffer& buffer) override;
+    void close() override;
 
 private:
+    mutable std::mutex socketMutex_;
     rsp::os::SocketHandle socketHandle_;
 };
 
-class TcpTransport : public Transport {
+class TcpTransport : public ListeningTransport {
 public:
     TcpTransport();
     ~TcpTransport() override;
@@ -36,16 +35,24 @@ public:
     TcpTransport& operator=(const TcpTransport&) = delete;
 
     bool listen(const std::string& parameters) override;
-    std::shared_ptr<Connection> connect(const std::string& parameters) override;
+    ConnectionHandle connect(const std::string& parameters) override;
+    ConnectionHandle reconnect() override;
+    void stop() override;
+    ConnectionHandle connection() const override;
 
 private:
     static bool parseEndpoint(const std::string& parameters, std::string& address, uint16_t& port);
+    ConnectionHandle connectParsed(const std::string& address, uint16_t port);
     void stopListening();
+    void stopConnection();
     void acceptLoop();
 
+    mutable std::mutex stateMutex_;
     rsp::os::SocketHandle listener_;
-    std::atomic<bool> listening_;
+    bool listening_;
     std::thread acceptThread_;
+    std::string lastParameters_;
+    ConnectionHandle activeConnection_;
 };
 
 }  // namespace rsp::transport

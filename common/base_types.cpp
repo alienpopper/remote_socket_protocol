@@ -1,6 +1,9 @@
 #include "common/base_types.hpp"
 
+#include "os/os_random.hpp"
+
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <iomanip>
 #include <sstream>
@@ -78,6 +81,11 @@ void Buffer::resize(uint32_t size) {
 }
 
 GUID::GUID() : high_(0), low_(0) {
+    std::array<uint8_t, 16> randomBytes{};
+    rsp::os::randomFill(randomBytes.data(), static_cast<uint32_t>(randomBytes.size()));
+
+    std::memcpy(&high_, randomBytes.data(), sizeof(high_));
+    std::memcpy(&low_, randomBytes.data() + sizeof(high_), sizeof(low_));
 }
 
 GUID::GUID(uint64_t high, uint64_t low) : high_(high), low_(low) {
@@ -110,6 +118,14 @@ uint64_t GUID::high() const {
 
 uint64_t GUID::low() const {
     return low_;
+}
+
+bool GUID::operator<(const GUID& other) const {
+    if (high_ != other.high_) {
+        return high_ < other.high_;
+    }
+
+    return low_ < other.low_;
 }
 
 bool GUID::operator==(const GUID& other) const {

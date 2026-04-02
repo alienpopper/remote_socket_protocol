@@ -2,13 +2,21 @@
 
 namespace rsp::transport {
 
-void Transport::setNewConnectionCallback(NewConnectionCallback callback) {
+void ListeningTransport::setNewConnectionCallback(NewConnectionCallback callback) {
+    std::lock_guard<std::mutex> lock(newConnectionCallbackMutex_);
     newConnectionCallback_ = std::move(callback);
 }
 
-void Transport::notifyNewConnection(const std::shared_ptr<Connection>& connection) const {
-    if (newConnectionCallback_) {
-        newConnectionCallback_(connection);
+void ListeningTransport::notifyNewConnection(const ConnectionHandle& connection) const {
+    NewConnectionCallback callback;
+
+    {
+        std::lock_guard<std::mutex> lock(newConnectionCallbackMutex_);
+        callback = newConnectionCallback_;
+    }
+
+    if (callback) {
+        callback(connection);
     }
 }
 

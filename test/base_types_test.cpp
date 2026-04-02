@@ -31,9 +31,14 @@ int main() {
     require(buffer.data()[0] == 1 && buffer.data()[3] == 4,
         "buffer resize should preserve existing contents");
 
-        const rsp::GUID emptyGuid;
-        require(emptyGuid.toString() == "00000000-0000-0000-0000-000000000000",
-                "default GUID should be zeroed");
+        const rsp::GUID randomGuid;
+        const std::string randomGuidText = randomGuid.toString();
+        require(randomGuidText.size() == 36,
+            "default GUID should serialize to canonical GUID text length");
+
+        const rsp::GUID reparsedRandomGuid(randomGuidText);
+        require(reparsedRandomGuid == randomGuid,
+            "default GUID should round-trip through canonical text");
 
         const rsp::GUID parsedGuid("00112233-4455-6677-8899-aabbccddeeff");
         require(parsedGuid.toString() == "00112233-4455-6677-8899-aabbccddeeff",

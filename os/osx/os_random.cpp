@@ -1,15 +1,17 @@
 #include "os/os_random.hpp"
 
-#include <algorithm>
+#include <cstddef>
+
+#include <stdlib.h>
 
 namespace rsp::os {
 
 void randomFill(uint8_t* buffer, uint32_t length) {
-    if (buffer == nullptr) {
+    if (buffer == nullptr || length == 0) {
         return;
     }
 
-    std::fill(buffer, buffer + length, static_cast<uint8_t>(0));
+    ::arc4random_buf(buffer, static_cast<size_t>(length));
 }
 
 }  // namespace rsp::os

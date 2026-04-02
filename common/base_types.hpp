@@ -43,6 +43,7 @@ public:
     uint64_t high() const;
     uint64_t low() const;
 
+    bool operator<(const GUID& other) const;
     bool operator==(const GUID& other) const;
     bool operator!=(const GUID& other) const;
 

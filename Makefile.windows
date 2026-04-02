@@ -2,11 +2,18 @@ PROJECT_ROOT = .
 BUILD_DIR = build
 BIN_DIR = $(BUILD_DIR)\bin
 OBJ_DIR = $(BUILD_DIR)\obj
+LIB_DIR = $(BUILD_DIR)\lib
 TARGET = $(BIN_DIR)\resource_manager.exe
 KEYPAIR_TEST_TARGET = $(BIN_DIR)\keypair_test.exe
+BASE_TYPES_TEST_TARGET = $(BIN_DIR)\base_types_test.exe
+CLIENT_TEST_TARGET = $(BIN_DIR)\client_test.exe
+RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
+RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
+RSPCLIENT_SHARED_TARGET = $(BIN_DIR)\rspclient.dll
 
 !include common\Makefile
 !include os\Makefile.windows
+!include client\cpp\Makefile
 
 CPPFLAGS = /I$(PROJECT_ROOT) /nologo /EHsc /std:c++17
 CXXFLAGS = /W4 /MD
@@ -35,10 +42,21 @@ OBJECTS = \
     $(OBJ_DIR)\resource_manager_main.obj \
     $(OBJ_DIR)\os_random.obj
 
-BASE_TYPES_TEST_TARGET = $(BIN_DIR)\base_types_test.exe
 BASE_TYPES_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\base_types_test.obj
+
+CLIENT_LIBRARY_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\node.obj \
+	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\transport.obj \
+	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_socket.obj \
+	$(OBJ_DIR)\os_random.obj
 
 KEYPAIR_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
@@ -48,9 +66,21 @@ KEYPAIR_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\keypair_test.obj
 
-all: dirs $(TARGET)
+CLIENT_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\node.obj \
+	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\transport.obj \
+	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_socket.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\client_test.obj
 
-test: test-base-types test-keypair
+all: dirs $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET)
+
+test: test-base-types test-keypair test-client
 
 !include third_party\Makefile.windows
 
@@ -60,19 +90,33 @@ dirs:
 	if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
 	if not exist $(BIN_DIR) mkdir $(BIN_DIR)
 	if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
+	if not exist $(LIB_DIR) mkdir $(LIB_DIR)
 
 
 $(TARGET): $(BORINGSSL_CRYPTO_LIB) $(OBJECTS)
-	link /nologo /OUT:$(TARGET) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS)
+	cl /nologo $(CXXFLAGS) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(TARGET)
+
+$(RSPCLIENT_STATIC_TARGET): dirs $(CLIENT_LIBRARY_OBJECTS)
+	lib /nologo /OUT:$(RSPCLIENT_STATIC_TARGET) $(CLIENT_LIBRARY_OBJECTS)
+
+$(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(CLIENT_LIBRARY_OBJECTS)
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
+	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(KEYPAIR_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
-	link /nologo /OUT:$(KEYPAIR_TEST_TARGET) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB)
+	cl /nologo $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(KEYPAIR_TEST_TARGET)
 
 $(BASE_TYPES_TEST_TARGET): dirs $(BASE_TYPES_TEST_OBJECTS)
-	link /nologo /OUT:$(BASE_TYPES_TEST_TARGET) $(BASE_TYPES_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(BASE_TYPES_TEST_TARGET)
+
+$(CLIENT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(CLIENT_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(CLIENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(CLIENT_TEST_TARGET)
 
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
+
+test-client: $(CLIENT_TEST_TARGET)
+	$(CLIENT_TEST_TARGET)
 
 test-keypair: $(KEYPAIR_TEST_TARGET)
 	$(KEYPAIR_TEST_TARGET)
@@ -91,6 +135,9 @@ $(OBJ_DIR)\transport.obj: common\transport\transport.cpp common\transport\transp
 
 $(OBJ_DIR)\transport_tcp.obj: common\transport\transport_tcp.cpp common\transport\transport_tcp.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_tcp.cpp /Fo$(OBJ_DIR)\transport_tcp.obj
+
+$(OBJ_DIR)\rsp_client.obj: client\cpp\rsp_client.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client.obj
 
 $(OBJ_DIR)\os_fileops.obj: $(OS_COMMON_SOURCE) $(OS_COMMON_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c $(OS_COMMON_SOURCE) /Fo$(OBJ_DIR)\os_fileops.obj
@@ -114,6 +161,9 @@ $(OBJ_DIR)\keypair_test.obj: test\keypair_test.cpp common\keypair.hpp $(BORINGSS
 
 $(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\base_types_test.cpp /Fo$(OBJ_DIR)\base_types_test.obj
+
+$(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\client_test.cpp /Fo$(OBJ_DIR)\client_test.obj
 
 clean:
 	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)

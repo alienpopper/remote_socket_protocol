@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
+#include <stdexcept>
 
 #include <fcntl.h>
 #include <sys/random.h>
@@ -11,7 +12,7 @@
 namespace rsp::os {
 
 void randomFill(uint8_t* buffer, uint32_t length) {
-    if (buffer == nullptr) {
+    if (buffer == nullptr || length == 0) {
         return;
     }
 
@@ -55,7 +56,7 @@ void randomFill(uint8_t* buffer, uint32_t length) {
     }
 
     if (filled < length) {
-        std::fill(buffer + filled, buffer + length, static_cast<uint8_t>(0));
+        throw std::runtime_error("failed to gather cryptographic random bytes");
     }
 }
 

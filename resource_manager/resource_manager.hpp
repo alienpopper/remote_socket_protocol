@@ -11,14 +11,14 @@ namespace rsp::resource_manager {
 class ResourceManager : public rsp::RSPNode {
 public:
     ResourceManager();
-    explicit ResourceManager(std::vector<std::unique_ptr<rsp::transport::Transport>> clientTransports);
+    explicit ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports);
 
     int run() const override;
-    void addClientTransport(std::unique_ptr<rsp::transport::Transport> transport);
+    void addClientTransport(const rsp::transport::ListeningTransportHandle& transport);
     size_t clientTransportCount() const;
 
 private:
-    std::vector<std::unique_ptr<rsp::transport::Transport>> clientTransports_;
+    std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
 };
 
 }  // namespace rsp::resource_manager

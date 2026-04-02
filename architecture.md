@@ -84,7 +84,7 @@ ASCII handshake protocol
 Normally an RM listens on a TCP port.  (UDP or other protocols may be supported in the future).  When an RS/CS establishes a connection, the server is the first to transmit.
 
 ```
-RHP version 0.1.21-alpha2\r\n
+RSP version 0.1.21-alpha2\r\n
 encodings:xml, json, protobuf, C\r\n
 asymmetric: RSA, EC256\r\n
 MIC: HMAC-SHA256-AES256\r\n
