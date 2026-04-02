@@ -10,6 +10,7 @@ TARGET := $(BIN_DIR)/resource_manager
 KEYPAIR_TEST_TARGET := $(BIN_DIR)/keypair_test
 
 COMMON_SOURCES := \
+	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
 	resource_manager/resource_manager.cpp \
@@ -22,17 +23,23 @@ endif
 SOURCES := $(COMMON_SOURCES) $(OS_COMMON_SOURCE) $(OS_SOURCE)
 OBJECTS := $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SOURCES))
 KEYPAIR_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/keypair_test.o
 
+BASE_TYPES_TEST_TARGET := $(BIN_DIR)/base_types_test
+BASE_TYPES_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/test/base_types_test.o
+
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 CPPFLAGS ?= -I$(PROJECT_ROOT)
 
-.PHONY: all clean directories test test-keypair
+.PHONY: all clean directories test test-base-types test-keypair
 
 all: $(TARGET)
 
@@ -46,10 +53,16 @@ $(TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(OBJECTS)
 $(KEYPAIR_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) -o $@
 
+$(BASE_TYPES_TEST_TARGET): directories $(BASE_TYPES_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) -o $@
+
+test-base-types: $(BASE_TYPES_TEST_TARGET)
+	$(BASE_TYPES_TEST_TARGET)
+
 test-keypair: $(KEYPAIR_TEST_TARGET)
 	$(KEYPAIR_TEST_TARGET)
 
-test: test-keypair
+test: test-base-types test-keypair
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER)
 

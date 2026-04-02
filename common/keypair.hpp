@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/base_types.hpp"
+
 #include <memory>
 #include <string>
 
@@ -23,6 +25,7 @@ public:
     static KeyPair generateP256();
     static KeyPair readFromDisk(const std::string& privateKeyPath, const std::string& publicKeyPath);
 
+    NodeID nodeID() const;
     void writeToDisk(const std::string& privateKeyPath, const std::string& publicKeyPath) const;
 
     bool isValid() const;

@@ -50,6 +50,9 @@ int main() {
         require(generatedKeyPair.isValid(), "generated keypair should be valid");
         require(generatedKeyPair.get() != nullptr, "generated keypair should expose an EVP_PKEY");
 
+        const rsp::NodeID generatedNodeId = generatedKeyPair.nodeID();
+        require(generatedNodeId != rsp::NodeID(), "generated NodeID should not be zero");
+
         const std::filesystem::path testDir = std::filesystem::path("build") / "test" / "keypair";
         const std::filesystem::path privateKeyPath = testDir / "private.pem";
         const std::filesystem::path publicKeyPath = testDir / "public.pem";
@@ -60,6 +63,8 @@ int main() {
 
         rsp::KeyPair loadedKeyPair = rsp::KeyPair::readFromDisk(privateKeyPath.string(), publicKeyPath.string());
         require(loadedKeyPair.isValid(), "loaded keypair should be valid");
+        require(loadedKeyPair.nodeID() == generatedNodeId,
+            "loaded keypair should hash to the same NodeID as the generated keypair");
 
         require(serializePublicKey(generatedKeyPair.get()) == serializePublicKey(loadedKeyPair.get()),
                 "loaded public key should match generated public key");

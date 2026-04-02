@@ -2,9 +2,14 @@
 
 #include "os/os_random.hpp"
 
+#include <utility>
+
 namespace rsp {
 
-RSPNode::RSPNode() {
+RSPNode::RSPNode() : RSPNode(KeyPair::generateP256()) {
+}
+
+RSPNode::RSPNode(KeyPair keyPair) : keyPair_(std::move(keyPair)) {
     rsp::os::randomFill(instanceSeed_.data(), static_cast<uint32_t>(instanceSeed_.size()));
 }
 

@@ -12,6 +12,7 @@ CPPFLAGS = /I$(PROJECT_ROOT) /nologo /EHsc /std:c++17
 CXXFLAGS = /W4 /MD
 
 SOURCES = \
+	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
 	$(OS_COMMON_SOURCE) \
@@ -20,6 +21,7 @@ SOURCES = \
 	$(OS_SOURCE)
 
 OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\os_fileops.obj \
@@ -27,7 +29,13 @@ OBJECTS = \
     $(OBJ_DIR)\resource_manager_main.obj \
     $(OBJ_DIR)\os_random.obj
 
+BASE_TYPES_TEST_TARGET = $(BIN_DIR)\base_types_test.exe
+BASE_TYPES_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\base_types_test.obj
+
 KEYPAIR_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\os_fileops.obj \
@@ -36,7 +44,7 @@ KEYPAIR_TEST_OBJECTS = \
 
 all: dirs $(TARGET)
 
-test: test-keypair
+test: test-base-types test-keypair
 
 !include third_party\Makefile.windows
 
@@ -54,8 +62,17 @@ $(TARGET): $(BORINGSSL_CRYPTO_LIB) $(OBJECTS)
 $(KEYPAIR_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
 	link /nologo /OUT:$(KEYPAIR_TEST_TARGET) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB)
 
+$(BASE_TYPES_TEST_TARGET): dirs $(BASE_TYPES_TEST_OBJECTS)
+	link /nologo /OUT:$(BASE_TYPES_TEST_TARGET) $(BASE_TYPES_TEST_OBJECTS)
+
+test-base-types: $(BASE_TYPES_TEST_TARGET)
+	$(BASE_TYPES_TEST_TARGET)
+
 test-keypair: $(KEYPAIR_TEST_TARGET)
 	$(KEYPAIR_TEST_TARGET)
+
+$(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj
 
 $(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\node.cpp /Fo$(OBJ_DIR)\node.obj
@@ -78,6 +95,9 @@ $(OBJ_DIR)\os_random.obj: $(OS_SOURCE) $(OS_HEADER)
 
 $(OBJ_DIR)\keypair_test.obj: test\keypair_test.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\keypair_test.cpp /Fo$(OBJ_DIR)\keypair_test.obj
+
+$(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\base_types_test.cpp /Fo$(OBJ_DIR)\base_types_test.obj
 
 clean:
 	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)

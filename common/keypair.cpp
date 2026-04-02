@@ -13,6 +13,8 @@
 #include <openssl/evp.h>
 #include <openssl/mem.h>
 #include <openssl/pem.h>
+#include <openssl/sha.h>
+#include <openssl/x509.h>
 
 namespace rsp {
 
@@ -129,6 +131,36 @@ KeyPair KeyPair::readFromDisk(const std::string& privateKeyPath, const std::stri
     verifyMatchingPair(privateKey.get(), publicKey.get());
 
     return KeyPair(duplicateKey(privateKey.get()).release());
+}
+
+NodeID KeyPair::nodeID() const {
+    if (!isValid()) {
+        throw makeError("cannot derive a NodeID from an empty keypair");
+    }
+
+    unsigned char* derBytes = nullptr;
+    const int derLength = i2d_PUBKEY(key_.get(), &derBytes);
+    if (derLength <= 0 || derBytes == nullptr) {
+        throw makeError("failed to serialize public key for NodeID hashing");
+    }
+
+    unsigned char digest[SHA256_DIGEST_LENGTH] = {};
+    const unsigned char* derBegin = derBytes;
+    const int hashResult = SHA256(derBegin, static_cast<size_t>(derLength), digest) == nullptr ? 0 : 1;
+    OPENSSL_free(derBytes);
+
+    if (hashResult != 1) {
+        throw makeError("failed to hash public key into NodeID");
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    for (int index = 0; index < 8; ++index) {
+        high = (high << 8) | static_cast<uint64_t>(digest[index]);
+        low = (low << 8) | static_cast<uint64_t>(digest[index + 8]);
+    }
+
+    return NodeID(high, low);
 }
 
 void KeyPair::writeToDisk(const std::string& privateKeyPath, const std::string& publicKeyPath) const {
