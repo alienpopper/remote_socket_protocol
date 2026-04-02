@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <iomanip>
 #include <sstream>
@@ -139,6 +141,60 @@ bool GUID::operator!=(const GUID& other) const {
 GUID GUID::parse(const std::string& guidString) {
     const std::string normalized = normalize(guidString);
     return GUID(parseHex64(normalized.substr(0, 16)), parseHex64(normalized.substr(16, 16)));
+}
+
+DateTime::DateTime()
+    : secondsSinceEpoch_(std::chrono::duration<double>(
+          std::chrono::system_clock::now().time_since_epoch()).count()) {
+}
+
+DateTime::DateTime(double secondsSinceEpoch) : secondsSinceEpoch_(secondsSinceEpoch) {
+}
+
+DateTime DateTime::fromMillisecondsSinceEpoch(uint64_t millisecondsSinceEpoch) {
+    return DateTime(static_cast<double>(millisecondsSinceEpoch) / 1000.0);
+}
+
+double DateTime::secondsSinceEpoch() const {
+    return secondsSinceEpoch_;
+}
+
+uint64_t DateTime::millisecondsSinceEpoch() const {
+    const double milliseconds = secondsSinceEpoch_ * 1000.0;
+    return static_cast<uint64_t>(std::llround(milliseconds));
+}
+
+DateTime& DateTime::operator+=(double seconds) {
+    secondsSinceEpoch_ += seconds;
+    return *this;
+}
+
+DateTime& DateTime::operator+=(const DateTime& other) {
+    return (*this += other.secondsSinceEpoch_);
+}
+
+bool DateTime::operator==(const DateTime& other) const {
+    return secondsSinceEpoch_ == other.secondsSinceEpoch_;
+}
+
+bool DateTime::operator!=(const DateTime& other) const {
+    return !(*this == other);
+}
+
+bool DateTime::operator<(const DateTime& other) const {
+    return secondsSinceEpoch_ < other.secondsSinceEpoch_;
+}
+
+bool DateTime::operator<=(const DateTime& other) const {
+    return secondsSinceEpoch_ <= other.secondsSinceEpoch_;
+}
+
+bool DateTime::operator>(const DateTime& other) const {
+    return secondsSinceEpoch_ > other.secondsSinceEpoch_;
+}
+
+bool DateTime::operator>=(const DateTime& other) const {
+    return secondsSinceEpoch_ >= other.secondsSinceEpoch_;
 }
 
 NodeID::NodeID() = default;

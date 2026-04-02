@@ -163,6 +163,68 @@ NodeID KeyPair::nodeID() const {
     return NodeID(high, low);
 }
 
+Buffer KeyPair::sign(const Buffer& message) const {
+    if (!isValid()) {
+        throw makeError("cannot sign with an empty keypair");
+    }
+
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context(EVP_MD_CTX_new(), &EVP_MD_CTX_free);
+    if (!context) {
+        throw makeError("failed to allocate signing context");
+    }
+
+    if (EVP_DigestSignInit(context.get(), nullptr, EVP_sha256(), nullptr, key_.get()) != 1) {
+        throw makeError("failed to initialize signature generation");
+    }
+
+    if (!message.empty() && EVP_DigestSignUpdate(context.get(), message.data(), message.size()) != 1) {
+        throw makeError("failed to update signature generation");
+    }
+
+    size_t signatureLength = 0;
+    if (EVP_DigestSignFinal(context.get(), nullptr, &signatureLength) != 1) {
+        throw makeError("failed to size signature buffer");
+    }
+
+    Buffer signature(static_cast<uint32_t>(signatureLength));
+    if (EVP_DigestSignFinal(context.get(), signature.data(), &signatureLength) != 1) {
+        throw makeError("failed to finalize signature generation");
+    }
+
+    signature.resize(static_cast<uint32_t>(signatureLength));
+    return signature;
+}
+
+bool KeyPair::verify(const Buffer& message, const Buffer& signature) const {
+    if (!isValid()) {
+        throw makeError("cannot verify with an empty keypair");
+    }
+
+    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> context(EVP_MD_CTX_new(), &EVP_MD_CTX_free);
+    if (!context) {
+        throw makeError("failed to allocate verification context");
+    }
+
+    if (EVP_DigestVerifyInit(context.get(), nullptr, EVP_sha256(), nullptr, key_.get()) != 1) {
+        throw makeError("failed to initialize signature verification");
+    }
+
+    if (!message.empty() && EVP_DigestVerifyUpdate(context.get(), message.data(), message.size()) != 1) {
+        throw makeError("failed to update signature verification");
+    }
+
+    const int verifyResult = EVP_DigestVerifyFinal(context.get(), signature.data(), signature.size());
+    if (verifyResult == 1) {
+        return true;
+    }
+
+    if (verifyResult == 0) {
+        return false;
+    }
+
+    throw makeError("failed to finalize signature verification");
+}
+
 void KeyPair::writeToDisk(const std::string& privateKeyPath, const std::string& publicKeyPath) const {
     if (!isValid()) {
         throw makeError("cannot write an empty keypair");

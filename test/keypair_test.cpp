@@ -50,6 +50,16 @@ int main() {
         require(generatedKeyPair.isValid(), "generated keypair should be valid");
         require(generatedKeyPair.get() != nullptr, "generated keypair should expose an EVP_PKEY");
 
+        const uint8_t messageBytes[] = {0x01, 0x02, 0x03, 0x04};
+        rsp::Buffer message(messageBytes, 4);
+        rsp::Buffer signature = generatedKeyPair.sign(message);
+        require(!signature.empty(), "generated signature should not be empty");
+        require(generatedKeyPair.verify(message, signature), "generated signature should verify");
+
+        message.data()[0] ^= 0xFF;
+        require(!generatedKeyPair.verify(message, signature), "tampered message should fail verification");
+        message.data()[0] ^= 0xFF;
+
         const rsp::NodeID generatedNodeId = generatedKeyPair.nodeID();
         require(generatedNodeId != rsp::NodeID(), "generated NodeID should not be zero");
 

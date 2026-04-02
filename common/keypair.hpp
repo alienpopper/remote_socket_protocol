@@ -26,6 +26,8 @@ public:
     static KeyPair readFromDisk(const std::string& privateKeyPath, const std::string& publicKeyPath);
 
     NodeID nodeID() const;
+    Buffer sign(const Buffer& message) const;
+    bool verify(const Buffer& message, const Buffer& signature) const;
     void writeToDisk(const std::string& privateKeyPath, const std::string& publicKeyPath) const;
 
     bool isValid() const;

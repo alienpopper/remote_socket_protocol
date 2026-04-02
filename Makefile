@@ -11,6 +11,7 @@ TARGET := $(BIN_DIR)/resource_manager
 KEYPAIR_TEST_TARGET := $(BIN_DIR)/keypair_test
 BASE_TYPES_TEST_TARGET := $(BIN_DIR)/base_types_test
 CLIENT_TEST_TARGET := $(BIN_DIR)/client_test
+ENDORSEMENT_TEST_TARGET := $(BIN_DIR)/endorsement_test
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -19,6 +20,7 @@ COMMON_SOURCES := \
 	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
+	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	resource_manager/resource_manager.cpp \
@@ -28,6 +30,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
+	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	$(CLIENT_CPP_RSP_CLIENT_SOURCE)
@@ -50,6 +53,13 @@ KEYPAIR_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/keypair_test.o
+ENDORSEMENT_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/endorsement_test.o
 BASE_TYPES_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -74,7 +84,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-keypair
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET)
 
@@ -96,6 +106,9 @@ $(RSPCLIENT_SHARED_TARGET): directories $(BORINGSSL_CRYPTO_LIB)
 $(KEYPAIR_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(ENDORSEMENT_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(ENDORSEMENT_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(BASE_TYPES_TEST_TARGET): directories $(BASE_TYPES_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -111,11 +124,16 @@ test-client: $(CLIENT_TEST_TARGET)
 test-keypair: $(KEYPAIR_TEST_TARGET)
 	$(KEYPAIR_TEST_TARGET)
 
-test: test-base-types test-keypair test-client
+test-endorsement: $(ENDORSEMENT_TEST_TARGET)
+	$(ENDORSEMENT_TEST_TARGET)
+
+test: test-base-types test-keypair test-endorsement test-client
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER)
 
 $(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER)
+
+$(OBJ_DIR)/common/endorsement/endorsement.o: $(BORINGSSL_INCLUDE_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client.o: $(BORINGSSL_INCLUDE_HEADER)
 

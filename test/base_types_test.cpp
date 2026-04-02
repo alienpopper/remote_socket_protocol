@@ -1,5 +1,6 @@
 #include "common/base_types.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -39,6 +40,22 @@ int main() {
         const rsp::GUID reparsedRandomGuid(randomGuidText);
         require(reparsedRandomGuid == randomGuid,
             "default GUID should round-trip through canonical text");
+
+        const rsp::DateTime now;
+        require(now.secondsSinceEpoch() > YEARS(40),
+            "default DateTime should initialize to a plausible current epoch time");
+
+        rsp::DateTime adjustedTime(100.0);
+        adjustedTime += HOURS(2);
+        require(std::fabs(adjustedTime.secondsSinceEpoch() - (100.0 + HOURS(2))) < 0.000001,
+            "DateTime += double should adjust the stored seconds");
+
+        adjustedTime += rsp::DateTime(30.0);
+        require(std::fabs(adjustedTime.secondsSinceEpoch() - (100.0 + HOURS(2) + 30.0)) < 0.000001,
+            "DateTime += DateTime should adjust by the other instance's seconds");
+
+        require(rsp::DateTime(10.0) < rsp::DateTime(20.0),
+            "DateTime comparisons should order by epoch seconds");
 
         const rsp::GUID parsedGuid("00112233-4455-6677-8899-aabbccddeeff");
         require(parsedGuid.toString() == "00112233-4455-6677-8899-aabbccddeeff",
