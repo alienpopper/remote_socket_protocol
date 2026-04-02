@@ -1,0 +1,20 @@
+BORINGSSL_SOURCE_DIR ?= third_party/boringssl
+BORINGSSL_INCLUDE_DIR := $(BORINGSSL_SOURCE_DIR)/include
+BORINGSSL_INCLUDE_HEADER := $(BORINGSSL_INCLUDE_DIR)/openssl/evp.h
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+	BORINGSSL_BUILD_DIR := $(BORINGSSL_SOURCE_DIR)/build-osx
+else
+	BORINGSSL_BUILD_DIR := $(BORINGSSL_SOURCE_DIR)/build-linux
+endif
+
+BORINGSSL_CRYPTO_LIB := $(BORINGSSL_BUILD_DIR)/crypto/libcrypto.a
+BORINGSSL_CMAKE_FLAGS := -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DOPENSSL_NO_ASM=1
+
+$(BORINGSSL_INCLUDE_HEADER):
+	@if [ ! -d "$(BORINGSSL_SOURCE_DIR)/.git" ]; then git clone https://github.com/google/boringssl.git $(BORINGSSL_SOURCE_DIR); fi
+
+$(BORINGSSL_CRYPTO_LIB): $(BORINGSSL_INCLUDE_HEADER)
+	cmake -S $(BORINGSSL_SOURCE_DIR) -B $(BORINGSSL_BUILD_DIR) $(BORINGSSL_CMAKE_FLAGS)
+	cmake --build $(BORINGSSL_BUILD_DIR) --target crypto --parallel

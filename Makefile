@@ -7,9 +7,11 @@ include common/Makefile
 include os/Makefile
 
 TARGET := $(BIN_DIR)/resource_manager
+KEYPAIR_TEST_TARGET := $(BIN_DIR)/keypair_test
 
 COMMON_SOURCES := \
 	$(COMMON_NODE_SOURCE) \
+	$(COMMON_KEYPAIR_SOURCE) \
 	resource_manager/resource_manager.cpp \
 	resource_manager/resource_manager_main.cpp
 
@@ -17,19 +19,41 @@ ifeq ($(OS),Windows_NT)
 	TARGET := $(TARGET).exe
 endif
 
-SOURCES := $(COMMON_SOURCES) $(OS_SOURCE)
+SOURCES := $(COMMON_SOURCES) $(OS_COMMON_SOURCE) $(OS_SOURCE)
 OBJECTS := $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SOURCES))
+KEYPAIR_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/keypair_test.o
 
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 CPPFLAGS ?= -I$(PROJECT_ROOT)
 
-.PHONY: all clean directories
+.PHONY: all clean directories test test-keypair
 
 all: $(TARGET)
 
-$(TARGET): directories $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@
+include third_party/Makefile
+
+CPPFLAGS += -I$(BORINGSSL_INCLUDE_DIR)
+
+$(TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(OBJECTS)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) -o $@
+
+$(KEYPAIR_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) -o $@
+
+test-keypair: $(KEYPAIR_TEST_TARGET)
+	$(KEYPAIR_TEST_TARGET)
+
+test: test-keypair
+
+$(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER)
+
+$(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER)
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
