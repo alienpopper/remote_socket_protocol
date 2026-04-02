@@ -4,3 +4,7 @@ COMMON_NODE_SOURCE = common/node.cpp
 COMMON_NODE_HEADER = common/node.hpp
 COMMON_KEYPAIR_SOURCE = common/keypair.cpp
 COMMON_KEYPAIR_HEADER = common/keypair.hpp
+COMMON_TRANSPORT_SOURCE = common/transport/transport.cpp
+COMMON_TRANSPORT_HEADER = common/transport/transport.hpp
+COMMON_TRANSPORT_TCP_SOURCE = common/transport/transport_tcp.cpp
+COMMON_TRANSPORT_TCP_HEADER = common/transport/transport_tcp.hpp

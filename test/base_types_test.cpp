@@ -16,6 +16,21 @@ void require(bool condition, const std::string& message) {
 
 int main() {
     try {
+    const uint8_t initialBytes[] = {1, 2, 3, 4};
+    rsp::Buffer buffer(initialBytes, 4);
+    require(buffer.size() == 4, "buffer should report its initial size");
+    require(buffer.data()[0] == 1 && buffer.data()[3] == 4,
+        "buffer should copy input bytes");
+
+    rsp::Buffer copiedBuffer(buffer);
+    require(copiedBuffer.size() == 4, "copied buffer should preserve size");
+    require(copiedBuffer.data()[1] == 2, "copied buffer should preserve contents");
+
+    buffer.resize(6);
+    require(buffer.size() == 6, "buffer resize should update size");
+    require(buffer.data()[0] == 1 && buffer.data()[3] == 4,
+        "buffer resize should preserve existing contents");
+
         const rsp::GUID emptyGuid;
         require(emptyGuid.toString() == "00000000-0000-0000-0000-000000000000",
                 "default GUID should be zeroed");

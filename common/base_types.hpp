@@ -1,9 +1,34 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace rsp {
+
+class Buffer {
+public:
+    Buffer();
+    explicit Buffer(uint32_t size);
+    Buffer(const uint8_t* data, uint32_t size);
+
+    Buffer(const Buffer& other);
+    Buffer& operator=(const Buffer& other);
+
+    Buffer(Buffer&& other) noexcept;
+    Buffer& operator=(Buffer&& other) noexcept;
+
+    uint8_t* data();
+    const uint8_t* data() const;
+    uint32_t size() const;
+    bool empty() const;
+
+    void resize(uint32_t size);
+
+private:
+    std::unique_ptr<uint8_t[]> bytes_;
+    uint32_t size_;
+};
 
 class GUID {
 public:

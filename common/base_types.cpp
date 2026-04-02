@@ -1,5 +1,7 @@
 #include "common/base_types.hpp"
 
+#include <algorithm>
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -15,6 +17,65 @@ bool isHexCharacter(char value) {
 }
 
 }  // namespace
+
+Buffer::Buffer() : size_(0) {
+}
+
+Buffer::Buffer(uint32_t size) : bytes_(size == 0 ? nullptr : std::make_unique<uint8_t[]>(size)), size_(size) {
+}
+
+Buffer::Buffer(const uint8_t* data, uint32_t size) : Buffer(size) {
+    if (data != nullptr && size_ != 0) {
+        std::copy_n(data, size_, bytes_.get());
+    }
+}
+
+Buffer::Buffer(const Buffer& other) : Buffer(other.data(), other.size()) {
+}
+
+Buffer& Buffer::operator=(const Buffer& other) {
+    if (this != &other) {
+        Buffer copy(other);
+        *this = std::move(copy);
+    }
+
+    return *this;
+}
+
+Buffer::Buffer(Buffer&& other) noexcept = default;
+
+Buffer& Buffer::operator=(Buffer&& other) noexcept = default;
+
+uint8_t* Buffer::data() {
+    return bytes_.get();
+}
+
+const uint8_t* Buffer::data() const {
+    return bytes_.get();
+}
+
+uint32_t Buffer::size() const {
+    return size_;
+}
+
+bool Buffer::empty() const {
+    return size_ == 0;
+}
+
+void Buffer::resize(uint32_t size) {
+    if (size == size_) {
+        return;
+    }
+
+    std::unique_ptr<uint8_t[]> resized = size == 0 ? nullptr : std::make_unique<uint8_t[]>(size);
+    const uint32_t bytesToCopy = size < size_ ? size : size_;
+    if (bytesToCopy != 0 && bytes_ != nullptr) {
+        std::copy_n(bytes_.get(), bytesToCopy, resized.get());
+    }
+
+    bytes_ = std::move(resized);
+    size_ = size;
+}
 
 GUID::GUID() : high_(0), low_(0) {
 }

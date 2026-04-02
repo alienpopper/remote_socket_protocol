@@ -1,5 +1,8 @@
 OS_COMMON_SOURCE = os\windows\os_fileops.cpp
 OS_COMMON_HEADER = os\os_fileops.hpp
+OS_SOCKET_SOURCE = os\windows\os_socket.cpp
+OS_SOCKET_HEADER = os\os_socket.hpp
+OS_SYSTEM_LIBS = ws2_32.lib
 
 OS_SOURCE = os\windows\os_random.cpp
 OS_HEADER = os\os_random.hpp
