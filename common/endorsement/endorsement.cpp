@@ -1,5 +1,6 @@
 #include "common/endorsement/endorsement.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 
@@ -9,11 +10,6 @@ namespace {
 
 std::runtime_error makeError(const char* message) {
     return std::runtime_error(message);
-}
-
-void appendUint16(Buffer& buffer, uint32_t& offset, uint16_t value) {
-    buffer.data()[offset++] = static_cast<uint8_t>((value >> 8) & 0xFFU);
-    buffer.data()[offset++] = static_cast<uint8_t>(value & 0xFFU);
 }
 
 void appendUint32(Buffer& buffer, uint32_t& offset, uint32_t value) {
@@ -39,17 +35,6 @@ void appendBytes(Buffer& buffer, uint32_t& offset, const Buffer& value) {
         std::copy_n(value.data(), value.size(), buffer.data() + offset);
         offset += value.size();
     }
-}
-
-uint16_t readUint16(const Buffer& buffer, uint32_t& offset) {
-    if (offset + 2 > buffer.size()) {
-        throw makeError("buffer underflow while reading uint16");
-    }
-
-    const uint16_t value = static_cast<uint16_t>(buffer.data()[offset] << 8) |
-                           static_cast<uint16_t>(buffer.data()[offset + 1]);
-    offset += 2;
-    return value;
 }
 
 uint32_t readUint32(const Buffer& buffer, uint32_t& offset) {
