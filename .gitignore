@@ -1,20 +1,2 @@
-# macOS
-.DS_Store
+build
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.venv/
-venv/
-
-# Node.js
-node_modules/
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/

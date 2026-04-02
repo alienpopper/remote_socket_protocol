@@ -1,0 +1,2 @@
+OS_SOURCE = os\windows\os_random.cpp
+OS_HEADER = os\os_random.hpp

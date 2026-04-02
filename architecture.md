@@ -6,19 +6,19 @@ The overall architecture has several pieces:
 - The resource services (RS)
 - The endorsement services (ES)
 - The name services (NS) 
-Genericly all pariticpants are referred to as Nodes.
+Generically all participants are referred to as Nodes.
 
 The Client Services
 ------------------------
-The client services are what interact with external sofware.  A client is the software that has the intent.  High level description of some typical CS tasks are "Listen on a port on the internet", "Connect to an ip/port on the Internet", "Show me the list of connected clients", "tell me if this server is available".
+The client services are what interact with external software.  A client is the software that has the intent.  High level description of some typical CS tasks are "Listen on a port on the internet", "Connect to an ip/port on the Internet", "Show me the list of connected clients", "tell me if this server is available".
 
 The Route and Monitor Services
 ------------------------
-The Route and Montior services are the glue that hooks together the systems.  RM generally runs on the Internet or some other central place.  Clients from labs and development environments connect to it.   Servers from labs and development environments connect to it.  Other RM servers connect to each other.  When a client wan't to use a resource (for example connect to an SSH server in a hardware lab), the client first establises a connection to the RM.  The RM can then forward the appropriate messages to the appropiate provider of that service.
+The Route and Monitor services are the glue that hooks together the systems.  RM generally runs on the Internet or some other central place.  Clients from labs and development environments connect to it.   Servers from labs and development environments connect to it.  Other RM servers connect to each other.  When a client wants to use a resource (for example connect to an SSH server in a hardware lab), the client first establishes a connection to the RM.  The RM can then forward the appropriate messages to the appropriate provider of that service.
 
 Main jobs of the RM:
 -handle queries about the health and availability.  
--authenitcate that clients are allowed to use the service
+-authenticate that clients are allowed to use the service
 -provide detailed logs about client usage
 -provide detailed logs about service usage
 -trace and debug connections
@@ -31,20 +31,20 @@ The RSs provide access to the clients.  An RS may be willing to proxy connection
 
 The Endorsement Services
 ------------------------
-The endorsement services are used to assign properties and authentications to nodes.  For example, to access the ssh servers in lab12, you may need an endorsement from the lab12 ES. Any type of information can be bound via an ES.  For example, it's perfectly valid to assign an endorcement for if someone has performed the lab training.
+The endorsement services are used to assign properties and authentications to nodes.  For example, to access the ssh servers in lab12, you may need an endorsement from the lab12 ES. Any type of information can be bound via an ES.  For example, it's perfectly valid to assign an endorsement for if someone has performed the lab training.
 
 The name services
 -----------------------
-The name services are used to lookup nodes.  This is an important part of failover and redunancy.  Often clients will connect to an RM and then try to interact with a RS by name instead of nodeID.  
+The name services are used to lookup nodes.  This is an important part of failover and redundancy.  Often clients will connect to an RM and then try to interact with a RS by name instead of nodeID.  
 
 A common operation during patching and maintenance is to change the value in a NS redirecting all CS to the new server before shutting down the old server.
 
-Names are cryptographicly bound so there should never be a name collision between two name services.
+Names are cryptographically bound so there should never be a name collision between two name services.
 
 
 The Security Model
 ------------------------
-This protocol is provides authentication and integrity for the protocol itself.  It does not provide confidentiality for anything.  It does not provice any guarantees for the protocols running over the remote socket protocol.  Protocols should view it as an insecure transport mechanism similar to transmitting over the open Ineternet.  Most modern protocols provide authentication and confidentiality.  For those that don't they have already accepted the risk and running over this infrastructure doesn't change that risk.  The security mechanisms in RSP are there to protect the RSP infrastructure and not the data flowing over it.
+This protocol is provides authentication and integrity for the protocol itself.  It does not provide confidentiality for anything.  It does not provide any guarantees for the protocols running over the remote socket protocol.  Protocols should view it as an insecure transport mechanism similar to transmitting over the open Internet.  Most modern protocols provide authentication and confidentiality.  For those that don't they have already accepted the risk and running over this infrastructure doesn't change that risk.  The security mechanisms in RSP are there to protect the RSP infrastructure and not the data flowing over it.
 
 The security model is distributed.  The RM provides authN/authZ that gates nodes attaching to the network.  This is to stop random outsiders from probing the services and to stop denial-of-service type situations.  The individual services provide authN/authZ for clients accessing those services.
 
@@ -66,17 +66,17 @@ The bulk of the traffic with use a MIC.  The CS/RS start by negotiating symetric
 
 Data streaming is only used when the test requires minimizing the overhead of the transport network.  For example fragmentation/reassembly may be an issue.  Timing of arrival changes may need to be minimized.  This mode should only be used when a man-in-the-middle attack is a acceptable risk.
 
-There is the problem of flooding the network with MIC "signed" packets.  For this reason, when the RM establishes a new session with a node, it verifies the nodeID explicitly.  It also verfiies the nodeID again any time a MIC failure is reported by another node back to the session.
+There is the problem of flooding the network with MIC "signed" packets.  For this reason, when the RM establishes a new session with a node, it verifies the nodeID explicitly.  It also verifies the nodeID again any time a MIC failure is reported by another node back to the session.
 
 Message Format
 ------------------------
-Different environments prefer different messages structures.  Firmware generally prefers C-Style structure stacking.  Web generally prefers JSON.  Other environments may prefer XML.  Often the correct tool isn't used because it's a pain to implement a message stack in that language.  It's unlikely that a firmware test enviornment will implement a JSON parser just to interact with an outside service.
+Different environments prefer different messages structures.  Firmware generally prefers C-Style structure stacking.  Web generally prefers JSON.  Other environments may prefer XML.  Often the correct tool isn't used because it's a pain to implement a message stack in that language.  It's unlikely that a firmware test environment will implement a JSON parser just to interact with an outside service.
 
 The remote_socket_protocol tries to abstract away message encoding so that the test harness can use whatever encoding is easiest.  Messages are defined in an abstract way that can be encoded by almost any data encoder.
 
-When the CS/RS estabishes a new session with an RM, the session starts out in a simple ASCII text protocol.  When both sides agree on an encoding, the session transitions to that encoding.  
+When the CS/RS establishes a new session with an RM, the session starts out in a simple ASCII text protocol.  When both sides agree on an encoding, the session transitions to that encoding.  
 
-Internally the RM and all RM<->RM commincations is based on Google Protocol Buffers (protobufs). And RM<->RM links do no negotate an encoding. The RM is responsible for translating the edge encoding to/from a protobuf right before it is sent to an RS/CS.  Internally, all message transite the RM nodes as protobufs.  The CS/RS are not aware of the encoding chosen by the opposite end of the connection.  Encoding used is not a discoverable property.
+Internally the RM and all RM<->RM communications is based on Google Protocol Buffers (protobufs). And RM<->RM links do no negotiate an encoding. The RM is responsible for translating the edge encoding to/from a protobuf right before it is sent to an RS/CS.  Internally, all message transit the RM nodes as protobufs.  The CS/RS are not aware of the encoding chosen by the opposite end of the connection.  Encoding used is not a discoverable property.
 
 ASCII handshake protocol
 ------------------------
@@ -102,7 +102,7 @@ encoding: protobuf\r\n
 
 The only required part of the client response is the encoding.  It is acceptable for the client to not parse the server advertisement and blindly transmit the encoding.  This allows devices with limited resources to connect use the service.
 
-The server then finishes the handshake with the server sucess message.
+The server then finishes the handshake with the server success message.
 
 ```
 0error: some_long_error_message\r\n
@@ -126,7 +126,7 @@ Identities and Endorsements
 ------------------------
 Each node is identified with a public/private keypair (node identity or NKP).  When referring to a node, a compact hash of the public key is used (nodeID).  NodeIDs are a primary unit that are used for routing, debugging, and most other tasks that aren't directly involved in authN/authZ.
 
-Having each node maintain a full list of all authorized participants can be problematic.  Identities are often transmited along with an Endorsement.  An endorsment cryptographically binds a property to an identity.  For example an endorsement could be used to prove that a node has been approved by a central authority or it could be used to assign a billing group.  
+Having each node maintain a full list of all authorized participants can be problematic.  Identities are often transmitted along with an Endorsement.  An endorsement cryptographically binds a property to an identity.  For example an endorsement could be used to prove that a node has been approved by a central authority or it could be used to assign a billing group.  
 
 Endorsements contain the nodeID of the ES, the nodeID of the CS, a value, and an expiration time. 
 
@@ -137,10 +137,10 @@ One of the primary features of the remote_socket_protocol is it is supposed to m
 
 - Tracing header attached to a message
 - Logging and debugging messages sent to the RM and collected by anyone interested
-- Active interregation of the various nodes and services
+- Active interrogation of the various nodes and services
 - Counters embedded in  the various nodes
 
-A tracing header is a way to request detailed logging of the message handling during processing.
+A tracing header is a way to request detailed logging of the message handling during processing.  To request header tracing, 
 
 
 

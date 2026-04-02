@@ -1,0 +1,49 @@
+PROJECT_ROOT = .
+BUILD_DIR = build
+BIN_DIR = $(BUILD_DIR)\bin
+OBJ_DIR = $(BUILD_DIR)\obj
+TARGET = $(BIN_DIR)\resource_manager.exe
+
+!include common\Makefile
+!include os\Makefile.windows
+
+CPPFLAGS = /I$(PROJECT_ROOT) /nologo /EHsc /std:c++17
+CXXFLAGS = /W4
+
+SOURCES = \
+	$(COMMON_NODE_SOURCE) \
+    resource_manager\resource_manager.cpp \
+    resource_manager\resource_manager_main.cpp \
+	$(OS_SOURCE)
+
+OBJECTS = \
+	$(OBJ_DIR)\node.obj \
+    $(OBJ_DIR)\resource_manager.obj \
+    $(OBJ_DIR)\resource_manager_main.obj \
+    $(OBJ_DIR)\os_random.obj
+
+all: dirs $(TARGET)
+
+dirs:
+	if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
+	if not exist $(BIN_DIR) mkdir $(BIN_DIR)
+	if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
+
+$(TARGET): $(OBJECTS)
+	link /nologo /OUT:$(TARGET) $(OBJECTS)
+
+$(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\node.cpp /Fo$(OBJ_DIR)\node.obj
+
+
+$(OBJ_DIR)\resource_manager.obj: resource_manager\resource_manager.cpp resource_manager\resource_manager.hpp common\node.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_manager\resource_manager.cpp /Fo$(OBJ_DIR)\resource_manager.obj
+
+$(OBJ_DIR)\resource_manager_main.obj: resource_manager\resource_manager_main.cpp resource_manager\resource_manager.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_manager\resource_manager_main.cpp /Fo$(OBJ_DIR)\resource_manager_main.obj
+
+$(OBJ_DIR)\os_random.obj: $(OS_SOURCE) $(OS_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c $(OS_SOURCE) /Fo$(OBJ_DIR)\os_random.obj
+
+clean:
+	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)
