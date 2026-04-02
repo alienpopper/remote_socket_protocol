@@ -3,6 +3,7 @@ BUILD_DIR = build
 BIN_DIR = $(BUILD_DIR)\bin
 OBJ_DIR = $(BUILD_DIR)\obj
 LIB_DIR = $(BUILD_DIR)\lib
+PROTOBUF_GENERATED_DIR = $(BUILD_DIR)\gen
 TARGET = $(BIN_DIR)\resource_manager.exe
 KEYPAIR_TEST_TARGET = $(BIN_DIR)\keypair_test.exe
 BASE_TYPES_TEST_TARGET = $(BIN_DIR)\base_types_test.exe
@@ -11,6 +12,9 @@ ENDORSEMENT_TEST_TARGET = $(BIN_DIR)\endorsement_test.exe
 RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
 RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
 RSPCLIENT_SHARED_TARGET = $(BIN_DIR)\rspclient.dll
+PROTOBUF_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\messages.pb.cc
+PROTOBUF_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\messages.pb.h
+PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj
 
 !include common\Makefile
 !include os\Makefile.windows
@@ -37,6 +41,7 @@ OBJECTS = \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\endorsement.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
 	$(OBJ_DIR)\os_fileops.obj \
@@ -55,6 +60,7 @@ CLIENT_LIBRARY_OBJECTS = \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\endorsement.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
 	$(OBJ_DIR)\rsp_client.obj \
@@ -74,6 +80,7 @@ ENDORSEMENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\endorsement.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\endorsement_test.obj
@@ -96,30 +103,37 @@ test: test-base-types test-keypair test-endorsement test-client
 
 !include third_party\Makefile.windows
 
-CPPFLAGS = $(CPPFLAGS) /I$(BORINGSSL_INCLUDE_DIR)
+CPPFLAGS = $(CPPFLAGS) /I$(BORINGSSL_INCLUDE_DIR) /I$(PROTOBUF_INCLUDE_DIR) /I$(PROTOBUF_GENERATED_DIR)
 
 dirs:
 	if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
 	if not exist $(BIN_DIR) mkdir $(BIN_DIR)
 	if not exist $(OBJ_DIR) mkdir $(OBJ_DIR)
 	if not exist $(LIB_DIR) mkdir $(LIB_DIR)
+	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
 
 
-$(TARGET): $(BORINGSSL_CRYPTO_LIB) $(OBJECTS)
-	cl /nologo $(CXXFLAGS) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(TARGET)
+$(TARGET): $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OBJECTS)
+	cl /nologo $(CXXFLAGS) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(TARGET)
 
-$(RSPCLIENT_STATIC_TARGET): dirs $(CLIENT_LIBRARY_OBJECTS)
+$(RSPCLIENT_STATIC_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
 	lib /nologo /OUT:$(RSPCLIENT_STATIC_TARGET) $(CLIENT_LIBRARY_OBJECTS)
 
-$(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(CLIENT_LIBRARY_OBJECTS)
+$(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
-	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
+	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(KEYPAIR_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(KEYPAIR_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(KEYPAIR_TEST_TARGET)
 
-$(ENDORSEMENT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(ENDORSEMENT_TEST_OBJECTS)
-	cl /nologo $(CXXFLAGS) $(ENDORSEMENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(OS_SYSTEM_LIBS) /Fe$(ENDORSEMENT_TEST_TARGET)
+$(ENDORSEMENT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(ENDORSEMENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(ENDORSEMENT_TEST_TARGET)
+
+$(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
+	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
+	$(PROTOBUF_PROTOC) --proto_path=. --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto
+
+$(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
 $(BASE_TYPES_TEST_TARGET): dirs $(BASE_TYPES_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(BASE_TYPES_TEST_TARGET)
@@ -148,8 +162,11 @@ $(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER)
 $(OBJ_DIR)\keypair.obj: common\keypair.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER) $(OS_COMMON_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\keypair.cpp /Fo$(OBJ_DIR)\keypair.obj
 
-$(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\base_types.hpp common\keypair.hpp
+$(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\base_types.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\endorsement\endorsement.cpp /Fo$(OBJ_DIR)\endorsement.obj
+
+$(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c $(PROTOBUF_GENERATED_SOURCE) /Fo$(PROTOBUF_GENERATED_OBJECT)
 
 $(OBJ_DIR)\transport.obj: common\transport\transport.cpp common\transport\transport.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport.cpp /Fo$(OBJ_DIR)\transport.obj
@@ -180,7 +197,7 @@ $(OBJ_DIR)\os_random.obj: $(OS_SOURCE) $(OS_HEADER)
 $(OBJ_DIR)\keypair_test.obj: test\keypair_test.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\keypair_test.cpp /Fo$(OBJ_DIR)\keypair_test.obj
 
-$(OBJ_DIR)\endorsement_test.obj: test\endorsement_test.cpp common\endorsement\endorsement.hpp common\keypair.hpp
+$(OBJ_DIR)\endorsement_test.obj: test\endorsement_test.cpp common\endorsement\endorsement.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\endorsement_test.cpp /Fo$(OBJ_DIR)\endorsement_test.obj
 
 $(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp

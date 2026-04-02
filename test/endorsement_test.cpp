@@ -82,7 +82,7 @@ void testTamperingInvalidatesSignature() {
         endorsementServiceKey, subjectKey.nodeID(), endorsementType, endorsementValue, validUntil);
 
     rsp::Buffer tamperedSerialized = endorsement.serialize();
-    tamperedSerialized.data()[40] ^= 0x01;
+    tamperedSerialized.data()[tamperedSerialized.size() - 1] ^= 0x01;
 
     const rsp::Endorsement tampered = rsp::Endorsement::deserialize(tamperedSerialized);
     require(!tampered.verifySignature(endorsementServiceKey),

@@ -1,8 +1,13 @@
 #include "common/endorsement/endorsement.hpp"
 
-#include <algorithm>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace rsp {
 
@@ -12,183 +17,203 @@ std::runtime_error makeError(const char* message) {
     return std::runtime_error(message);
 }
 
-void appendUint32(Buffer& buffer, uint32_t& offset, uint32_t value) {
-    buffer.data()[offset++] = static_cast<uint8_t>((value >> 24) & 0xFFU);
-    buffer.data()[offset++] = static_cast<uint8_t>((value >> 16) & 0xFFU);
-    buffer.data()[offset++] = static_cast<uint8_t>((value >> 8) & 0xFFU);
-    buffer.data()[offset++] = static_cast<uint8_t>(value & 0xFFU);
-}
-
-void appendUint64(Buffer& buffer, uint32_t& offset, uint64_t value) {
+void appendUint64(std::string& bytes, uint64_t value) {
     for (int shift = 56; shift >= 0; shift -= 8) {
-        buffer.data()[offset++] = static_cast<uint8_t>((value >> shift) & 0xFFULL);
+        bytes.push_back(static_cast<char>((value >> shift) & 0xFFULL));
     }
 }
 
-void appendGuid(Buffer& buffer, uint32_t& offset, const GUID& guid) {
-    appendUint64(buffer, offset, guid.high());
-    appendUint64(buffer, offset, guid.low());
+std::string serializeGuidBytes(const GUID& guid) {
+    std::string bytes;
+    bytes.reserve(16);
+    appendUint64(bytes, guid.high());
+    appendUint64(bytes, guid.low());
+    return bytes;
 }
 
-void appendBytes(Buffer& buffer, uint32_t& offset, const Buffer& value) {
-    if (!value.empty()) {
-        std::copy_n(value.data(), value.size(), buffer.data() + offset);
-        offset += value.size();
-    }
-}
-
-uint32_t readUint32(const Buffer& buffer, uint32_t& offset) {
-    if (offset + 4 > buffer.size()) {
-        throw makeError("buffer underflow while reading uint32");
+GUID deserializeGuidBytes(const std::string& bytes, const char* fieldName) {
+    if (bytes.size() != 16) {
+        throw makeError(fieldName);
     }
 
-    uint32_t value = 0;
-    for (int index = 0; index < 4; ++index) {
-        value = (value << 8) | static_cast<uint32_t>(buffer.data()[offset + index]);
+    uint64_t high = 0;
+    uint64_t low = 0;
+    for (size_t index = 0; index < 8; ++index) {
+        high = (high << 8) | static_cast<uint64_t>(static_cast<uint8_t>(bytes[index]));
+        low = (low << 8) | static_cast<uint64_t>(static_cast<uint8_t>(bytes[index + 8]));
     }
 
-    offset += 4;
-    return value;
-}
-
-uint64_t readUint64(const Buffer& buffer, uint32_t& offset) {
-    if (offset + 8 > buffer.size()) {
-        throw makeError("buffer underflow while reading uint64");
-    }
-
-    uint64_t value = 0;
-    for (int index = 0; index < 8; ++index) {
-        value = (value << 8) | static_cast<uint64_t>(buffer.data()[offset + index]);
-    }
-
-    offset += 8;
-    return value;
-}
-
-GUID readGuid(const Buffer& buffer, uint32_t& offset) {
-    const uint64_t high = readUint64(buffer, offset);
-    const uint64_t low = readUint64(buffer, offset);
     return GUID(high, low);
 }
 
-Buffer readBytes(const Buffer& buffer, uint32_t& offset, uint32_t length) {
-    if (offset + length > buffer.size()) {
-        throw makeError("buffer underflow while reading byte array");
+Buffer stringToBuffer(const std::string& bytes) {
+    return Buffer(reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<uint32_t>(bytes.size()));
+}
+
+std::string bufferToString(const Buffer& buffer) {
+    if (buffer.empty()) {
+        return std::string();
     }
 
-    Buffer value(length);
-    if (length != 0) {
-        std::copy_n(buffer.data() + offset, length, value.data());
-        offset += length;
+    return std::string(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+}
+
+Buffer serializeDeterministic(const google::protobuf::MessageLite& message) {
+    std::string serialized;
+    serialized.resize(message.ByteSizeLong());
+
+    google::protobuf::io::ArrayOutputStream arrayOutputStream(serialized.data(), static_cast<int>(serialized.size()));
+    google::protobuf::io::CodedOutputStream codedOutputStream(&arrayOutputStream);
+    codedOutputStream.SetSerializationDeterministic(true);
+
+    if (!message.SerializeToCodedStream(&codedOutputStream) || codedOutputStream.HadError() ||
+        static_cast<size_t>(codedOutputStream.ByteCount()) != serialized.size()) {
+        throw makeError("failed to serialize endorsement protobuf");
     }
 
-    return value;
+    return stringToBuffer(serialized);
+}
+
+void validateUuidLike(const std::string& bytes, const char* fieldName) {
+    if (bytes.size() != 16) {
+        throw makeError(fieldName);
+    }
+}
+
+void populateUuid(rsp::proto::Uuid* target, const GUID& guid) {
+    target->set_value(serializeGuidBytes(guid));
+}
+
+void populateNodeId(rsp::proto::NodeId* target, const NodeID& nodeId) {
+    target->set_value(serializeGuidBytes(nodeId));
+}
+
+NodeID parseNodeId(const rsp::proto::NodeId& nodeId, const char* fieldName) {
+    return NodeID(deserializeGuidBytes(nodeId.value(), fieldName));
+}
+
+GUID parseUuid(const rsp::proto::Uuid& uuid, const char* fieldName) {
+    return deserializeGuidBytes(uuid.value(), fieldName);
+}
+
+void setMessageFields(rsp::proto::Endorsement* message, NodeID subject, NodeID endorsementService,
+                      GUID endorsementType, Buffer endorsementValue, DateTime validUntil,
+                      Buffer signature) {
+    populateNodeId(message->mutable_subject(), subject);
+    populateNodeId(message->mutable_endorsement_service(), endorsementService);
+    populateUuid(message->mutable_endorsement_type(), endorsementType);
+    message->set_endorsement_value(bufferToString(endorsementValue));
+    message->mutable_valid_until()->set_milliseconds_since_epoch(validUntil.millisecondsSinceEpoch());
+    message->set_signature(bufferToString(signature));
 }
 
 }  // namespace
 
-Endorsement::Endorsement() : validUntil_(0) {
-}
+Endorsement::Endorsement() = default;
 
 Endorsement::Endorsement(NodeID subject, NodeID endorsementService, GUID endorsementType,
-                                                 Buffer endorsementValue, DateTime validUntil, Buffer signature)
-    : subject_(subject),
-      endorsementService_(endorsementService),
-      endorsementType_(endorsementType),
-      endorsementValue_(std::move(endorsementValue)),
-            validUntil_(std::move(validUntil)),
-      signature_(std::move(signature)) {
+                         Buffer endorsementValue, DateTime validUntil, Buffer signature) {
+    setMessageFields(&message_, subject, endorsementService, endorsementType,
+                     std::move(endorsementValue), validUntil, std::move(signature));
+}
+
+Endorsement::Endorsement(rsp::proto::Endorsement message) : message_(std::move(message)) {
 }
 
 Endorsement Endorsement::createSigned(const KeyPair& endorsementServiceKeyPair, const NodeID& subject,
                                       const GUID& endorsementType, const Buffer& endorsementValue,
-                                                                            const DateTime& validUntil) {
+                                      const DateTime& validUntil) {
     Endorsement endorsement(subject, endorsementServiceKeyPair.nodeID(), endorsementType,
                             endorsementValue, validUntil, Buffer());
-    endorsement.signature_ = endorsementServiceKeyPair.sign(endorsement.serializeUnsigned());
+    endorsement.message_.set_signature(bufferToString(endorsementServiceKeyPair.sign(endorsement.serializeUnsigned())));
     return endorsement;
 }
 
 Endorsement Endorsement::deserialize(const Buffer& serialized) {
-    uint32_t offset = 0;
-    if (readUint32(serialized, offset) != kMagic) {
-        throw makeError("endorsement magic mismatch");
+    rsp::proto::Endorsement message;
+    if (!message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()))) {
+        throw makeError("failed to deserialize endorsement protobuf");
     }
 
-    const NodeID subject(readGuid(serialized, offset));
-    const NodeID endorsementService(readGuid(serialized, offset));
-    const GUID endorsementType(readGuid(serialized, offset));
-    const uint32_t valueLength = readUint32(serialized, offset);
-    Buffer endorsementValue = readBytes(serialized, offset, valueLength);
-    const DateTime validUntil = DateTime::fromMillisecondsSinceEpoch(readUint64(serialized, offset));
-    const uint32_t signatureLength = readUint32(serialized, offset);
-    Buffer signature = readBytes(serialized, offset, signatureLength);
-
-    if (offset != serialized.size()) {
-        throw makeError("extra trailing bytes in endorsement buffer");
-    }
-
-    return Endorsement(subject, endorsementService, endorsementType,
-                       std::move(endorsementValue), validUntil, std::move(signature));
+    validateMessage(message, true);
+    return Endorsement(std::move(message));
 }
 
 Buffer Endorsement::serialize() const {
-    Buffer unsignedPayload = serializeUnsigned();
-    const uint32_t totalSize = unsignedPayload.size() + 4 + signature_.size();
-    Buffer serialized(totalSize);
-
-    uint32_t offset = 0;
-    appendBytes(serialized, offset, unsignedPayload);
-    appendUint32(serialized, offset, signature_.size());
-    appendBytes(serialized, offset, signature_);
-    return serialized;
+    validateMessage(message_, true);
+    return serializeDeterministic(message_);
 }
 
 bool Endorsement::verifySignature(const KeyPair& endorsementServiceKeyPair) const {
-    if (endorsementServiceKeyPair.nodeID() != endorsementService_) {
+    validateMessage(message_, true);
+    if (endorsementServiceKeyPair.nodeID() != endorsementService()) {
         return false;
     }
 
-    return endorsementServiceKeyPair.verify(serializeUnsigned(), signature_);
+    return endorsementServiceKeyPair.verify(serializeUnsigned(), signature());
 }
 
-const NodeID& Endorsement::subject() const {
-    return subject_;
+NodeID Endorsement::subject() const {
+    validateMessage(message_, true);
+    return parseNodeId(message_.subject(), "invalid endorsement subject length");
 }
 
-const NodeID& Endorsement::endorsementService() const {
-    return endorsementService_;
+NodeID Endorsement::endorsementService() const {
+    validateMessage(message_, true);
+    return parseNodeId(message_.endorsement_service(), "invalid endorsement service length");
 }
 
-const GUID& Endorsement::endorsementType() const {
-    return endorsementType_;
+GUID Endorsement::endorsementType() const {
+    validateMessage(message_, true);
+    return parseUuid(message_.endorsement_type(), "invalid endorsement type length");
 }
 
-const Buffer& Endorsement::endorsementValue() const {
-    return endorsementValue_;
+Buffer Endorsement::endorsementValue() const {
+    validateMessage(message_, true);
+    return stringToBuffer(message_.endorsement_value());
 }
 
-const DateTime& Endorsement::validUntil() const {
-    return validUntil_;
+DateTime Endorsement::validUntil() const {
+    validateMessage(message_, true);
+    return DateTime::fromMillisecondsSinceEpoch(message_.valid_until().milliseconds_since_epoch());
 }
 
-const Buffer& Endorsement::signature() const {
-    return signature_;
+Buffer Endorsement::signature() const {
+    validateMessage(message_, true);
+    return stringToBuffer(message_.signature());
 }
 
 Buffer Endorsement::serializeUnsigned() const {
-    const uint32_t totalSize = 4 + 16 + 16 + 16 + 4 + endorsementValue_.size() + 8;
-    Buffer serialized(totalSize);
+    rsp::proto::Endorsement unsignedMessage(message_);
+    unsignedMessage.clear_signature();
+    validateMessage(unsignedMessage, false);
+    return serializeDeterministic(unsignedMessage);
+}
 
-    uint32_t offset = 0;
-    appendUint32(serialized, offset, kMagic);
-    appendGuid(serialized, offset, subject_);
-    appendGuid(serialized, offset, endorsementService_);
-    appendGuid(serialized, offset, endorsementType_);
-    appendUint32(serialized, offset, endorsementValue_.size());
-    appendBytes(serialized, offset, endorsementValue_);
-    appendUint64(serialized, offset, validUntil_.millisecondsSinceEpoch());
-    return serialized;
+void Endorsement::validateMessage(const rsp::proto::Endorsement& message, bool requireSignature) {
+    if (!message.has_subject()) {
+        throw makeError("endorsement missing subject");
+    }
+
+    if (!message.has_endorsement_service()) {
+        throw makeError("endorsement missing endorsement service");
+    }
+
+    if (!message.has_endorsement_type()) {
+        throw makeError("endorsement missing endorsement type");
+    }
+
+    if (!message.has_valid_until()) {
+        throw makeError("endorsement missing valid-until time");
+    }
+
+    validateUuidLike(message.subject().value(), "invalid endorsement subject length");
+    validateUuidLike(message.endorsement_service().value(), "invalid endorsement service length");
+    validateUuidLike(message.endorsement_type().value(), "invalid endorsement type length");
+
+    if (requireSignature && message.signature().empty()) {
+        throw makeError("endorsement missing signature");
+    }
 }
 
 }  // namespace rsp
