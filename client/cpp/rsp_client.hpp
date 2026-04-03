@@ -32,6 +32,7 @@ public:
 
     RSPCLIENT_API TransportID createTcpTransport();
     RSPCLIENT_API TransportID addTransport(const std::shared_ptr<rsp::transport::Transport>& transport);
+    RSPCLIENT_API rsp::transport::ConnectionHandle connect(TransportID transportId, const std::string& parameters) const;
 
     RSPCLIENT_API bool hasTransports() const;
     RSPCLIENT_API bool hasTransport(TransportID transportId) const;
@@ -43,6 +44,8 @@ public:
 
 private:
     explicit RSPClient(KeyPair keyPair);
+
+    bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const;
 
     mutable std::mutex transportsMutex_;
     std::map<TransportID, rsp::transport::TransportHandle> transports_;

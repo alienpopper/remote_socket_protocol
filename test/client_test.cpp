@@ -1,8 +1,13 @@
 #include "client/cpp/rsp_client.hpp"
 
+#include "common/transport/transport_tcp.hpp"
+#include "resource_manager/resource_manager.hpp"
+
 #include "common/transport/transport.hpp"
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
@@ -109,6 +114,48 @@ void require(bool condition, const std::string& message) {
     }
 }
 
+std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
+    for (uint16_t port = 35000; port < 35100; ++port) {
+        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
+        if (serverTransport->listen(endpoint)) {
+            return endpoint;
+        }
+    }
+
+    throw std::runtime_error("failed to find an available TCP port for handshake test");
+}
+
+void testTcpAsciiHandshake() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    rsp::resource_manager::ResourceManager resourceManager({serverTransport});
+
+    std::promise<bool> handshakePromise;
+    std::future<bool> handshakeFuture = handshakePromise.get_future();
+    serverTransport->setNewConnectionCallback([&resourceManager, &handshakePromise](const rsp::transport::ConnectionHandle& connection) {
+        try {
+            const bool succeeded = resourceManager.performAsciiHandshake(connection);
+            connection->close();
+            handshakePromise.set_value(succeeded);
+        } catch (...) {
+            handshakePromise.set_exception(std::current_exception());
+        }
+    });
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+
+    rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create();
+    const rsp::client::RSPClient::TransportID transportId = client->createTcpTransport();
+    const rsp::transport::ConnectionHandle connection = client->connect(transportId, endpoint);
+    require(connection != nullptr, "client should complete the ASCII handshake over TCP");
+
+    require(handshakeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+            "server handshake should complete");
+    require(handshakeFuture.get(), "server should accept the protobuf handshake");
+
+    client->removeTransport(transportId);
+    serverTransport->stop();
+}
+
 }  // namespace
 
 int main() {
@@ -185,6 +232,8 @@ int main() {
         require(!client->hasTransport(mockTransportId), "removed transport should no longer be tracked");
         require(!client->removeTransport(mockTransportId), "removing the same transport twice should fail");
         require(client->transportCount() == 1, "removing a transport should shrink the managed set");
+
+        testTcpAsciiHandshake();
 
         std::cout << "client_test passed\n";
         return 0;

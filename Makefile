@@ -24,6 +24,7 @@ COMMON_SOURCES := \
 	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
+	$(COMMON_ASCII_HANDSHAKE_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
@@ -34,6 +35,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
+	$(COMMON_ASCII_HANDSHAKE_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
@@ -74,11 +76,13 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/resource_manager/resource_manager.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/test/client_test.o
 

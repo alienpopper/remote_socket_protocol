@@ -1,5 +1,6 @@
 #include "client/cpp/rsp_client.hpp"
 
+#include "common/ascii_handshake.hpp"
 #include "common/transport/transport_tcp.hpp"
 
 #include <memory>
@@ -39,6 +40,25 @@ RSPClient::TransportID RSPClient::addTransport(const rsp::transport::TransportHa
     std::lock_guard<std::mutex> lock(transportsMutex_);
     transports_.emplace(transportId, transport);
     return transportId;
+}
+
+rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, const std::string& parameters) const {
+    const rsp::transport::TransportHandle selectedTransport = transport(transportId);
+    if (selectedTransport == nullptr) {
+        return nullptr;
+    }
+
+    const rsp::transport::ConnectionHandle connection = selectedTransport->connect(parameters);
+    if (connection == nullptr) {
+        return nullptr;
+    }
+
+    if (!performAsciiHandshake(connection)) {
+        selectedTransport->stop();
+        return nullptr;
+    }
+
+    return connection;
 }
 
 bool RSPClient::hasTransports() const {
@@ -94,6 +114,10 @@ rsp::transport::TransportHandle RSPClient::transport(TransportID transportId) co
     }
 
     return iterator->second;
+}
+
+bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
+    return rsp::ascii_handshake::performClientHandshake(connection);
 }
 
 }  // namespace rsp::client

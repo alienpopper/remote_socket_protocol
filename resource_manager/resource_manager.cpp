@@ -1,5 +1,7 @@
 #include "resource_manager/resource_manager.hpp"
 
+#include "common/ascii_handshake.hpp"
+
 #include <utility>
 
 namespace rsp::resource_manager {
@@ -20,6 +22,10 @@ void ResourceManager::addClientTransport(const rsp::transport::ListeningTranspor
 
 size_t ResourceManager::clientTransportCount() const {
     return clientTransports_.size();
+}
+
+bool ResourceManager::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
+    return rsp::ascii_handshake::performServerHandshake(connection);
 }
 
 }  // namespace rsp::resource_manager
