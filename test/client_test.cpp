@@ -134,18 +134,22 @@ bool waitForCondition(const std::function<bool()>& condition) {
     return condition();
 }
 
-rsp::proto::RSPMessage makeChallengeRequestMessage(const std::array<uint8_t, 16>& sourceBytes,
+rsp::proto::RSPMessage makeChallengeRequestMessage(const std::array<uint8_t, 16>& signerBytes,
                                                    const std::array<uint8_t, 16>& nonceBytes) {
     rsp::proto::RSPMessage message;
-    setBytes(message.mutable_source()->mutable_value(), sourceBytes);
+    setBytes(message.mutable_signature()->mutable_signer()->mutable_value(), signerBytes);
+    message.mutable_signature()->set_algorithm(rsp::proto::P256);
+    message.mutable_signature()->set_signature("challenge-request-signature");
     setBytes(message.mutable_challenge_request()->mutable_nonce()->mutable_value(), nonceBytes);
     return message;
 }
 
-rsp::proto::RSPMessage makeChallengeReplyMessage(const std::array<uint8_t, 16>& sourceBytes,
+rsp::proto::RSPMessage makeChallengeReplyMessage(const std::array<uint8_t, 16>& signerBytes,
                                                  const std::array<uint8_t, 16>& nonceBytes) {
     rsp::proto::RSPMessage message;
-    setBytes(message.mutable_source()->mutable_value(), sourceBytes);
+    setBytes(message.mutable_signature()->mutable_signer()->mutable_value(), signerBytes);
+    message.mutable_signature()->set_algorithm(rsp::proto::P256);
+    message.mutable_signature()->set_signature("challenge-reply-signature");
     setBytes(message.mutable_challenge_reply()->mutable_nonce()->mutable_value(), nonceBytes);
     return message;
 }

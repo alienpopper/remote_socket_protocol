@@ -16,14 +16,29 @@ message DateTime {
   uint64 milliseconds_since_epoch = 1;
 }
 
+enum SIGNATURE_ALGORITHMS {
+  SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+  P256 = 100;
+  RSA2048 = 200;
+  RSA4096 = 201;
+}
+
+message SignatureBlock {
+  NodeId signer = 1;
+  SIGNATURE_ALGORITHMS algorithm = 2;
+  bytes signature = 3;
+}
+
 message Endorsement {
   NodeId subject = 1;
   NodeId endorsement_service = 2;
   Uuid endorsement_type = 3;
   bytes endorsement_value = 4;
   DateTime valid_until = 5;
-  bytes signature = 6;
+  bytes signature = 99;
 }
+
+
 
 message ChallengeRequest {
     Uuid nonce = 1;
@@ -34,23 +49,25 @@ message ChallengeReply {
 }
 
 message RouteEntry {
-    NodeId nodeID = 1;
+    NodeId node_id = 1;
     uint32 hops_away = 2;
     DateTime last_seen = 3;
 }
 
 message RouteUpdate {
-    NodeId link = 1;
     repeated RouteEntry entries = 2;
 }
 
 message RSPMessage {
-  optional NodeId destination = 1;  //RouteUpdate doesn't require a destination
+  //No destination means it's for whoever it on the other side of this transport link
+  optional NodeId destination = 1;  
   NodeId source = 2;
-    oneof submessage {
-        ChallengeRequest challenge_request = 3;
-        ChallengeReply challenge_reply = 4;
-        RouteUpdate route = 5;
-    }
-  bytes signature = 99;
+  oneof submessage {
+      ChallengeRequest challenge_request = 3;
+      ChallengeReply challenge_reply = 4;
+      RouteUpdate route = 5;
+  }
+  SignatureBlock signature = 99;
+  //endorsements are valid even if the signature is wrong
+  repeated Endorsement endorsements = 100; 
 }

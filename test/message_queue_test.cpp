@@ -55,15 +55,20 @@ protected:
 
 rsp::proto::RSPMessage makeMessage(int value) {
     rsp::proto::RSPMessage message;
-    message.mutable_signature()->assign(reinterpret_cast<const char*>(&value), sizeof(value));
+    message.mutable_challenge_request()->mutable_nonce()->set_value(
+        std::string(reinterpret_cast<const char*>(&value), sizeof(value)));
     return message;
 }
 
 int messageValue(const rsp::proto::RSPMessage& message) {
     int value = 0;
-    const std::string& signature = message.signature();
-    if (signature.size() == sizeof(value)) {
-        std::memcpy(&value, signature.data(), sizeof(value));
+    if (!message.has_challenge_request()) {
+        return value;
+    }
+
+    const std::string& nonce = message.challenge_request().nonce().value();
+    if (nonce.size() == sizeof(value)) {
+        std::memcpy(&value, nonce.data(), sizeof(value));
     }
 
     return value;
