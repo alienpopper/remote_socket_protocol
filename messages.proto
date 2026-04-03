@@ -24,3 +24,21 @@ message Endorsement {
   DateTime valid_until = 5;
   bytes signature = 6;
 }
+
+message ChallengeRequest {
+    Uuid nonce = 1;
+}
+
+message ChallengeReply {
+    Uuid nonce = 1;
+    bytes signature = 2;
+}
+
+message RSPMessage {
+  NodeId destination = 1;
+  NodeId source = 2;
+    oneof submessage {
+        ChallengeRequest challenge_request = 3;
+        ChallengeReply challenge_reply = 4;
+    }
+}

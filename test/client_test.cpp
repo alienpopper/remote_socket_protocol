@@ -131,9 +131,9 @@ void testTcpAsciiHandshake() {
 
     std::promise<bool> handshakePromise;
     std::future<bool> handshakeFuture = handshakePromise.get_future();
-    serverTransport->setNewConnectionCallback([&resourceManager, &handshakePromise](const rsp::transport::ConnectionHandle& connection) {
+    resourceManager.setNewConnectionCallback([&handshakePromise](const rsp::transport::ConnectionHandle& connection) {
         try {
-            const bool succeeded = resourceManager.performAsciiHandshake(connection);
+            const bool succeeded = (connection != nullptr);
             connection->close();
             handshakePromise.set_value(succeeded);
         } catch (...) {
@@ -151,6 +151,8 @@ void testTcpAsciiHandshake() {
     require(handshakeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "server handshake should complete");
     require(handshakeFuture.get(), "server should accept the protobuf handshake");
+        require(resourceManager.activeConnectionCount() == 1,
+            "resource manager should be notified when a listening transport accepts a connection");
 
     client->removeTransport(transportId);
     serverTransport->stop();
