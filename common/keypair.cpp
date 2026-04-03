@@ -215,6 +215,14 @@ KeyPair KeyPair::readFromDisk(const std::string& privateKeyPath, const std::stri
     return KeyPair(duplicateKey(privateKey.get()).release());
 }
 
+KeyPair KeyPair::duplicate() const {
+    if (!isValid()) {
+        throw makeError("cannot duplicate an empty keypair");
+    }
+
+    return KeyPair(duplicateKey(key_.get()).release());
+}
+
 NodeID KeyPair::nodeID() const {
     if (!isValid()) {
         throw makeError("cannot derive a NodeID from an empty keypair");

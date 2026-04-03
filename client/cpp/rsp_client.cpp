@@ -10,24 +10,6 @@
 
 namespace rsp::client {
 
-class ClientApiIncomingMessageQueue : public rsp::RSPMessageQueue {
-public:
-    explicit ClientApiIncomingMessageQueue(RSPClient& owner) : owner_(owner) {
-    }
-
-protected:
-    void handleMessage(Message message, rsp::MessageQueueSharedState&) override {
-        owner_.dispatchIncomingMessage(std::move(message));
-    }
-
-    void handleQueueFull(size_t, size_t, const Message&) override {
-        std::cerr << "RSPClient incoming message queue dropped message because the queue is full" << std::endl;
-    }
-
-private:
-    RSPClient& owner_;
-};
-
 namespace {
 
 rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
@@ -58,10 +40,8 @@ RSPClient::Ptr RSPClient::create(KeyPair keyPair) {
 }
 
 RSPClient::RSPClient(KeyPair keyPair)
-    : messageClient_(RSPClientMessage::create(std::move(keyPair))),
-      incomingMessages_(std::make_shared<ClientApiIncomingMessageQueue>(*this)) {
-    incomingMessages_->setWorkerCount(1);
-    incomingMessages_->start();
+        : rsp::RSPNode(keyPair.duplicate()),
+            messageClient_(RSPClientMessage::create(std::move(keyPair))) {
     receiveThread_ = std::thread([this]() { receiveLoop(); });
 }
 
@@ -75,14 +55,25 @@ RSPClient::~RSPClient() {
     if (receiveThread_.joinable()) {
         receiveThread_.join();
     }
-
-    if (incomingMessages_ != nullptr) {
-        incomingMessages_->stop();
-    }
 }
 
 int RSPClient::run() const {
     return 0;
+}
+
+bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
+    if (message.has_ping_reply()) {
+        handlePingReply(message);
+        return true;
+    }
+
+    return false;
+}
+
+void RSPClient::handleOutputMessage(rsp::proto::RSPMessage message) {
+    if (!messageClient_->send(message)) {
+        std::cerr << "RSPClient failed to send message produced by node handler" << std::endl;
+    }
 }
 
 RSPClient::ClientConnectionID RSPClient::connectToResourceManager(const std::string& transport,
@@ -120,7 +111,7 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     }();
 
     rsp::proto::RSPMessage pingRequest;
-    *pingRequest.mutable_source() = toProtoNodeId(messageClient_->nodeId());
+    *pingRequest.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *pingRequest.mutable_destination() = toProtoNodeId(nodeId);
     pingRequest.mutable_ping_request()->mutable_nonce()->set_value(nonce);
     pingRequest.mutable_ping_request()->set_sequence(sequence);
@@ -161,9 +152,7 @@ void RSPClient::receiveLoop() {
 
         rsp::proto::RSPMessage message;
         if (messageClient_ != nullptr && messageClient_->tryDequeueMessage(message)) {
-            if (incomingMessages_ == nullptr || !incomingMessages_->push(std::move(message))) {
-                std::cerr << "RSPClient failed to enqueue inbound message for API handling" << std::endl;
-            }
+            dispatchIncomingMessage(std::move(message));
             continue;
         }
 
@@ -172,13 +161,12 @@ void RSPClient::receiveLoop() {
 }
 
 void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
-    if (message.has_ping_request() && shouldHandleLocally(message)) {
-        handlePingRequest(message);
+    if (!shouldHandleLocally(message)) {
         return;
     }
 
-    if (message.has_ping_reply()) {
-        handlePingReply(message);
+    if (!enqueueInput(std::move(message))) {
+        std::cerr << "RSPClient failed to enqueue inbound message on node input queue" << std::endl;
     }
 }
 
@@ -187,25 +175,7 @@ bool RSPClient::shouldHandleLocally(const rsp::proto::RSPMessage& message) const
         return true;
     }
 
-    return message.destination().value() == toProtoNodeId(messageClient_->nodeId()).value();
-}
-
-void RSPClient::handlePingRequest(const rsp::proto::RSPMessage& message) {
-    rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(messageClient_->nodeId());
-    if (message.has_source()) {
-        *reply.mutable_destination() = message.source();
-    }
-
-    auto* pingReply = reply.mutable_ping_reply();
-    pingReply->mutable_nonce()->CopyFrom(message.ping_request().nonce());
-    pingReply->set_sequence(message.ping_request().sequence());
-    pingReply->mutable_time_sent()->CopyFrom(message.ping_request().time_sent());
-    *pingReply->mutable_time_replied() = toProtoDateTime(rsp::DateTime());
-
-    if (!messageClient_->send(reply)) {
-        std::cerr << "RSPClient failed to send ping reply" << std::endl;
-    }
+    return message.destination().value() == toProtoNodeId(keyPair().nodeID()).value();
 }
 
 void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {

@@ -41,21 +41,11 @@ RSPClientMessage::Ptr RSPClientMessage::create(KeyPair keyPair) {
 }
 
 RSPClientMessage::RSPClientMessage(KeyPair keyPair)
-    : rsp::RSPNode(std::move(keyPair)), incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
+    : keyPair_(std::move(keyPair)), incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
 }
 
 int RSPClientMessage::run() const {
     return 0;
-}
-
-bool RSPClientMessage::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
-    return false;
-}
-
-void RSPClientMessage::handleOutputMessage(rsp::proto::RSPMessage message) {
-    if (!send(message)) {
-        std::cerr << "RSPClientMessage failed to route outgoing message" << std::endl;
-    }
 }
 
 RSPClientMessage::ClientConnectionID RSPClientMessage::connectToResourceManager(const std::string& transport,
@@ -164,7 +154,7 @@ std::optional<rsp::NodeID> RSPClientMessage::peerNodeID(ClientConnectionID conne
 }
 
 rsp::NodeID RSPClientMessage::nodeId() const {
-    return keyPair().nodeID();
+    return keyPair_.nodeID();
 }
 
 bool RSPClientMessage::hasConnections() const {
@@ -234,7 +224,7 @@ rsp::encoding::EncodingHandle RSPClientMessage::createEncoding(const rsp::transp
     }
 
     if (encoding == rsp::ascii_handshake::kEncoding) {
-        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
+        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair_.duplicate());
     }
 
     return nullptr;
