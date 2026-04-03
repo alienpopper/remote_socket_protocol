@@ -17,4 +17,8 @@ const std::array<uint8_t, 16>& RSPNode::instanceSeed() const {
     return instanceSeed_;
 }
 
+const KeyPair& RSPNode::keyPair() const {
+    return keyPair_;
+}
+
 }  // namespace rsp

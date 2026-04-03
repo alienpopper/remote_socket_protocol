@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/keypair.hpp"
 #include "common/message_queue.hpp"
 #include "common/transport/transport.hpp"
 #include "messages.pb.h"
@@ -12,7 +13,7 @@ namespace rsp::encoding {
 
 class Encoding {
 public:
-    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages);
+    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages, const rsp::KeyPair& localKeyPair);
     virtual ~Encoding();
 
     Encoding(const Encoding&) = delete;
@@ -27,10 +28,12 @@ public:
 protected:
     rsp::transport::ConnectionHandle connection() const;
     void enqueueReceived(rsp::proto::RSPMessage message) const;
+    rsp::proto::RSPMessage normalizeOutgoingMessage(rsp::proto::RSPMessage message) const;
 
 private:
     virtual bool readMessage(rsp::proto::RSPMessage& message) = 0;
     virtual bool writeMessage(const rsp::proto::RSPMessage& message) = 0;
+    bool performInitialIdentityExchange();
     void readLoop();
     bool queueSend(rsp::proto::RSPMessage message) const;
 
@@ -39,6 +42,7 @@ private:
     rsp::transport::ConnectionHandle connection_;
     rsp::MessageQueueHandle receivedMessages_;
     rsp::MessageQueueHandle outgoingMessages_;
+    const rsp::KeyPair* localKeyPair_;
     bool running_;
     std::thread readThread_;
 };

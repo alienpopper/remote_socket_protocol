@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 namespace rsp::transport {
@@ -19,6 +20,7 @@ using ListeningTransportHandle = std::shared_ptr<ListeningTransport>;
 
 class Connection {
 public:
+    Connection() = default;
     virtual ~Connection() = default;
 
     virtual int send(const rsp::Buffer& data) = 0;
@@ -27,6 +29,12 @@ public:
 
     bool readExact(uint8_t* destination, uint32_t length);
     bool sendAll(const uint8_t* data, uint32_t length);
+    void setPeerNodeID(const rsp::NodeID& nodeId);
+    std::optional<rsp::NodeID> peerNodeID() const;
+
+private:
+    mutable std::mutex peerNodeIdMutex_;
+    std::optional<rsp::NodeID> peerNodeId_;
 };
 
 using NewConnectionCallback = std::function<void(const ConnectionHandle& connection)>;

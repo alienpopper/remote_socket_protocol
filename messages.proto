@@ -29,6 +29,11 @@ message SignatureBlock {
   bytes signature = 3;
 }
 
+message PublicKey {
+    SIGNATURE_ALGORITHMS algorithm = 1;
+    bytes public_key = 2;
+}
+
 message Endorsement {
   NodeId subject = 1;
   NodeId endorsement_service = 2;
@@ -38,13 +43,13 @@ message Endorsement {
   bytes signature = 99;
 }
 
-
-
-message ChallengeRequest {
-    Uuid nonce = 1;
+message Identity {
+    optional Uuid nonce = 1;
+    PublicKey public_key = 2;
 }
 
-message ChallengeReply {
+//Reply should be an Identity
+message ChallengeRequest {
     Uuid nonce = 1;
 }
 
@@ -59,12 +64,12 @@ message RouteUpdate {
 }
 
 message RSPMessage {
-  //No destination means it's for whoever it on the other side of this transport link
+  //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
   NodeId source = 2;
   oneof submessage {
       ChallengeRequest challenge_request = 3;
-      ChallengeReply challenge_reply = 4;
+      Identity identity = 4;
       RouteUpdate route = 5;
   }
   SignatureBlock signature = 99;

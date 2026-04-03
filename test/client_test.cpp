@@ -20,6 +20,15 @@
 
 namespace {
 
+class TestResourceManager : public rsp::resource_manager::ResourceManager {
+public:
+    using rsp::resource_manager::ResourceManager::ResourceManager;
+
+    rsp::NodeID nodeId() const {
+        return keyPair().nodeID();
+    }
+};
+
 class MockConnection : public rsp::transport::Connection {
 public:
     explicit MockConnection(int id) : id_(id) {
@@ -134,23 +143,11 @@ bool waitForCondition(const std::function<bool()>& condition) {
     return condition();
 }
 
-rsp::proto::RSPMessage makeChallengeRequestMessage(const std::array<uint8_t, 16>& signerBytes,
-                                                   const std::array<uint8_t, 16>& nonceBytes) {
+rsp::proto::RSPMessage makeRouteUpdateMessage(const std::array<uint8_t, 16>& nodeIdBytes, uint32_t hopsAway) {
     rsp::proto::RSPMessage message;
-    setBytes(message.mutable_signature()->mutable_signer()->mutable_value(), signerBytes);
-    message.mutable_signature()->set_algorithm(rsp::proto::P256);
-    message.mutable_signature()->set_signature("challenge-request-signature");
-    setBytes(message.mutable_challenge_request()->mutable_nonce()->mutable_value(), nonceBytes);
-    return message;
-}
-
-rsp::proto::RSPMessage makeChallengeReplyMessage(const std::array<uint8_t, 16>& signerBytes,
-                                                 const std::array<uint8_t, 16>& nonceBytes) {
-    rsp::proto::RSPMessage message;
-    setBytes(message.mutable_signature()->mutable_signer()->mutable_value(), signerBytes);
-    message.mutable_signature()->set_algorithm(rsp::proto::P256);
-    message.mutable_signature()->set_signature("challenge-reply-signature");
-    setBytes(message.mutable_challenge_reply()->mutable_nonce()->mutable_value(), nonceBytes);
+    auto* entry = message.mutable_route()->add_entries();
+    setBytes(entry->mutable_node_id()->mutable_value(), nodeIdBytes);
+    entry->set_hops_away(hopsAway);
     return message;
 }
 
@@ -167,14 +164,16 @@ std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTrans
 
 void testTcpAsciiHandshake() {
     auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
-    rsp::resource_manager::ResourceManager resourceManager({serverTransport});
+    TestResourceManager resourceManager({serverTransport});
 
-    std::promise<bool> handshakePromise;
-    std::future<bool> handshakeFuture = handshakePromise.get_future();
+    rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
+
+    std::promise<rsp::transport::ConnectionHandle> handshakePromise;
+    std::future<rsp::transport::ConnectionHandle> handshakeFuture = handshakePromise.get_future();
     resourceManager.setNewConnectionCallback([&handshakePromise](const rsp::transport::ConnectionHandle& connection) {
         try {
-            const bool succeeded = (connection != nullptr);
-            handshakePromise.set_value(succeeded);
+            handshakePromise.set_value(connection);
         } catch (...) {
             handshakePromise.set_exception(std::current_exception());
         }
@@ -182,49 +181,60 @@ void testTcpAsciiHandshake() {
 
     const std::string endpoint = findListeningEndpoint(serverTransport);
 
-    rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create();
+    rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create(std::move(clientKeyPair));
     const rsp::client::RSPClient::TransportID transportId = client->createTcpTransport();
     const rsp::transport::ConnectionHandle connection = client->connect(transportId, endpoint);
-    require(connection != nullptr, "client should complete the ASCII handshake over TCP");
+    require(connection != nullptr, "client should complete the ASCII and identity handshakes over TCP");
 
     require(handshakeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "server handshake should complete");
-    require(handshakeFuture.get(), "server should accept the protobuf handshake");
-        require(resourceManager.activeConnectionCount() == 1,
+    const rsp::transport::ConnectionHandle serverConnection = handshakeFuture.get();
+    require(serverConnection != nullptr, "server should accept the authenticated transport");
+    require(resourceManager.activeConnectionCount() == 1,
             "resource manager should be notified when a listening transport accepts a connection");
-        require(resourceManager.activeEncodingCount() == 1,
+    require(resourceManager.activeEncodingCount() == 1,
             "resource manager should create an encoding for the accepted connection");
+    require(resourceManager.pendingMessageCount() == 0,
+        "authentication messages should not be exposed through the resource manager queue");
 
-        const std::array<uint8_t, 16> clientSource = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                              0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
-        const std::array<uint8_t, 16> clientNonce = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-                             0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F};
-        const rsp::proto::RSPMessage clientMessage = makeChallengeRequestMessage(clientSource, clientNonce);
-        require(client->send(transportId, clientMessage), "client should send framed protobuf messages after the handshake");
-        require(waitForCondition([&resourceManager]() { return resourceManager.pendingMessageCount() == 1; }),
-            "resource manager should receive and queue a decoded protobuf message");
+    const auto clientPeerNodeId = connection->peerNodeID();
+    require(clientPeerNodeId.has_value(), "client transport should learn the server node id during authentication");
+    require(clientPeerNodeId.value() == resourceManager.nodeId(),
+        "client transport should store the resource manager node id");
 
-        rsp::proto::RSPMessage queuedAtServer;
-        require(resourceManager.tryDequeueMessage(queuedAtServer), "resource manager should expose queued decoded messages");
-        require(queuedAtServer.has_challenge_request(), "resource manager should decode the client challenge request");
-        require(queuedAtServer.challenge_request().nonce().value() == clientMessage.challenge_request().nonce().value(),
-            "resource manager should preserve the protobuf payload across framing");
+    const auto serverPeerNodeId = serverConnection->peerNodeID();
+    require(serverPeerNodeId.has_value(), "server transport should learn the client node id during authentication");
+    require(serverPeerNodeId.value() == clientNodeId,
+        "server transport should store the client node id");
 
-        const std::array<uint8_t, 16> serverSource = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-                              0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F};
-        const std::array<uint8_t, 16> serverNonce = {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-                             0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F};
-        const rsp::proto::RSPMessage serverMessage = makeChallengeReplyMessage(serverSource, serverNonce);
-        require(resourceManager.sendToConnection(0, serverMessage),
-            "resource manager should send framed protobuf messages through its active encoding");
-        require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
-            "client should receive and queue a decoded protobuf reply");
+    const std::array<uint8_t, 16> clientRouteNode = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                         0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+    const rsp::proto::RSPMessage clientMessage = makeRouteUpdateMessage(clientRouteNode, 2);
+    require(client->send(transportId, clientMessage), "client should send framed protobuf messages after authentication");
+    require(waitForCondition([&resourceManager]() { return resourceManager.pendingMessageCount() == 1; }),
+        "resource manager should receive and queue a decoded protobuf message");
 
-        rsp::proto::RSPMessage queuedAtClient;
-        require(client->tryDequeueMessage(queuedAtClient), "client should expose queued decoded protobuf messages");
-        require(queuedAtClient.has_challenge_reply(), "client should decode the server challenge reply");
-        require(queuedAtClient.challenge_reply().nonce().value() == serverMessage.challenge_reply().nonce().value(),
-            "client should preserve the reply payload across framing");
+    rsp::proto::RSPMessage queuedAtServer;
+    require(resourceManager.tryDequeueMessage(queuedAtServer), "resource manager should expose queued decoded messages");
+    require(queuedAtServer.has_route(), "resource manager should decode the client route update");
+    require(queuedAtServer.route().entries_size() == 1, "resource manager should preserve route entries");
+    require(queuedAtServer.route().entries(0).node_id().value() == clientMessage.route().entries(0).node_id().value(),
+        "resource manager should preserve the route payload across framing");
+
+    const std::array<uint8_t, 16> serverRouteNode = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+                         0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F};
+    const rsp::proto::RSPMessage serverMessage = makeRouteUpdateMessage(serverRouteNode, 5);
+    require(resourceManager.sendToConnection(0, serverMessage),
+        "resource manager should send framed protobuf messages through its active encoding");
+    require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
+        "client should receive and queue a decoded protobuf message");
+
+    rsp::proto::RSPMessage queuedAtClient;
+    require(client->tryDequeueMessage(queuedAtClient), "client should expose queued decoded protobuf messages");
+    require(queuedAtClient.has_route(), "client should decode the server route update");
+    require(queuedAtClient.route().entries_size() == 1, "client should preserve route entries");
+    require(queuedAtClient.route().entries(0).node_id().value() == serverMessage.route().entries(0).node_id().value(),
+        "client should preserve the route payload across framing");
 
     client->removeTransport(transportId);
     serverTransport->stop();

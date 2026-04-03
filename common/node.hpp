@@ -17,6 +17,7 @@ public:
 
 protected:
     const std::array<uint8_t, 16>& instanceSeed() const;
+    const KeyPair& keyPair() const;
 
 private:
     KeyPair keyPair_;

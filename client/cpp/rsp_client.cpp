@@ -61,7 +61,7 @@ rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, con
     }
 
     rsp::encoding::EncodingHandle previousEncoding;
-    const auto newEncoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_);
+    const auto newEncoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
     if (!newEncoding->start()) {
         selectedTransport->stop();
         return nullptr;

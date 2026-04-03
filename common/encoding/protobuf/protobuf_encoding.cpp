@@ -29,8 +29,9 @@ uint32_t readUint32(const uint8_t* data) {
 }  // namespace
 
 ProtobufEncoding::ProtobufEncoding(rsp::transport::ConnectionHandle connection,
-                                   rsp::MessageQueueHandle receivedMessages)
-    : Encoding(std::move(connection), std::move(receivedMessages)) {
+                                   rsp::MessageQueueHandle receivedMessages,
+                                   const rsp::KeyPair& localKeyPair)
+    : Encoding(std::move(connection), std::move(receivedMessages), localKeyPair) {
 }
 
 bool ProtobufEncoding::readMessage(rsp::proto::RSPMessage& message) {

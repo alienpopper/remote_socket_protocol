@@ -3,8 +3,6 @@
 #include "common/base_types.hpp"
 #include "common/version.h"
 
-#include <cstdint>
-#include <stdexcept>
 #include <string>
 
 namespace rsp::ascii_handshake {

@@ -1,6 +1,7 @@
 #include "common/transport/transport.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace rsp::transport {
 
@@ -33,6 +34,20 @@ bool Connection::sendAll(const uint8_t* data, uint32_t length) {
     }
 
     return true;
+}
+
+void Connection::setPeerNodeID(const rsp::NodeID& nodeId) {
+    std::lock_guard<std::mutex> lock(peerNodeIdMutex_);
+    if (peerNodeId_.has_value() && peerNodeId_.value() != nodeId) {
+        throw std::logic_error("peer NodeID is already established for this connection");
+    }
+
+    peerNodeId_ = nodeId;
+}
+
+std::optional<rsp::NodeID> Connection::peerNodeID() const {
+    std::lock_guard<std::mutex> lock(peerNodeIdMutex_);
+    return peerNodeId_;
 }
 
 void ListeningTransport::setNewConnectionCallback(NewConnectionCallback callback) {

@@ -56,12 +56,57 @@ int main() {
         require(!signature.empty(), "generated signature should not be empty");
         require(generatedKeyPair.verify(message, signature), "generated signature should verify");
 
-        message.data()[0] ^= 0xFF;
-        require(!generatedKeyPair.verify(message, signature), "tampered message should fail verification");
-        message.data()[0] ^= 0xFF;
-
         const rsp::NodeID generatedNodeId = generatedKeyPair.nodeID();
         require(generatedNodeId != rsp::NodeID(), "generated NodeID should not be zero");
+
+        const rsp::proto::PublicKey exportedPublicKey = generatedKeyPair.publicKey();
+        require(exportedPublicKey.algorithm() == rsp::proto::P256, "exported public key should report P256");
+        require(!exportedPublicKey.public_key().empty(), "exported public key bytes should not be empty");
+
+        rsp::KeyPair publicOnlyKeyPair = rsp::KeyPair::fromPublicKey(exportedPublicKey);
+        require(publicOnlyKeyPair.isValid(), "public-only keypair should be valid");
+        require(!publicOnlyKeyPair.hasPrivateKey(), "public-only keypair should not expose a private component");
+        require(publicOnlyKeyPair.nodeID() == generatedNodeId,
+            "public-only keypair should hash to the same NodeID as the original keypair");
+        require(publicOnlyKeyPair.verify(message, signature),
+            "public-only keypair should verify signatures from the original keypair");
+
+        bool publicOnlySignThrown = false;
+        try {
+            static_cast<void>(publicOnlyKeyPair.sign(message));
+        } catch (const std::runtime_error&) {
+            publicOnlySignThrown = true;
+        }
+        require(publicOnlySignThrown, "public-only keypair should reject signing");
+
+        const rsp::proto::SignatureBlock signatureBlock = generatedKeyPair.signBlock(message);
+        require(signatureBlock.algorithm() == rsp::proto::P256, "signature block should record the P256 algorithm");
+        require(signatureBlock.signer().value().size() == 16, "signature block signer should contain a NodeId");
+        require(!signatureBlock.signature().empty(), "signature block should contain signature bytes");
+        require(generatedKeyPair.verifyBlock(message, signatureBlock),
+            "generated keypair should verify its own signature block");
+        require(publicOnlyKeyPair.verifyBlock(message, signatureBlock),
+            "public-only keypair should verify signature blocks from the original keypair");
+        require(publicOnlyKeyPair.verify(message,
+                         rsp::Buffer(reinterpret_cast<const uint8_t*>(signatureBlock.signature().data()),
+                                 static_cast<uint32_t>(signatureBlock.signature().size()))),
+            "signature block bytes should verify with the public-only keypair");
+
+        rsp::proto::SignatureBlock wrongSignerBlock = signatureBlock;
+        wrongSignerBlock.mutable_signer()->set_value(std::string(16, '\0'));
+        require(!generatedKeyPair.verifyBlock(message, wrongSignerBlock),
+            "signature block with the wrong signer should fail verification");
+
+        rsp::proto::SignatureBlock wrongAlgorithmBlock = signatureBlock;
+        wrongAlgorithmBlock.set_algorithm(rsp::proto::RSA2048);
+        require(!generatedKeyPair.verifyBlock(message, wrongAlgorithmBlock),
+            "signature block with the wrong algorithm should fail verification");
+
+        message.data()[0] ^= 0xFF;
+        require(!generatedKeyPair.verify(message, signature), "tampered message should fail verification");
+        require(!generatedKeyPair.verifyBlock(message, signatureBlock),
+            "tampered message should fail signature block verification");
+        message.data()[0] ^= 0xFF;
 
         const std::filesystem::path testDir = std::filesystem::path("build") / "test" / "keypair";
         const std::filesystem::path privateKeyPath = testDir / "private.pem";

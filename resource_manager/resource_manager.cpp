@@ -104,7 +104,7 @@ void ResourceManager::handleNewConnection(const rsp::transport::ConnectionHandle
         return;
     }
 
-    const auto encoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_);
+    const auto encoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
     if (!encoding->start()) {
         connection->close();
         return;
