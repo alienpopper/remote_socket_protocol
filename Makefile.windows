@@ -187,7 +187,7 @@ test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 $(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj
 
-$(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER)
+$(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER) $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\node.cpp /Fo$(OBJ_DIR)\node.obj
 
 $(OBJ_DIR)\keypair.obj: common\keypair.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER) $(OS_COMMON_HEADER) $(PROTOBUF_GENERATED_HEADER)
