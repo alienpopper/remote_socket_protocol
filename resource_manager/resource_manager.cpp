@@ -3,6 +3,7 @@
 #include "common/ascii_handshake.hpp"
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -12,6 +13,17 @@
 namespace rsp::resource_manager {
 
 namespace {
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
+}
 
 class PendingConnectionQueue : public rsp::MessageQueue<rsp::transport::ConnectionHandle> {
 public:
@@ -27,6 +39,33 @@ protected:
         if (connection != nullptr) {
             connection->close();
         }
+    }
+
+private:
+    ResourceManager& owner_;
+};
+
+class IncomingMessageQueue : public rsp::RSPMessageQueue {
+public:
+    explicit IncomingMessageQueue(ResourceManager& owner) : owner_(owner) {
+    }
+
+protected:
+    void handleMessage(Message message, rsp::MessageQueueSharedState&) override {
+        if (owner_.isForThisNode(message)) {
+            if (!owner_.enqueueInput(std::move(message))) {
+                std::cerr << "ResourceManager failed to enqueue local message on input queue" << std::endl;
+            }
+            return;
+        }
+
+        if (!owner_.routeAndSend(message)) {
+            std::cerr << "ResourceManager failed to route incoming message" << std::endl;
+        }
+    }
+
+    void handleQueueFull(size_t, size_t, const Message&) override {
+        std::cerr << "ResourceManager incoming message queue dropped message because the queue is full" << std::endl;
     }
 
 private:
@@ -56,9 +95,11 @@ private:
 }  // namespace
 
 ResourceManager::ResourceManager()
-    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()),
+    : incomingMessages_(std::make_shared<IncomingMessageQueue>(*this)),
       pendingConnections_(std::make_shared<PendingConnectionQueue>(*this)),
       pendingEncodings_(std::make_shared<PendingEncodingQueue>(*this)) {
+    incomingMessages_->setWorkerCount(1);
+    incomingMessages_->start();
     pendingConnections_->setWorkerCount(1);
     pendingConnections_->start();
     pendingEncodings_->setWorkerCount(1);
@@ -67,10 +108,12 @@ ResourceManager::ResourceManager()
 }
 
 ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
-    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()),
+        : incomingMessages_(std::make_shared<IncomingMessageQueue>(*this)),
       pendingConnections_(std::make_shared<PendingConnectionQueue>(*this)),
       pendingEncodings_(std::make_shared<PendingEncodingQueue>(*this)),
       clientTransports_(std::move(clientTransports)) {
+        incomingMessages_->setWorkerCount(1);
+        incomingMessages_->start();
     pendingConnections_->setWorkerCount(1);
     pendingConnections_->start();
     pendingEncodings_->setWorkerCount(1);
@@ -79,6 +122,10 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
 }
 
 ResourceManager::~ResourceManager() {
+    if (incomingMessages_ != nullptr) {
+        incomingMessages_->stop();
+    }
+
     if (pendingConnections_ != nullptr) {
         pendingConnections_->stop();
     }
@@ -114,8 +161,10 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
     return false;
 }
 
-void ResourceManager::handleOutputMessage(rsp::proto::RSPMessage) {
-    std::cerr << "ResourceManager output queue dropped message" << std::endl;
+void ResourceManager::handleOutputMessage(rsp::proto::RSPMessage message) {
+    if (!routeAndSend(message)) {
+        std::cerr << "ResourceManager failed to route outgoing message" << std::endl;
+    }
 }
 
 void ResourceManager::addClientTransport(const rsp::transport::ListeningTransportHandle& transport) {
@@ -155,6 +204,48 @@ bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessag
 
     const auto outgoingMessages = selectedEncoding->outgoingMessages();
     return outgoingMessages != nullptr && outgoingMessages->push(message);
+}
+
+bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const {
+    if (!message.has_destination() || message.destination().value().empty()) {
+        return false;
+    }
+
+    rsp::encoding::EncodingHandle selectedEncoding;
+
+    {
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
+        for (const auto& encoding : activeEncodings_) {
+            if (encoding == nullptr) {
+                continue;
+            }
+
+            const auto peerNodeId = encoding->peerNodeID();
+            if (!peerNodeId.has_value()) {
+                continue;
+            }
+
+            if (toProtoNodeId(*peerNodeId).value() == message.destination().value()) {
+                selectedEncoding = encoding;
+                break;
+            }
+        }
+    }
+
+    if (selectedEncoding == nullptr) {
+        return false;
+    }
+
+    const auto outgoingMessages = selectedEncoding->outgoingMessages();
+    return outgoingMessages != nullptr && outgoingMessages->push(message);
+}
+
+bool ResourceManager::isForThisNode(const rsp::proto::RSPMessage& message) const {
+    if (!message.has_destination()) {
+        return true;
+    }
+
+    return message.destination().value() == toProtoNodeId(keyPair().nodeID()).value();
 }
 
 bool ResourceManager::tryDequeueMessage(rsp::proto::RSPMessage& message) const {

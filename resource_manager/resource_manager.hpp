@@ -29,6 +29,8 @@ public:
     void setNewEncodingCallback(NewEncodingCallback callback);
     size_t activeEncodingCount() const;
     bool sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const;
+    bool routeAndSend(const rsp::proto::RSPMessage& message) const;
+    bool isForThisNode(const rsp::proto::RSPMessage& message) const;
     bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     size_t pendingMessageCount() const;
 
@@ -36,7 +38,9 @@ public:
     void processPendingEncoding(rsp::encoding::EncodingHandle encoding);
 
 private:
+    /*messages send to this RM, not routed to other nodes*/
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+    /*messages produced by this RM, not routed through*/
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
 
     void registerTransportCallbacks();

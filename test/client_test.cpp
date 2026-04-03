@@ -130,6 +130,14 @@ void setBytes(std::string* destination, const std::array<uint8_t, 16>& value) {
     destination->assign(reinterpret_cast<const char*>(value.data()), value.size());
 }
 
+void setNodeIdBytes(std::string* destination, const rsp::NodeID& nodeId) {
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    destination->assign(16, '\0');
+    std::memcpy(destination->data(), &high, sizeof(high));
+    std::memcpy(destination->data() + sizeof(high), &low, sizeof(low));
+}
+
 bool waitForCondition(const std::function<bool()>& condition) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (std::chrono::steady_clock::now() < deadline) {
@@ -148,6 +156,20 @@ rsp::proto::RSPMessage makeRouteUpdateMessage(const std::array<uint8_t, 16>& nod
     auto* entry = message.mutable_route()->add_entries();
     setBytes(entry->mutable_node_id()->mutable_value(), nodeIdBytes);
     entry->set_hops_away(hopsAway);
+    return message;
+}
+
+rsp::proto::RSPMessage makePingRequestMessage(const rsp::NodeID& sourceNodeId,
+                                              const rsp::NodeID& destinationNodeId,
+                                              const std::string& nonce,
+                                              uint32_t sequence,
+                                              uint64_t timeSentMilliseconds) {
+    rsp::proto::RSPMessage message;
+    setNodeIdBytes(message.mutable_source()->mutable_value(), sourceNodeId);
+    setNodeIdBytes(message.mutable_destination()->mutable_value(), destinationNodeId);
+    message.mutable_ping_request()->mutable_nonce()->set_value(nonce);
+    message.mutable_ping_request()->set_sequence(sequence);
+    message.mutable_ping_request()->mutable_time_sent()->set_milliseconds_since_epoch(timeSentMilliseconds);
     return message;
 }
 
@@ -205,19 +227,28 @@ void testTcpAsciiHandshake() {
     require(serverPeerNodeId.value() == clientNodeId,
         "server encoding should store the client node id");
 
-    const std::array<uint8_t, 16> clientRouteNode = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                         0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
-    const rsp::proto::RSPMessage clientMessage = makeRouteUpdateMessage(clientRouteNode, 2);
-    require(client->send(transportId, clientMessage), "client should send framed protobuf messages after authentication");
-    require(waitForCondition([&resourceManager]() { return resourceManager.pendingMessageCount() == 1; }),
-        "resource manager should receive and queue a decoded protobuf message");
+    const rsp::proto::RSPMessage pingRequest =
+        makePingRequestMessage(clientNodeId, resourceManager.nodeId(), "ping-nonce", 7, 123456);
+    require(client->send(transportId, pingRequest), "client should send a ping request after authentication");
+    require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
+        "client should receive a ping reply from the resource manager");
 
-    rsp::proto::RSPMessage queuedAtServer;
-    require(resourceManager.tryDequeueMessage(queuedAtServer), "resource manager should expose queued decoded messages");
-    require(queuedAtServer.has_route(), "resource manager should decode the client route update");
-    require(queuedAtServer.route().entries_size() == 1, "resource manager should preserve route entries");
-    require(queuedAtServer.route().entries(0).node_id().value() == clientMessage.route().entries(0).node_id().value(),
-        "resource manager should preserve the route payload across framing");
+    rsp::proto::RSPMessage pingReply;
+    require(client->tryDequeueMessage(pingReply), "client should expose the ping reply decoded by its encoding");
+    require(pingReply.has_ping_reply(), "resource manager should answer ping requests with ping replies");
+    require(pingReply.destination().value() == pingRequest.source().value(),
+        "ping reply should target the client node id");
+    require(pingReply.source().value() == pingRequest.destination().value(),
+        "ping reply should identify the resource manager as sender");
+    require(pingReply.ping_reply().nonce().value() == pingRequest.ping_request().nonce().value(),
+        "ping reply should preserve the ping nonce");
+    require(pingReply.ping_reply().sequence() == pingRequest.ping_request().sequence(),
+        "ping reply should preserve the ping sequence");
+    require(pingReply.ping_reply().time_sent().milliseconds_since_epoch() ==
+                pingRequest.ping_request().time_sent().milliseconds_since_epoch(),
+        "ping reply should preserve the original send timestamp");
+    require(pingReply.ping_reply().has_time_replied(),
+        "ping reply should include the reply timestamp");
 
     const std::array<uint8_t, 16> serverRouteNode = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
                          0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F};
