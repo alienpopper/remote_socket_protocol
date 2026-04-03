@@ -121,6 +121,7 @@ int recvSocket(SocketHandle socketHandle, uint8_t* buffer, uint32_t length) {
 
 void closeSocket(SocketHandle socketHandle) {
     if (isValidSocket(socketHandle)) {
+        shutdown(toNative(socketHandle), SHUT_RDWR);
         close(toNative(socketHandle));
     }
 }
