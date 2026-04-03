@@ -28,18 +28,7 @@ bool sendAll(const rsp::transport::ConnectionHandle& connection, const std::stri
     }
 
     const Buffer buffer = stringToBuffer(message);
-    uint32_t totalSent = 0;
-    while (totalSent < buffer.size()) {
-        Buffer remaining(buffer.data() + totalSent, buffer.size() - totalSent);
-        const int bytesSent = connection->send(remaining);
-        if (bytesSent <= 0) {
-            return false;
-        }
-
-        totalSent += static_cast<uint32_t>(bytesSent);
-    }
-
-    return true;
+    return connection->sendAll(buffer.data(), buffer.size());
 }
 
 bool receiveMessage(const rsp::transport::ConnectionHandle& connection, std::string& message) {

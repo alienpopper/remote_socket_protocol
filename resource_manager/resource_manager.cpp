@@ -1,6 +1,7 @@
 #include "resource_manager/resource_manager.hpp"
 
 #include "common/ascii_handshake.hpp"
+#include "common/encoding/protobuf/protobuf_encoding.hpp"
 
 #include <functional>
 #include <mutex>
@@ -8,12 +9,12 @@
 
 namespace rsp::resource_manager {
 
-ResourceManager::ResourceManager() {
+ResourceManager::ResourceManager() : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
     registerTransportCallbacks();
 }
 
 ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
-    : clientTransports_(std::move(clientTransports)) {
+    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()), clientTransports_(std::move(clientTransports)) {
     registerTransportCallbacks();
 }
 
@@ -38,6 +39,34 @@ void ResourceManager::setNewConnectionCallback(NewConnectionCallback callback) {
 size_t ResourceManager::activeConnectionCount() const {
     std::lock_guard<std::mutex> lock(connectionsMutex_);
     return activeConnections_.size();
+}
+
+size_t ResourceManager::activeEncodingCount() const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    return activeEncodings_.size();
+}
+
+bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const {
+    rsp::encoding::EncodingHandle selectedEncoding;
+
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        if (index >= activeEncodings_.size()) {
+            return false;
+        }
+
+        selectedEncoding = activeEncodings_[index];
+    }
+
+    return selectedEncoding != nullptr && selectedEncoding->send(message);
+}
+
+bool ResourceManager::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
+    return incomingMessages_ != nullptr && incomingMessages_->tryPop(message);
+}
+
+size_t ResourceManager::pendingMessageCount() const {
+    return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
 }
 
 bool ResourceManager::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
@@ -70,9 +99,16 @@ void ResourceManager::handleNewConnection(const rsp::transport::ConnectionHandle
         return;
     }
 
+    const auto encoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_);
+    if (!encoding->start()) {
+        connection->close();
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         activeConnections_.push_back(connection);
+        activeEncodings_.push_back(encoding);
     }
 
     NewConnectionCallback callback;

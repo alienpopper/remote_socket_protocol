@@ -24,6 +24,9 @@ public:
     virtual int send(const rsp::Buffer& data) = 0;
     virtual int recv(rsp::Buffer& buffer) = 0;
     virtual void close() = 0;
+
+    bool readExact(uint8_t* destination, uint32_t length);
+    bool sendAll(const uint8_t* data, uint32_t length);
 };
 
 using NewConnectionCallback = std::function<void(const ConnectionHandle& connection)>;

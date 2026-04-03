@@ -1,6 +1,8 @@
 #pragma once
 
 #include "client/cpp/rsp_client_export.hpp"
+#include "common/encoding/encoding.hpp"
+#include "common/message_queue.hpp"
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
 
@@ -33,6 +35,9 @@ public:
     RSPCLIENT_API TransportID createTcpTransport();
     RSPCLIENT_API TransportID addTransport(const std::shared_ptr<rsp::transport::Transport>& transport);
     RSPCLIENT_API rsp::transport::ConnectionHandle connect(TransportID transportId, const std::string& parameters) const;
+    RSPCLIENT_API bool send(TransportID transportId, const rsp::proto::RSPMessage& message) const;
+    RSPCLIENT_API bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
+    RSPCLIENT_API std::size_t pendingMessageCount() const;
 
     RSPCLIENT_API bool hasTransports() const;
     RSPCLIENT_API bool hasTransport(TransportID transportId) const;
@@ -46,9 +51,12 @@ private:
     explicit RSPClient(KeyPair keyPair);
 
     bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const;
+    rsp::encoding::EncodingHandle encoding(TransportID transportId) const;
 
     mutable std::mutex transportsMutex_;
     std::map<TransportID, rsp::transport::TransportHandle> transports_;
+    mutable std::map<TransportID, rsp::encoding::EncodingHandle> encodings_;
+    rsp::MessageQueueHandle incomingMessages_;
 };
 
 }  // namespace rsp::client

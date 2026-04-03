@@ -1,6 +1,8 @@
 #pragma once
 
 #include "common/ascii_handshake.hpp"
+#include "common/encoding/encoding.hpp"
+#include "common/message_queue.hpp"
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
 
@@ -23,6 +25,10 @@ public:
     size_t clientTransportCount() const;
     void setNewConnectionCallback(NewConnectionCallback callback);
     size_t activeConnectionCount() const;
+    size_t activeEncodingCount() const;
+    bool sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const;
+    bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
+    size_t pendingMessageCount() const;
     bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const;
 
 private:
@@ -32,8 +38,10 @@ private:
 
     mutable std::mutex connectionsMutex_;
     std::vector<rsp::transport::ConnectionHandle> activeConnections_;
+    std::vector<rsp::encoding::EncodingHandle> activeEncodings_;
     mutable std::mutex newConnectionCallbackMutex_;
     NewConnectionCallback newConnectionCallback_;
+    rsp::MessageQueueHandle incomingMessages_;
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
 };
 

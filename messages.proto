@@ -31,14 +31,26 @@ message ChallengeRequest {
 
 message ChallengeReply {
     Uuid nonce = 1;
-    bytes signature = 2;
+}
+
+message RouteEntry {
+    NodeId nodeID = 1;
+    uint32 hops_away = 2;
+    DateTime last_seen = 3;
+}
+
+message RouteUpdate {
+    NodeId link = 1;
+    repeated RouteEntry entries = 2;
 }
 
 message RSPMessage {
-  NodeId destination = 1;
+  optional NodeId destination = 1;  //RouteUpdate doesn't require a destination
   NodeId source = 2;
     oneof submessage {
         ChallengeRequest challenge_request = 3;
         ChallengeReply challenge_reply = 4;
+        RouteUpdate route = 5;
     }
+  bytes signature = 99;
 }

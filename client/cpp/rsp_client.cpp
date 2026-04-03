@@ -1,6 +1,7 @@
 #include "client/cpp/rsp_client.hpp"
 
 #include "common/ascii_handshake.hpp"
+#include "common/encoding/protobuf/protobuf_encoding.hpp"
 #include "common/transport/transport_tcp.hpp"
 
 #include <memory>
@@ -19,7 +20,8 @@ RSPClient::Ptr RSPClient::create(KeyPair keyPair) {
     return Ptr(new RSPClient(std::move(keyPair)));
 }
 
-RSPClient::RSPClient(KeyPair keyPair) : rsp::RSPNode(std::move(keyPair)) {
+RSPClient::RSPClient(KeyPair keyPair)
+    : rsp::RSPNode(std::move(keyPair)), incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
 }
 
 int RSPClient::run() const {
@@ -58,7 +60,42 @@ rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, con
         return nullptr;
     }
 
+    rsp::encoding::EncodingHandle previousEncoding;
+    const auto newEncoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_);
+    if (!newEncoding->start()) {
+        selectedTransport->stop();
+        return nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(transportsMutex_);
+        const auto iterator = encodings_.find(transportId);
+        if (iterator != encodings_.end()) {
+            previousEncoding = iterator->second;
+            iterator->second = newEncoding;
+        } else {
+            encodings_.emplace(transportId, newEncoding);
+        }
+    }
+
+    if (previousEncoding != nullptr) {
+        previousEncoding->stop();
+    }
+
     return connection;
+}
+
+bool RSPClient::send(TransportID transportId, const rsp::proto::RSPMessage& message) const {
+    const auto selectedEncoding = encoding(transportId);
+    return selectedEncoding != nullptr && selectedEncoding->send(message);
+}
+
+bool RSPClient::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
+    return incomingMessages_ != nullptr && incomingMessages_->tryPop(message);
+}
+
+std::size_t RSPClient::pendingMessageCount() const {
+    return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
 }
 
 bool RSPClient::hasTransports() const {
@@ -90,6 +127,7 @@ std::vector<RSPClient::TransportID> RSPClient::transportIds() const {
 
 bool RSPClient::removeTransport(TransportID transportId) {
     rsp::transport::TransportHandle removedTransport;
+    rsp::encoding::EncodingHandle removedEncoding;
 
     {
         std::lock_guard<std::mutex> lock(transportsMutex_);
@@ -100,6 +138,16 @@ bool RSPClient::removeTransport(TransportID transportId) {
 
         removedTransport = iterator->second;
         transports_.erase(iterator);
+
+        const auto encodingIterator = encodings_.find(transportId);
+        if (encodingIterator != encodings_.end()) {
+            removedEncoding = encodingIterator->second;
+            encodings_.erase(encodingIterator);
+        }
+    }
+
+    if (removedEncoding != nullptr) {
+        removedEncoding->stop();
     }
 
     removedTransport->stop();
@@ -118,6 +166,16 @@ rsp::transport::TransportHandle RSPClient::transport(TransportID transportId) co
 
 bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
     return rsp::ascii_handshake::performClientHandshake(connection);
+}
+
+rsp::encoding::EncodingHandle RSPClient::encoding(TransportID transportId) const {
+    std::lock_guard<std::mutex> lock(transportsMutex_);
+    const auto iterator = encodings_.find(transportId);
+    if (iterator == encodings_.end()) {
+        return nullptr;
+    }
+
+    return iterator->second;
 }
 
 }  // namespace rsp::client
