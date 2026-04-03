@@ -5,17 +5,104 @@
 
 #include <functional>
 #include <mutex>
+#include <stdexcept>
 #include <utility>
 
 namespace rsp::resource_manager {
 
-ResourceManager::ResourceManager() : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
+namespace {
+
+class PendingConnectionQueue : public rsp::MessageQueue<rsp::transport::ConnectionHandle> {
+public:
+    explicit PendingConnectionQueue(ResourceManager& owner) : owner_(owner) {
+    }
+
+protected:
+    void handleMessage(Message connection, rsp::MessageQueueSharedState&) override {
+        owner_.processAcceptedConnection(std::move(connection));
+    }
+
+    void handleQueueFull(size_t, size_t, const Message& connection) override {
+        if (connection != nullptr) {
+            connection->close();
+        }
+    }
+
+private:
+    ResourceManager& owner_;
+};
+
+class PendingEncodingQueue : public rsp::MessageQueue<rsp::encoding::EncodingHandle> {
+public:
+    explicit PendingEncodingQueue(ResourceManager& owner) : owner_(owner) {
+    }
+
+protected:
+    void handleMessage(Message encoding, rsp::MessageQueueSharedState&) override {
+        owner_.processPendingEncoding(std::move(encoding));
+    }
+
+    void handleQueueFull(size_t, size_t, const Message& encoding) override {
+        if (encoding != nullptr) {
+            encoding->stop();
+        }
+    }
+
+private:
+    ResourceManager& owner_;
+};
+
+}  // namespace
+
+ResourceManager::ResourceManager()
+    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()),
+      pendingConnections_(std::make_shared<PendingConnectionQueue>(*this)),
+      pendingEncodings_(std::make_shared<PendingEncodingQueue>(*this)) {
+    pendingConnections_->setWorkerCount(1);
+    pendingConnections_->start();
+    pendingEncodings_->setWorkerCount(1);
+    pendingEncodings_->start();
     registerTransportCallbacks();
 }
 
 ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
-    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()), clientTransports_(std::move(clientTransports)) {
+    : incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()),
+      pendingConnections_(std::make_shared<PendingConnectionQueue>(*this)),
+      pendingEncodings_(std::make_shared<PendingEncodingQueue>(*this)),
+      clientTransports_(std::move(clientTransports)) {
+    pendingConnections_->setWorkerCount(1);
+    pendingConnections_->start();
+    pendingEncodings_->setWorkerCount(1);
+    pendingEncodings_->start();
     registerTransportCallbacks();
+}
+
+ResourceManager::~ResourceManager() {
+    if (pendingConnections_ != nullptr) {
+        pendingConnections_->stop();
+    }
+
+    if (pendingEncodings_ != nullptr) {
+        pendingEncodings_->stop();
+    }
+
+    std::vector<rsp::encoding::EncodingHandle> encodings;
+    {
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
+        encodings.swap(activeEncodings_);
+    }
+
+    for (const auto& encoding : encodings) {
+        if (encoding != nullptr) {
+            encoding->stop();
+        }
+    }
+
+    for (const auto& transport : clientTransports_) {
+        if (transport != nullptr) {
+            transport->stop();
+        }
+    }
 }
 
 int ResourceManager::run() const {
@@ -31,18 +118,13 @@ size_t ResourceManager::clientTransportCount() const {
     return clientTransports_.size();
 }
 
-void ResourceManager::setNewConnectionCallback(NewConnectionCallback callback) {
-    std::lock_guard<std::mutex> lock(newConnectionCallbackMutex_);
-    newConnectionCallback_ = std::move(callback);
-}
-
-size_t ResourceManager::activeConnectionCount() const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    return activeConnections_.size();
+void ResourceManager::setNewEncodingCallback(NewEncodingCallback callback) {
+    std::lock_guard<std::mutex> lock(newEncodingCallbackMutex_);
+    newEncodingCallback_ = std::move(callback);
 }
 
 size_t ResourceManager::activeEncodingCount() const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    std::lock_guard<std::mutex> lock(encodingsMutex_);
     return activeEncodings_.size();
 }
 
@@ -50,7 +132,7 @@ bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessag
     rsp::encoding::EncodingHandle selectedEncoding;
 
     {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
         if (index >= activeEncodings_.size()) {
             return false;
         }
@@ -74,10 +156,6 @@ size_t ResourceManager::pendingMessageCount() const {
     return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
 }
 
-bool ResourceManager::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
-    return rsp::ascii_handshake::performServerHandshake(connection);
-}
-
 void ResourceManager::registerTransportCallbacks() {
     for (const auto& transport : clientTransports_) {
         registerTransportCallback(transport);
@@ -90,41 +168,80 @@ void ResourceManager::registerTransportCallback(const rsp::transport::ListeningT
     }
 
     transport->setNewConnectionCallback([this](const rsp::transport::ConnectionHandle& connection) {
-        handleNewConnection(connection);
+        enqueueAcceptedConnection(connection);
     });
 }
 
-void ResourceManager::handleNewConnection(const rsp::transport::ConnectionHandle& connection) {
+void ResourceManager::enqueueAcceptedConnection(const rsp::transport::ConnectionHandle& connection) {
     if (connection == nullptr) {
         return;
     }
 
-    if (!performAsciiHandshake(connection)) {
+    if (pendingConnections_ == nullptr || !pendingConnections_->push(connection)) {
+        connection->close();
+    }
+}
+
+void ResourceManager::processAcceptedConnection(rsp::transport::ConnectionHandle connection) {
+    if (connection == nullptr) {
+        return;
+    }
+
+    const auto selectedEncoding = rsp::ascii_handshake::performServerHandshake(connection);
+    if (!selectedEncoding.has_value()) {
         connection->close();
         return;
     }
 
-    const auto encoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
-    if (!encoding->start()) {
+    connection->setNegotiatedEncoding(*selectedEncoding);
+
+    const auto encoding = createEncodingForConnection(connection);
+    if (encoding == nullptr || pendingEncodings_ == nullptr || !pendingEncodings_->push(encoding)) {
         connection->close();
+    }
+}
+
+void ResourceManager::processPendingEncoding(rsp::encoding::EncodingHandle encoding) {
+    if (encoding == nullptr) {
+        return;
+    }
+
+    if (!encoding->performInitialIdentityExchange() || !encoding->start()) {
+        encoding->stop();
         return;
     }
 
     {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        activeConnections_.push_back(connection);
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
         activeEncodings_.push_back(encoding);
     }
 
-    NewConnectionCallback callback;
+    NewEncodingCallback callback;
     {
-        std::lock_guard<std::mutex> lock(newConnectionCallbackMutex_);
-        callback = newConnectionCallback_;
+        std::lock_guard<std::mutex> lock(newEncodingCallbackMutex_);
+        callback = newEncodingCallback_;
     }
 
     if (callback) {
-        callback(connection);
+        callback(encoding);
     }
+}
+
+rsp::encoding::EncodingHandle ResourceManager::createEncodingForConnection(const rsp::transport::ConnectionHandle& connection) const {
+    if (connection == nullptr) {
+        return nullptr;
+    }
+
+    const auto selectedEncoding = connection->negotiatedEncoding();
+    if (!selectedEncoding.has_value()) {
+        return nullptr;
+    }
+
+    if (*selectedEncoding == rsp::ascii_handshake::kEncoding) {
+        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
+    }
+
+    return nullptr;
 }
 
 }  // namespace rsp::resource_manager

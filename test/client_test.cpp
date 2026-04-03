@@ -169,11 +169,11 @@ void testTcpAsciiHandshake() {
     rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
 
-    std::promise<rsp::transport::ConnectionHandle> handshakePromise;
-    std::future<rsp::transport::ConnectionHandle> handshakeFuture = handshakePromise.get_future();
-    resourceManager.setNewConnectionCallback([&handshakePromise](const rsp::transport::ConnectionHandle& connection) {
+    std::promise<rsp::encoding::EncodingHandle> handshakePromise;
+    std::future<rsp::encoding::EncodingHandle> handshakeFuture = handshakePromise.get_future();
+    resourceManager.setNewEncodingCallback([&handshakePromise](const rsp::encoding::EncodingHandle& encoding) {
         try {
-            handshakePromise.set_value(connection);
+            handshakePromise.set_value(encoding);
         } catch (...) {
             handshakePromise.set_exception(std::current_exception());
         }
@@ -187,25 +187,23 @@ void testTcpAsciiHandshake() {
     require(connection != nullptr, "client should complete the ASCII and identity handshakes over TCP");
 
     require(handshakeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
-            "server handshake should complete");
-    const rsp::transport::ConnectionHandle serverConnection = handshakeFuture.get();
-    require(serverConnection != nullptr, "server should accept the authenticated transport");
-    require(resourceManager.activeConnectionCount() == 1,
-            "resource manager should be notified when a listening transport accepts a connection");
+            "server handshake pipeline should complete");
+    const rsp::encoding::EncodingHandle serverEncoding = handshakeFuture.get();
+    require(serverEncoding != nullptr, "server should activate an authenticated encoding");
     require(resourceManager.activeEncodingCount() == 1,
             "resource manager should create an encoding for the accepted connection");
     require(resourceManager.pendingMessageCount() == 0,
         "authentication messages should not be exposed through the resource manager queue");
 
-    const auto clientPeerNodeId = connection->peerNodeID();
-    require(clientPeerNodeId.has_value(), "client transport should learn the server node id during authentication");
+    const auto clientPeerNodeId = client->peerNodeID(transportId);
+    require(clientPeerNodeId.has_value(), "client encoding should learn the server node id during authentication");
     require(clientPeerNodeId.value() == resourceManager.nodeId(),
-        "client transport should store the resource manager node id");
+        "client encoding should store the resource manager node id");
 
-    const auto serverPeerNodeId = serverConnection->peerNodeID();
-    require(serverPeerNodeId.has_value(), "server transport should learn the client node id during authentication");
+    const auto serverPeerNodeId = serverEncoding->peerNodeID();
+    require(serverPeerNodeId.has_value(), "server encoding should learn the client node id during authentication");
     require(serverPeerNodeId.value() == clientNodeId,
-        "server transport should store the client node id");
+        "server encoding should store the client node id");
 
     const std::array<uint8_t, 16> clientRouteNode = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                          0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};

@@ -36,18 +36,18 @@ bool Connection::sendAll(const uint8_t* data, uint32_t length) {
     return true;
 }
 
-void Connection::setPeerNodeID(const rsp::NodeID& nodeId) {
-    std::lock_guard<std::mutex> lock(peerNodeIdMutex_);
-    if (peerNodeId_.has_value() && peerNodeId_.value() != nodeId) {
-        throw std::logic_error("peer NodeID is already established for this connection");
+void Connection::setNegotiatedEncoding(const std::string& encodingName) {
+    std::lock_guard<std::mutex> lock(metadataMutex_);
+    if (negotiatedEncoding_.has_value() && negotiatedEncoding_.value() != encodingName) {
+        throw std::logic_error("connection encoding is already established");
     }
 
-    peerNodeId_ = nodeId;
+    negotiatedEncoding_ = encodingName;
 }
 
-std::optional<rsp::NodeID> Connection::peerNodeID() const {
-    std::lock_guard<std::mutex> lock(peerNodeIdMutex_);
-    return peerNodeId_;
+std::optional<std::string> Connection::negotiatedEncoding() const {
+    std::lock_guard<std::mutex> lock(metadataMutex_);
+    return negotiatedEncoding_;
 }
 
 void ListeningTransport::setNewConnectionCallback(NewConnectionCallback callback) {

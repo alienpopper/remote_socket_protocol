@@ -3,6 +3,7 @@
 #include "common/base_types.hpp"
 #include "common/version.h"
 
+#include <optional>
 #include <string>
 
 namespace rsp::ascii_handshake {
@@ -109,45 +110,56 @@ std::string errorResponse(const std::string& message) {
     return std::string("0error: ") + message + "\r\n\r\n";
 }
 
-bool performServerHandshake(const rsp::transport::ConnectionHandle& connection) {
+std::optional<std::string> performServerHandshake(const rsp::transport::ConnectionHandle& connection) {
     if (!sendAll(connection, serverAdvertisement())) {
-        return false;
+        return std::nullopt;
     }
 
     std::string clientMessage;
     if (!receiveMessage(connection, clientMessage)) {
-        return false;
+        return std::nullopt;
     }
 
-    if (headerValue(clientMessage, "encoding:") != kEncoding) {
+    const std::string selectedEncoding = headerValue(clientMessage, "encoding:");
+    if (selectedEncoding != kEncoding) {
         sendAll(connection, errorResponse("unsupported encoding"));
         connection->close();
-        return false;
+        return std::nullopt;
     }
 
     if (!sendAll(connection, successResponse())) {
-        return false;
+        return std::nullopt;
     }
 
-    return true;
+    return selectedEncoding;
 }
 
-bool performClientHandshake(const rsp::transport::ConnectionHandle& connection) {
+std::optional<std::string> performClientHandshake(const rsp::transport::ConnectionHandle& connection) {
     std::string serverMessage;
     if (!receiveMessage(connection, serverMessage)) {
-        return false;
+        return std::nullopt;
     }
 
     if (!sendAll(connection, clientSelection())) {
-        return false;
+        return std::nullopt;
     }
 
     std::string serverResult;
     if (!receiveMessage(connection, serverResult)) {
-        return false;
+        return std::nullopt;
     }
 
-    return !serverResult.empty() && serverResult[0] == '1';
+    if (serverResult.empty() || serverResult[0] != '1') {
+        return std::nullopt;
+    }
+
+    const std::string successPrefix = "1success: encoding:";
+    const size_t lineEnd = serverResult.find("\r\n");
+    if (serverResult.rfind(successPrefix, 0) != 0) {
+        return std::nullopt;
+    }
+
+    return serverResult.substr(successPrefix.size(), lineEnd == std::string::npos ? std::string::npos : lineEnd - successPrefix.size());
 }
 
 }  // namespace rsp::ascii_handshake

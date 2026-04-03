@@ -87,6 +87,7 @@ Encoding::Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueu
       receivedMessages_(std::move(receivedMessages)),
       outgoingMessages_(std::make_shared<EncodingOutgoingQueue>(*this)),
       localKeyPair_(&localKeyPair),
+            peerNodeId_(std::nullopt),
       running_(false) {
     outgoingMessages_->setWorkerCount(1);
 }
@@ -99,17 +100,9 @@ bool Encoding::start() {
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         if (running_ || connection_ == nullptr || receivedMessages_ == nullptr || outgoingMessages_ == nullptr ||
-            localKeyPair_ == nullptr || !localKeyPair_->isValid()) {
+            localKeyPair_ == nullptr || !localKeyPair_->isValid() || !peerNodeId_.has_value()) {
             return false;
         }
-    }
-
-    if (!performInitialIdentityExchange()) {
-        const auto activeConnection = connection();
-        if (activeConnection != nullptr) {
-            activeConnection->close();
-        }
-        return false;
     }
 
     std::lock_guard<std::mutex> lock(stateMutex_);
@@ -183,6 +176,20 @@ bool Encoding::dispatchSend(const rsp::proto::RSPMessage& message) {
     return writeMessage(message);
 }
 
+std::optional<rsp::NodeID> Encoding::peerNodeID() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return peerNodeId_;
+}
+
+void Encoding::setPeerNodeID(const rsp::NodeID& nodeId) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (peerNodeId_.has_value() && peerNodeId_.value() != nodeId) {
+        throw std::logic_error("peer NodeID is already established for this encoding");
+    }
+
+    peerNodeId_ = nodeId;
+}
+
 bool Encoding::performInitialIdentityExchange() {
     const auto activeConnection = connection();
     if (activeConnection == nullptr || localKeyPair_ == nullptr) {
@@ -243,7 +250,7 @@ bool Encoding::performInitialIdentityExchange() {
                 return false;
             }
 
-            activeConnection->setPeerNodeID(peerNodeId);
+            setPeerNodeID(peerNodeId);
             peerIdentityReceived = true;
             continue;
         }

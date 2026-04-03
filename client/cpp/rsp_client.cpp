@@ -62,7 +62,7 @@ rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, con
 
     rsp::encoding::EncodingHandle previousEncoding;
     const auto newEncoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
-    if (!newEncoding->start()) {
+    if (!newEncoding->performInitialIdentityExchange() || !newEncoding->start()) {
         selectedTransport->stop();
         return nullptr;
     }
@@ -101,6 +101,15 @@ bool RSPClient::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
 
 std::size_t RSPClient::pendingMessageCount() const {
     return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
+}
+
+std::optional<rsp::NodeID> RSPClient::peerNodeID(TransportID transportId) const {
+    const auto selectedEncoding = encoding(transportId);
+    if (selectedEncoding == nullptr) {
+        return std::nullopt;
+    }
+
+    return selectedEncoding->peerNodeID();
 }
 
 bool RSPClient::hasTransports() const {
@@ -170,7 +179,13 @@ rsp::transport::TransportHandle RSPClient::transport(TransportID transportId) co
 }
 
 bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
-    return rsp::ascii_handshake::performClientHandshake(connection);
+    const auto selectedEncoding = rsp::ascii_handshake::performClientHandshake(connection);
+    if (!selectedEncoding.has_value()) {
+        return false;
+    }
+
+    connection->setNegotiatedEncoding(*selectedEncoding);
+    return true;
 }
 
 rsp::encoding::EncodingHandle RSPClient::encoding(TransportID transportId) const {

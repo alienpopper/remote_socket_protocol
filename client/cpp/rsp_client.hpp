@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace rsp::client {
@@ -38,6 +39,7 @@ public:
     RSPCLIENT_API bool send(TransportID transportId, const rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API std::size_t pendingMessageCount() const;
+    RSPCLIENT_API std::optional<rsp::NodeID> peerNodeID(TransportID transportId) const;
 
     RSPCLIENT_API bool hasTransports() const;
     RSPCLIENT_API bool hasTransport(TransportID transportId) const;

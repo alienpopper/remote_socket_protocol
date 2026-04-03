@@ -15,33 +15,39 @@ namespace rsp::resource_manager {
 
 class ResourceManager : public rsp::RSPNode {
 public:
-    using NewConnectionCallback = rsp::transport::NewConnectionCallback;
+    using ConnectionQueueHandle = rsp::MessageQueueHandleT<rsp::transport::ConnectionHandle>;
+    using EncodingQueueHandle = rsp::MessageQueueHandleT<rsp::encoding::EncodingHandle>;
+    using NewEncodingCallback = std::function<void(const rsp::encoding::EncodingHandle& encoding)>;
 
     ResourceManager();
     explicit ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports);
+    ~ResourceManager() override;
 
     int run() const override;
     void addClientTransport(const rsp::transport::ListeningTransportHandle& transport);
     size_t clientTransportCount() const;
-    void setNewConnectionCallback(NewConnectionCallback callback);
-    size_t activeConnectionCount() const;
+    void setNewEncodingCallback(NewEncodingCallback callback);
     size_t activeEncodingCount() const;
     bool sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const;
     bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     size_t pendingMessageCount() const;
-    bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const;
+
+    void processAcceptedConnection(rsp::transport::ConnectionHandle connection);
+    void processPendingEncoding(rsp::encoding::EncodingHandle encoding);
 
 private:
     void registerTransportCallbacks();
     void registerTransportCallback(const rsp::transport::ListeningTransportHandle& transport);
-    void handleNewConnection(const rsp::transport::ConnectionHandle& connection);
+    void enqueueAcceptedConnection(const rsp::transport::ConnectionHandle& connection);
+    rsp::encoding::EncodingHandle createEncodingForConnection(const rsp::transport::ConnectionHandle& connection) const;
 
-    mutable std::mutex connectionsMutex_;
-    std::vector<rsp::transport::ConnectionHandle> activeConnections_;
+    mutable std::mutex encodingsMutex_;
     std::vector<rsp::encoding::EncodingHandle> activeEncodings_;
-    mutable std::mutex newConnectionCallbackMutex_;
-    NewConnectionCallback newConnectionCallback_;
+    mutable std::mutex newEncodingCallbackMutex_;
+    NewEncodingCallback newEncodingCallback_;
     rsp::MessageQueueHandle incomingMessages_;
+    ConnectionQueueHandle pendingConnections_;
+    EncodingQueueHandle pendingEncodings_;
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
 };
 

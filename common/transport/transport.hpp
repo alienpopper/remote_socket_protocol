@@ -29,12 +29,12 @@ public:
 
     bool readExact(uint8_t* destination, uint32_t length);
     bool sendAll(const uint8_t* data, uint32_t length);
-    void setPeerNodeID(const rsp::NodeID& nodeId);
-    std::optional<rsp::NodeID> peerNodeID() const;
+    void setNegotiatedEncoding(const std::string& encodingName);
+    std::optional<std::string> negotiatedEncoding() const;
 
 private:
-    mutable std::mutex peerNodeIdMutex_;
-    std::optional<rsp::NodeID> peerNodeId_;
+    mutable std::mutex metadataMutex_;
+    std::optional<std::string> negotiatedEncoding_;
 };
 
 using NewConnectionCallback = std::function<void(const ConnectionHandle& connection)>;

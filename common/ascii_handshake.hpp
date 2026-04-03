@@ -2,6 +2,7 @@
 
 #include "common/transport/transport.hpp"
 
+#include <optional>
 #include <string>
 
 namespace rsp::ascii_handshake {
@@ -14,7 +15,7 @@ std::string clientSelection();
 std::string successResponse();
 std::string errorResponse(const std::string& message);
 
-bool performServerHandshake(const rsp::transport::ConnectionHandle& connection);
-bool performClientHandshake(const rsp::transport::ConnectionHandle& connection);
+std::optional<std::string> performServerHandshake(const rsp::transport::ConnectionHandle& connection);
+std::optional<std::string> performClientHandshake(const rsp::transport::ConnectionHandle& connection);
 
 }  // namespace rsp::ascii_handshake
