@@ -192,7 +192,7 @@ $(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER)
 $(OBJ_DIR)\keypair.obj: common\keypair.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER) $(OS_COMMON_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\keypair.cpp /Fo$(OBJ_DIR)\keypair.obj
 
-$(OBJ_DIR)\message_queue.obj: common\message_queue.cpp common\message_queue.hpp
+$(OBJ_DIR)\message_queue.obj: common\message_queue.cpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\message_queue.cpp /Fo$(OBJ_DIR)\message_queue.obj
 
 $(OBJ_DIR)\ascii_handshake.obj: common\ascii_handshake.cpp common\ascii_handshake.hpp common\transport\transport.hpp common\version.h

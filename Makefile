@@ -172,7 +172,7 @@ $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER)
 
-$(OBJ_DIR)/common/message_queue.o:
+$(OBJ_DIR)/common/message_queue.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER)
 
