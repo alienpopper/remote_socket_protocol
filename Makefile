@@ -14,6 +14,7 @@ BASE_TYPES_TEST_TARGET := $(BIN_DIR)/base_types_test
 CLIENT_TEST_TARGET := $(BIN_DIR)/client_test
 ENDORSEMENT_TEST_TARGET := $(BIN_DIR)/endorsement_test
 MESSAGE_QUEUE_TEST_TARGET := $(BIN_DIR)/message_queue_test
+NODE_TEST_TARGET := $(BIN_DIR)/node_test
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -84,6 +85,15 @@ MESSAGE_QUEUE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue.o \
 	$(OBJ_DIR)/build/gen/messages.pb.o \
 	$(OBJ_DIR)/test/message_queue_test.o
+NODE_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/node_test.o
 CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
@@ -110,7 +120,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-node
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET)
 
@@ -141,6 +151,9 @@ $(BASE_TYPES_TEST_TARGET): directories $(BASE_TYPES_TEST_OBJECTS)
 $(MESSAGE_QUEUE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MESSAGE_QUEUE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(MESSAGE_QUEUE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(NODE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(NODE_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(NODE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(CLIENT_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(CLIENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -149,6 +162,9 @@ test-base-types: $(BASE_TYPES_TEST_TARGET)
 
 test-message-queue: $(MESSAGE_QUEUE_TEST_TARGET)
 	$(MESSAGE_QUEUE_TEST_TARGET)
+
+test-node: $(NODE_TEST_TARGET)
+	$(NODE_TEST_TARGET)
 
 test-client: $(CLIENT_TEST_TARGET)
 	$(CLIENT_TEST_TARGET)
@@ -159,7 +175,7 @@ test-keypair: $(KEYPAIR_TEST_TARGET)
 test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 	$(ENDORSEMENT_TEST_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-client
+test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
@@ -196,6 +212,8 @@ $(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue.hpp $(BORINGSSL_INCLUDE
 $(OBJ_DIR)/test/client_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)

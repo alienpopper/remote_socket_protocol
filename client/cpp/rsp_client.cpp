@@ -28,6 +28,13 @@ int RSPClient::run() const {
     return 0;
 }
 
+bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
+    return false;
+}
+
+void RSPClient::handleOutputMessage(rsp::proto::RSPMessage) {
+}
+
 RSPClient::TransportID RSPClient::createTcpTransport() {
     return addTransport(std::make_shared<rsp::transport::TcpTransport>());
 }

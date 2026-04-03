@@ -36,6 +36,9 @@ public:
     void processPendingEncoding(rsp::encoding::EncodingHandle encoding);
 
 private:
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+    void handleOutputMessage(rsp::proto::RSPMessage message) override;
+
     void registerTransportCallbacks();
     void registerTransportCallback(const rsp::transport::ListeningTransportHandle& transport);
     void enqueueAcceptedConnection(const rsp::transport::ConnectionHandle& connection);

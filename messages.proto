@@ -63,6 +63,29 @@ message RouteUpdate {
     repeated RouteEntry entries = 2;
 }
 
+enum ERROR_CODE{
+    UNKNOWN_ERROR = 0;
+    UNKNOWN_MESSAGE_TYPE = 1;
+}
+
+message Error {
+    ERROR_CODE error_code = 1;
+    string message = 2;
+}
+
+message PingRequest {
+    Uuid nonce = 1;
+    uint32 sequence = 2;
+    DateTime time_sent = 3;
+}
+
+message PingReply {
+    Uuid nonce = 1;
+    uint32 sequence = 2;
+    DateTime time_sent = 3;
+    DateTime time_replied = 4;
+}
+
 message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
@@ -71,6 +94,9 @@ message RSPMessage {
       ChallengeRequest challenge_request = 3;
       Identity identity = 4;
       RouteUpdate route = 5;
+      Error error = 6;
+      PingRequest ping_request = 7;
+      PingReply ping_reply = 8;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong

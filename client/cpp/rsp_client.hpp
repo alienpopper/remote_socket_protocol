@@ -52,6 +52,8 @@ public:
 private:
     explicit RSPClient(KeyPair keyPair);
 
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+    void handleOutputMessage(rsp::proto::RSPMessage message) override;
     bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const;
     rsp::encoding::EncodingHandle encoding(TransportID transportId) const;
 

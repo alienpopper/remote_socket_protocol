@@ -4,6 +4,7 @@
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 
 #include <functional>
+#include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -107,6 +108,14 @@ ResourceManager::~ResourceManager() {
 
 int ResourceManager::run() const {
     return 0;
+}
+
+bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
+    return false;
+}
+
+void ResourceManager::handleOutputMessage(rsp::proto::RSPMessage) {
+    std::cerr << "ResourceManager output queue dropped message" << std::endl;
 }
 
 void ResourceManager::addClientTransport(const rsp::transport::ListeningTransportHandle& transport) {
