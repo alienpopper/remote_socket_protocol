@@ -185,15 +185,15 @@ $(OBJ_DIR)/common/endorsement/endorsement.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTO
 
 $(OBJ_DIR)/test/endorsement_test.o: $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/encoding/encoding.o: $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/encoding/encoding.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/resource_manager/resource_manager.o: $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/client/cpp/rsp_client.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/test/client_test.o: $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/test/client_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 

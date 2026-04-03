@@ -14,7 +14,7 @@ namespace {
 
 int messageValue(const rsp::proto::RSPMessage& message);
 
-class TestMessageQueue : public rsp::MessageQueue {
+class TestMessageQueue : public rsp::RSPMessageQueue {
 public:
     std::atomic<bool> fullCallbackTriggered = false;
     std::atomic<int> processedCount = 0;
@@ -44,9 +44,33 @@ protected:
     }
 };
 
-class PassiveTestQueue : public rsp::MessageQueue {
+class PassiveTestQueue : public rsp::RSPMessageQueue {
 protected:
     void handleMessage(Message, rsp::MessageQueueSharedState&) override {
+    }
+
+    void handleQueueFull(size_t, size_t, const Message&) override {
+    }
+};
+
+class IntQueue : public rsp::MessageQueue<int> {
+public:
+    std::atomic<int> processedCount = 0;
+    std::vector<int> processedValues;
+    std::mutex processedMutex;
+
+protected:
+    void handleMessage(Message value, rsp::MessageQueueSharedState& sharedState) override {
+        sharedState.update<int>("sum", [value](int& sum) {
+            sum += value;
+        });
+
+        {
+            std::lock_guard<std::mutex> lock(processedMutex);
+            processedValues.push_back(value);
+        }
+
+        ++processedCount;
     }
 
     void handleQueueFull(size_t, size_t, const Message&) override {
@@ -171,6 +195,23 @@ void testWorkerLifecycleAndSharedState() {
     queue.stop();
 }
 
+void testGenericQueueType() {
+    IntQueue queue;
+    queue.sharedState().set<int>("sum", 0);
+    queue.setWorkerCount(1);
+    queue.start();
+
+    require(queue.push(7), "generic queue should accept values of its message type");
+    require(queue.push(9), "generic queue should process multiple values");
+    require(waitForCondition([&queue]() { return queue.processedCount.load() == 2; }),
+            "generic queue workers should process templated message values");
+
+    const std::optional<int> sum = queue.sharedState().get<int>("sum");
+    require(sum.has_value() && *sum == 16, "generic queue shared state should work across message types");
+
+    queue.stop();
+}
+
 }  // namespace
 
 int main() {
@@ -178,6 +219,7 @@ int main() {
         testManualQueueOperations();
         testQueueLimitAndFullCallback();
         testWorkerLifecycleAndSharedState();
+        testGenericQueueType();
 
         std::cout << "message_queue_test passed\n";
         return 0;

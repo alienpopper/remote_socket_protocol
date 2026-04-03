@@ -11,7 +11,7 @@ namespace rsp::encoding {
 
 namespace {
 
-class EncodingOutgoingQueue : public rsp::MessageQueue {
+class EncodingOutgoingQueue : public rsp::RSPMessageQueue {
 public:
     explicit EncodingOutgoingQueue(Encoding& owner) : owner_(owner) {
     }
