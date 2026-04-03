@@ -1,4 +1,5 @@
 #include "client/cpp/rsp_client.hpp"
+#include "client/cpp/rsp_client_message.hpp"
 
 #include "messages.pb.h"
 #include "common/transport/transport_tcp.hpp"
@@ -14,6 +15,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -111,8 +113,8 @@ void testTcpAsciiHandshake() {
     const std::string endpoint = findListeningEndpoint(serverTransport);
     const std::string transportSpec = std::string("tcp:") + endpoint;
 
-    rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create(std::move(clientKeyPair));
-    const rsp::client::RSPClient::ClientConnectionID connectionId =
+    rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
+    const rsp::client::RSPClientMessage::ClientConnectionID connectionId =
         client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
     require(client->hasConnections(), "client should track created connections");
     require(client->hasConnection(connectionId), "client should track the new connection id");
@@ -183,16 +185,50 @@ void testTcpAsciiHandshake() {
     serverTransport->stop();
 }
 
+void testClientToClientRouting() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair firstClientKeyPair = rsp::KeyPair::generateP256();
+    rsp::KeyPair secondClientKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID secondClientNodeId = secondClientKeyPair.nodeID();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    rsp::client::RSPClient::Ptr firstClient = rsp::client::RSPClient::create(std::move(firstClientKeyPair));
+    rsp::client::RSPClient::Ptr secondClient = rsp::client::RSPClient::create(std::move(secondClientKeyPair));
+
+    const rsp::client::RSPClient::ClientConnectionID firstConnectionId =
+        firstClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const rsp::client::RSPClient::ClientConnectionID secondConnectionId =
+        secondClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(firstClient->hasConnections(), "high-level client should track created connections");
+    require(firstClient->hasConnection(firstConnectionId), "high-level client should expose existing connection ids");
+    require(firstClient->connectionCount() == 1, "high-level client should report one live connection");
+    require(firstClient->connectionIds().size() == 1, "high-level client should enumerate its connections");
+    require(secondClient->hasConnection(secondConnectionId), "second high-level client should expose its connection id");
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+        "resource manager should authenticate both client connections");
+
+    require(firstClient->ping(secondClientNodeId), "high-level client should route a ping to another client through the resource manager");
+
+    require(firstClient->removeConnection(firstConnectionId), "high-level client should remove an existing connection");
+    require(secondClient->removeConnection(secondConnectionId), "second high-level client should remove an existing connection");
+}
+
 }  // namespace
 
 int main() {
     try {
-        rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create();
+        rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create();
         require(client != nullptr, "client should be reference counted");
         require(!client->hasConnections(), "client should start without connections");
         require(client->connectionCount() == 0, "client should start with zero connections");
 
-        rsp::client::RSPClient::Ptr secondReference = client;
+        rsp::client::RSPClientMessage::Ptr secondReference = client;
         require(secondReference.use_count() >= 2, "client should support shared ownership");
 
         bool invalidTransportThrown = false;
@@ -212,6 +248,7 @@ int main() {
         require(unsupportedTransportThrown, "client should reject unsupported transport names");
 
         testTcpAsciiHandshake();
+        testClientToClientRouting();
 
         std::cout << "client_test passed\n";
         return 0;

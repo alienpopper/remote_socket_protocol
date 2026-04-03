@@ -1,32 +1,50 @@
 #include "client/cpp/rsp_client.hpp"
 
-#include "common/ascii_handshake.hpp"
-#include "common/encoding/protobuf/protobuf_encoding.hpp"
-#include "common/transport/transport_tcp.hpp"
+#include "common/base_types.hpp"
 
-#include <optional>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <stdexcept>
+#include <chrono>
+#include <cstring>
+#include <iostream>
+#include <thread>
 #include <utility>
-#include <vector>
 
 namespace rsp::client {
 
-namespace {
-
-bool splitTransportSpec(const std::string& transportSpec,
-                        std::string& transportName,
-                        std::string& transportParameters) {
-    const size_t separator = transportSpec.find(':');
-    if (separator == std::string::npos || separator == 0 || separator + 1 >= transportSpec.size()) {
-        return false;
+class ClientApiIncomingMessageQueue : public rsp::RSPMessageQueue {
+public:
+    explicit ClientApiIncomingMessageQueue(RSPClient& owner) : owner_(owner) {
     }
 
-    transportName = transportSpec.substr(0, separator);
-    transportParameters = transportSpec.substr(separator + 1);
-    return true;
+protected:
+    void handleMessage(Message message, rsp::MessageQueueSharedState&) override {
+        owner_.dispatchIncomingMessage(std::move(message));
+    }
+
+    void handleQueueFull(size_t, size_t, const Message&) override {
+        std::cerr << "RSPClient incoming message queue dropped message because the queue is full" << std::endl;
+    }
+
+private:
+    RSPClient& owner_;
+};
+
+namespace {
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
+}
+
+rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
+    rsp::proto::DateTime protoDateTime;
+    protoDateTime.set_milliseconds_since_epoch(dateTime.millisecondsSinceEpoch());
+    return protoDateTime;
 }
 
 }  // namespace
@@ -40,224 +58,177 @@ RSPClient::Ptr RSPClient::create(KeyPair keyPair) {
 }
 
 RSPClient::RSPClient(KeyPair keyPair)
-    : rsp::RSPNode(std::move(keyPair)), incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
+    : messageClient_(RSPClientMessage::create(std::move(keyPair))),
+      incomingMessages_(std::make_shared<ClientApiIncomingMessageQueue>(*this)) {
+    incomingMessages_->setWorkerCount(1);
+    incomingMessages_->start();
+    receiveThread_ = std::thread([this]() { receiveLoop(); });
+}
+
+RSPClient::~RSPClient() {
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        stopping_ = true;
+    }
+    stateChanged_.notify_all();
+
+    if (receiveThread_.joinable()) {
+        receiveThread_.join();
+    }
+
+    if (incomingMessages_ != nullptr) {
+        incomingMessages_->stop();
+    }
 }
 
 int RSPClient::run() const {
     return 0;
 }
 
-bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
-    return false;
-}
-
-void RSPClient::handleOutputMessage(rsp::proto::RSPMessage) {
-}
-
 RSPClient::ClientConnectionID RSPClient::connectToResourceManager(const std::string& transport,
                                                                   const std::string& encoding) {
-    std::string transportName;
-    std::string transportParameters;
-    if (!splitTransportSpec(transport, transportName, transportParameters)) {
-        throw std::invalid_argument("transport must be in the format <name>:<parameters>");
-    }
-
-    const auto selectedTransport = createTransport(transportName);
-    if (selectedTransport == nullptr) {
-        throw std::invalid_argument("unsupported transport");
-    }
-
-    const rsp::transport::ConnectionHandle connection = selectedTransport->connect(transportParameters);
-    if (connection == nullptr) {
-        throw std::runtime_error("failed to establish transport connection");
-    }
-
-    if (!performAsciiHandshake(connection, encoding)) {
-        selectedTransport->stop();
-        throw std::runtime_error("ASCII handshake failed");
-    }
-
-    const auto newEncoding = createEncoding(connection, encoding);
-    if (newEncoding == nullptr) {
-        selectedTransport->stop();
-        throw std::invalid_argument("unsupported encoding");
-    }
-
-    if (!newEncoding->performInitialIdentityExchange() || !newEncoding->start()) {
-        newEncoding->stop();
-        selectedTransport->stop();
-        throw std::runtime_error("identity handshake failed");
-    }
-
-    const ClientConnectionID connectionId;
-
-    {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.emplace(connectionId, ClientConnectionState{selectedTransport, newEncoding});
-    }
-
-    return connectionId;
-}
-
-bool RSPClient::send(const rsp::proto::RSPMessage& message) const {
-    rsp::MessageQueueHandle selectedQueue;
-    size_t selectedQueueSize = 0;
-    bool selectionMade = false;
-
-    {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        for (const auto& [_, connectionState] : connections_) {
-            if (connectionState.encoding == nullptr) {
-                continue;
-            }
-
-            const auto outgoingQueue = connectionState.encoding->outgoingMessages();
-            if (outgoingQueue == nullptr) {
-                continue;
-            }
-
-            const size_t queueSize = outgoingQueue->size();
-            if (queueSize == 0) {
-                return outgoingQueue->push(message);
-            }
-
-            if (!selectionMade || queueSize < selectedQueueSize) {
-                selectedQueue = outgoingQueue;
-                selectedQueueSize = queueSize;
-                selectionMade = true;
-            }
-        }
-    }
-
-    return selectedQueue != nullptr && selectedQueue->push(message);
-}
-
-bool RSPClient::sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const {
-    const auto selectedConnection = connectionState(connectionId);
-    if (!selectedConnection.has_value() || selectedConnection->encoding == nullptr) {
-        return false;
-    }
-
-    const auto outgoingMessages = selectedConnection->encoding->outgoingMessages();
-    return outgoingMessages != nullptr && outgoingMessages->push(message);
-}
-
-bool RSPClient::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
-    return incomingMessages_ != nullptr && incomingMessages_->tryPop(message);
-}
-
-std::size_t RSPClient::pendingMessageCount() const {
-    return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
-}
-
-std::optional<rsp::NodeID> RSPClient::peerNodeID(ClientConnectionID connectionId) const {
-    const auto selectedConnection = connectionState(connectionId);
-    if (!selectedConnection.has_value() || selectedConnection->encoding == nullptr) {
-        return std::nullopt;
-    }
-
-    return selectedConnection->encoding->peerNodeID();
+    return messageClient_->connectToResourceManager(transport, encoding);
 }
 
 bool RSPClient::hasConnections() const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    return !connections_.empty();
+    return messageClient_->hasConnections();
 }
 
 bool RSPClient::hasConnection(ClientConnectionID connectionId) const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    return connections_.find(connectionId) != connections_.end();
+    return messageClient_->hasConnection(connectionId);
 }
 
 std::size_t RSPClient::connectionCount() const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    return connections_.size();
+    return messageClient_->connectionCount();
 }
 
 std::vector<RSPClient::ClientConnectionID> RSPClient::connectionIds() const {
-    std::vector<ClientConnectionID> connectionIds;
-
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    connectionIds.reserve(connections_.size());
-    for (const auto& [connectionId, _] : connections_) {
-        connectionIds.push_back(connectionId);
-    }
-
-    return connectionIds;
+    return messageClient_->connectionIds();
 }
 
 bool RSPClient::removeConnection(ClientConnectionID connectionId) {
-    ClientConnectionState removedConnection;
+    return messageClient_->removeConnection(connectionId);
+}
 
-    {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        const auto iterator = connections_.find(connectionId);
-        if (iterator == connections_.end()) {
-            return false;
+bool RSPClient::ping(rsp::NodeID nodeId) {
+    const std::string nonce = rsp::GUID().toString();
+    const uint32_t sequence = [this, &nonce, &nodeId]() {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        const uint32_t nextSequence = nextPingSequence_++;
+        pendingPings_.emplace(nonce, PendingPingState{nodeId, nextSequence, false});
+        return nextSequence;
+    }();
+
+    rsp::proto::RSPMessage pingRequest;
+    *pingRequest.mutable_source() = toProtoNodeId(messageClient_->nodeId());
+    *pingRequest.mutable_destination() = toProtoNodeId(nodeId);
+    pingRequest.mutable_ping_request()->mutable_nonce()->set_value(nonce);
+    pingRequest.mutable_ping_request()->set_sequence(sequence);
+    *pingRequest.mutable_ping_request()->mutable_time_sent() = toProtoDateTime(rsp::DateTime());
+
+    if (!messageClient_->send(pingRequest)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingPings_.erase(nonce);
+        return false;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(
+        lock,
+        std::chrono::seconds(5),
+        [this, &nonce]() {
+            const auto iterator = pendingPings_.find(nonce);
+            return stopping_ || (iterator != pendingPings_.end() && iterator->second.completed);
+        });
+
+    if (!replied || stopping_) {
+        pendingPings_.erase(nonce);
+        return false;
+    }
+
+    pendingPings_.erase(nonce);
+    return true;
+}
+
+void RSPClient::receiveLoop() {
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (stopping_) {
+                return;
+            }
         }
 
-        removedConnection = iterator->second;
-        connections_.erase(iterator);
-    }
+        rsp::proto::RSPMessage message;
+        if (messageClient_ != nullptr && messageClient_->tryDequeueMessage(message)) {
+            if (incomingMessages_ == nullptr || !incomingMessages_->push(std::move(message))) {
+                std::cerr << "RSPClient failed to enqueue inbound message for API handling" << std::endl;
+            }
+            continue;
+        }
 
-    if (removedConnection.encoding != nullptr) {
-        removedConnection.encoding->stop();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-
-    if (removedConnection.transport != nullptr) {
-        removedConnection.transport->stop();
-    }
-
-    return true;
 }
 
-rsp::transport::TransportHandle RSPClient::createTransport(const std::string& transportName) const {
-    if (transportName == "tcp") {
-        return std::make_shared<rsp::transport::TcpTransport>();
+void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
+    if (message.has_ping_request() && shouldHandleLocally(message)) {
+        handlePingRequest(message);
+        return;
     }
 
-    return nullptr;
+    if (message.has_ping_reply()) {
+        handlePingReply(message);
+    }
 }
 
-rsp::encoding::EncodingHandle RSPClient::createEncoding(const rsp::transport::ConnectionHandle& connection,
-                                                        const std::string& encoding) const {
-    if (connection == nullptr) {
-        return nullptr;
+bool RSPClient::shouldHandleLocally(const rsp::proto::RSPMessage& message) const {
+    if (!message.has_destination()) {
+        return true;
     }
 
-    if (encoding == rsp::ascii_handshake::kEncoding) {
-        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
-    }
-
-    return nullptr;
+    return message.destination().value() == toProtoNodeId(messageClient_->nodeId()).value();
 }
 
-bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection, const std::string& encoding) const {
-    if (encoding != rsp::ascii_handshake::kEncoding) {
-        return false;
+void RSPClient::handlePingRequest(const rsp::proto::RSPMessage& message) {
+    rsp::proto::RSPMessage reply;
+    *reply.mutable_source() = toProtoNodeId(messageClient_->nodeId());
+    if (message.has_source()) {
+        *reply.mutable_destination() = message.source();
     }
 
-    const auto selectedEncoding = rsp::ascii_handshake::performClientHandshake(connection);
-    if (!selectedEncoding.has_value()) {
-        return false;
-    }
+    auto* pingReply = reply.mutable_ping_reply();
+    pingReply->mutable_nonce()->CopyFrom(message.ping_request().nonce());
+    pingReply->set_sequence(message.ping_request().sequence());
+    pingReply->mutable_time_sent()->CopyFrom(message.ping_request().time_sent());
+    *pingReply->mutable_time_replied() = toProtoDateTime(rsp::DateTime());
 
-    if (*selectedEncoding != encoding) {
-        return false;
+    if (!messageClient_->send(reply)) {
+        std::cerr << "RSPClient failed to send ping reply" << std::endl;
     }
-
-    connection->setNegotiatedEncoding(*selectedEncoding);
-    return true;
 }
 
-std::optional<RSPClient::ClientConnectionState> RSPClient::connectionState(ClientConnectionID connectionId) const {
-    std::lock_guard<std::mutex> lock(connectionsMutex_);
-    const auto iterator = connections_.find(connectionId);
-    if (iterator == connections_.end()) {
-        return std::nullopt;
+void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
+    if (!message.ping_reply().has_nonce()) {
+        return;
     }
 
-    return iterator->second;
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    const auto iterator = pendingPings_.find(message.ping_reply().nonce().value());
+    if (iterator == pendingPings_.end()) {
+        return;
+    }
+
+    if (message.ping_reply().sequence() != iterator->second.sequence) {
+        return;
+    }
+
+    if (message.source().value() != toProtoNodeId(iterator->second.destination).value()) {
+        return;
+    }
+
+    iterator->second.completed = true;
+    stateChanged_.notify_all();
 }
 
 }  // namespace rsp::client

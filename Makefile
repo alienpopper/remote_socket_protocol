@@ -47,6 +47,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
+	$(CLIENT_CPP_RSP_CLIENT_MESSAGE_SOURCE) \
 	$(CLIENT_CPP_RSP_CLIENT_SOURCE)
 
 ifeq ($(OS),Windows_NT)
@@ -109,6 +110,7 @@ CLIENT_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/resource_manager/resource_manager.o \
+	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/test/client_test.o
 
@@ -206,6 +208,8 @@ $(OBJ_DIR)/common/encoding/encoding.o: common/message_queue.hpp $(PROTOBUF_GENER
 $(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 

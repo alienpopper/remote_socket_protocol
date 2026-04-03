@@ -92,6 +92,7 @@ CLIENT_LIBRARY_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -127,6 +128,7 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
 	$(OBJ_DIR)\resource_manager.obj \
+	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -156,8 +158,9 @@ $(RSPCLIENT_STATIC_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(
 	lib /nologo /OUT:$(RSPCLIENT_STATIC_TARGET) $(CLIENT_LIBRARY_OBJECTS)
 
 $(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message_dll.obj
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
-	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
+	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(KEYPAIR_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(KEYPAIR_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(KEYPAIR_TEST_TARGET)
@@ -234,6 +237,9 @@ $(OBJ_DIR)\transport.obj: common\transport\transport.cpp common\transport\transp
 $(OBJ_DIR)\transport_tcp.obj: common\transport\transport_tcp.cpp common\transport\transport_tcp.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_tcp.cpp /Fo$(OBJ_DIR)\transport_tcp.obj
 
+$(OBJ_DIR)\rsp_client_message.obj: client\cpp\rsp_client_message.cpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message.obj
+
 $(OBJ_DIR)\rsp_client.obj: client\cpp\rsp_client.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client.obj
 
@@ -269,7 +275,7 @@ $(OBJ_DIR)\message_queue_test.obj: test\message_queue_test.cpp common\message_qu
 $(OBJ_DIR)\node_test.obj: test\node_test.cpp common\node.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\node_test.cpp /Fo$(OBJ_DIR)\node_test.obj
 
-$(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\client_test.cpp /Fo$(OBJ_DIR)\client_test.obj
 
 clean:
