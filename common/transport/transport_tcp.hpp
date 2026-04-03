@@ -22,7 +22,9 @@ public:
     void close() override;
 
 private:
-    mutable std::mutex socketMutex_;
+    mutable std::mutex sendMutex_;
+    mutable std::mutex recvMutex_;
+    mutable std::mutex stateMutex_;
     rsp::os::SocketHandle socketHandle_;
 };
 

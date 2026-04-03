@@ -40,28 +40,45 @@ TcpConnection::~TcpConnection() {
 }
 
 int TcpConnection::send(const rsp::Buffer& data) {
-    std::lock_guard<std::mutex> lock(socketMutex_);
-    if (!rsp::os::isValidSocket(socketHandle_)) {
+    std::lock_guard<std::mutex> sendLock(sendMutex_);
+    rsp::os::SocketHandle socketHandle = rsp::os::invalidSocket();
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        socketHandle = socketHandle_;
+    }
+
+    if (!rsp::os::isValidSocket(socketHandle)) {
         return -1;
     }
 
-    return rsp::os::sendSocket(socketHandle_, data.data(), data.size());
+    return rsp::os::sendSocket(socketHandle, data.data(), data.size());
 }
 
 int TcpConnection::recv(rsp::Buffer& buffer) {
-    std::lock_guard<std::mutex> lock(socketMutex_);
-    if (!rsp::os::isValidSocket(socketHandle_)) {
+    std::lock_guard<std::mutex> recvLock(recvMutex_);
+    rsp::os::SocketHandle socketHandle = rsp::os::invalidSocket();
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        socketHandle = socketHandle_;
+    }
+
+    if (!rsp::os::isValidSocket(socketHandle)) {
         return -1;
     }
 
-    return rsp::os::recvSocket(socketHandle_, buffer.data(), buffer.size());
+    return rsp::os::recvSocket(socketHandle, buffer.data(), buffer.size());
 }
 
 void TcpConnection::close() {
-    std::lock_guard<std::mutex> lock(socketMutex_);
-    if (rsp::os::isValidSocket(socketHandle_)) {
-        rsp::os::closeSocket(socketHandle_);
+    rsp::os::SocketHandle socketHandle = rsp::os::invalidSocket();
+    {
+        std::lock_guard<std::mutex> stateLock(stateMutex_);
+        socketHandle = socketHandle_;
         socketHandle_ = rsp::os::invalidSocket();
+    }
+
+    if (rsp::os::isValidSocket(socketHandle)) {
+        rsp::os::closeSocket(socketHandle);
     }
 }
 
