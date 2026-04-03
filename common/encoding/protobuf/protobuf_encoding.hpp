@@ -10,7 +10,7 @@ class ProtobufEncoding : public rsp::encoding::Encoding {
 public:
     static constexpr uint32_t kFrameMagic = 0x52535050U;
 
-    ProtobufEncoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle incomingMessages);
+    ProtobufEncoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages);
 
 private:
     bool readMessage(rsp::proto::RSPMessage& message) override;

@@ -58,7 +58,12 @@ bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessag
         selectedEncoding = activeEncodings_[index];
     }
 
-    return selectedEncoding != nullptr && selectedEncoding->send(message);
+    if (selectedEncoding == nullptr) {
+        return false;
+    }
+
+    const auto outgoingMessages = selectedEncoding->outgoingMessages();
+    return outgoingMessages != nullptr && outgoingMessages->push(message);
 }
 
 bool ResourceManager::tryDequeueMessage(rsp::proto::RSPMessage& message) const {

@@ -87,7 +87,12 @@ rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, con
 
 bool RSPClient::send(TransportID transportId, const rsp::proto::RSPMessage& message) const {
     const auto selectedEncoding = encoding(transportId);
-    return selectedEncoding != nullptr && selectedEncoding->send(message);
+    if (selectedEncoding == nullptr) {
+        return false;
+    }
+
+    const auto outgoingMessages = selectedEncoding->outgoingMessages();
+    return outgoingMessages != nullptr && outgoingMessages->push(message);
 }
 
 bool RSPClient::tryDequeueMessage(rsp::proto::RSPMessage& message) const {

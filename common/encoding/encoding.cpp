@@ -4,8 +4,34 @@
 #include <utility>
 
 namespace rsp::encoding {
-Encoding::Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle incomingMessages)
-    : connection_(std::move(connection)), incomingMessages_(std::move(incomingMessages)), running_(false) {
+
+namespace {
+
+class EncodingOutgoingQueue : public rsp::MessageQueue {
+public:
+    explicit EncodingOutgoingQueue(Encoding& owner) : owner_(owner) {
+    }
+
+protected:
+    void handleMessage(Message message, rsp::MessageQueueSharedState&) override {
+        owner_.dispatchSend(message);
+    }
+
+    void handleQueueFull(size_t, size_t, const Message&) override {
+    }
+
+private:
+    Encoding& owner_;
+};
+
+}  // namespace
+
+Encoding::Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages)
+    : connection_(std::move(connection)),
+      receivedMessages_(std::move(receivedMessages)),
+      outgoingMessages_(std::make_shared<EncodingOutgoingQueue>(*this)),
+      running_(false) {
+    outgoingMessages_->setWorkerCount(1);
 }
 
 Encoding::~Encoding() {
@@ -14,11 +40,12 @@ Encoding::~Encoding() {
 
 bool Encoding::start() {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    if (running_ || connection_ == nullptr || incomingMessages_ == nullptr) {
+    if (running_ || connection_ == nullptr || receivedMessages_ == nullptr || outgoingMessages_ == nullptr) {
         return false;
     }
 
     running_ = true;
+    outgoingMessages_->start();
     readThread_ = std::thread(&Encoding::readLoop, this);
     return true;
 }
@@ -40,14 +67,22 @@ void Encoding::stop() {
         connection->close();
     }
 
+    if (outgoingMessages_ != nullptr) {
+        outgoingMessages_->stop();
+    }
+
     if (readThread_.joinable() && readThread_.get_id() != std::this_thread::get_id()) {
         readThread_.join();
     }
 }
 
 bool Encoding::send(const rsp::proto::RSPMessage& message) {
-    std::lock_guard<std::mutex> lock(sendMutex_);
-    return writeMessage(message);
+    return queueSend(message);
+}
+
+rsp::MessageQueueHandle Encoding::outgoingMessages() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return outgoingMessages_;
 }
 
 rsp::transport::ConnectionHandle Encoding::connection() const {
@@ -55,10 +90,20 @@ rsp::transport::ConnectionHandle Encoding::connection() const {
     return connection_;
 }
 
-void Encoding::enqueue(rsp::proto::RSPMessage message) const {
-    if (incomingMessages_ != nullptr) {
-        incomingMessages_->push(std::move(message));
+void Encoding::enqueueReceived(rsp::proto::RSPMessage message) const {
+    if (receivedMessages_ != nullptr) {
+        receivedMessages_->push(std::move(message));
     }
+}
+
+bool Encoding::queueSend(rsp::proto::RSPMessage message) const {
+    const auto queue = outgoingMessages();
+    return queue != nullptr && queue->push(std::move(message));
+}
+
+bool Encoding::dispatchSend(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(sendMutex_);
+    return writeMessage(message);
 }
 
 void Encoding::readLoop() {
@@ -77,7 +122,7 @@ void Encoding::readLoop() {
             break;
         }
 
-        enqueue(std::move(message));
+        enqueueReceived(std::move(message));
     }
 }
 

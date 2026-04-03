@@ -29,8 +29,8 @@ uint32_t readUint32(const uint8_t* data) {
 }  // namespace
 
 ProtobufEncoding::ProtobufEncoding(rsp::transport::ConnectionHandle connection,
-                                   rsp::MessageQueueHandle incomingMessages)
-    : Encoding(std::move(connection), std::move(incomingMessages)) {
+                                   rsp::MessageQueueHandle receivedMessages)
+    : Encoding(std::move(connection), std::move(receivedMessages)) {
 }
 
 bool ProtobufEncoding::readMessage(rsp::proto::RSPMessage& message) {
@@ -78,8 +78,8 @@ bool ProtobufEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
     appendUint32(header, kFrameMagic);
     appendUint32(header, static_cast<uint32_t>(payload.size()));
 
-            return activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
-                activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
+    return activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
+           activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
 }
 
 }  // namespace rsp::encoding::protobuf

@@ -12,7 +12,7 @@ namespace rsp::encoding {
 
 class Encoding {
 public:
-    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle incomingMessages);
+    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages);
     virtual ~Encoding();
 
     Encoding(const Encoding&) = delete;
@@ -21,20 +21,24 @@ public:
     bool start();
     void stop();
     bool send(const rsp::proto::RSPMessage& message);
+    rsp::MessageQueueHandle outgoingMessages() const;
+    bool dispatchSend(const rsp::proto::RSPMessage& message);
 
 protected:
     rsp::transport::ConnectionHandle connection() const;
-    void enqueue(rsp::proto::RSPMessage message) const;
+    void enqueueReceived(rsp::proto::RSPMessage message) const;
 
 private:
     virtual bool readMessage(rsp::proto::RSPMessage& message) = 0;
     virtual bool writeMessage(const rsp::proto::RSPMessage& message) = 0;
     void readLoop();
+    bool queueSend(rsp::proto::RSPMessage message) const;
 
     mutable std::mutex stateMutex_;
     mutable std::mutex sendMutex_;
     rsp::transport::ConnectionHandle connection_;
-    rsp::MessageQueueHandle incomingMessages_;
+    rsp::MessageQueueHandle receivedMessages_;
+    rsp::MessageQueueHandle outgoingMessages_;
     bool running_;
     std::thread readThread_;
 };
