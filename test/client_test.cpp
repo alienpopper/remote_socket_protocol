@@ -7,15 +7,13 @@
 #include "common/transport/transport.hpp"
 
 #include <array>
-#include <atomic>
+#include <cstring>
 #include <chrono>
 #include <functional>
 #include <future>
 #include <iostream>
-#include <mutex>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace {
@@ -27,97 +25,6 @@ public:
     rsp::NodeID nodeId() const {
         return keyPair().nodeID();
     }
-};
-
-class MockConnection : public rsp::transport::Connection {
-public:
-    explicit MockConnection(int id) : id_(id) {
-    }
-
-    int send(const rsp::Buffer&) override {
-        return 0;
-    }
-
-    int recv(rsp::Buffer&) override {
-        return 0;
-    }
-
-    void close() override {
-        closed_ = true;
-    }
-
-    int id() const {
-        return id_;
-    }
-
-    bool isClosed() const {
-        return closed_;
-    }
-
-private:
-    int id_;
-    bool closed_ = false;
-};
-
-class MockTransport : public rsp::transport::Transport {
-public:
-    rsp::transport::ConnectionHandle connect(const std::string& parameters) override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        lastParameters_ = parameters;
-        ++connectCount_;
-        activeConnection_ = std::make_shared<MockConnection>(connectCount_);
-        return activeConnection_;
-    }
-
-    rsp::transport::ConnectionHandle reconnect() override {
-        std::string parameters;
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            parameters = lastParameters_;
-        }
-
-        if (parameters.empty()) {
-            return nullptr;
-        }
-
-        return connect(parameters);
-    }
-
-    void stop() override {
-        std::shared_ptr<rsp::transport::Connection> activeConnection;
-
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            activeConnection = activeConnection_;
-            activeConnection_.reset();
-        }
-
-        if (activeConnection != nullptr) {
-            activeConnection->close();
-        }
-    }
-
-    rsp::transport::ConnectionHandle connection() const override {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return activeConnection_;
-    }
-
-    int connectCount() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return connectCount_;
-    }
-
-    std::string lastParameters() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return lastParameters_;
-    }
-
-private:
-    mutable std::mutex mutex_;
-    int connectCount_ = 0;
-    std::string lastParameters_;
-    rsp::transport::ConnectionHandle activeConnection_;
 };
 
 void require(bool condition, const std::string& message) {
@@ -202,11 +109,15 @@ void testTcpAsciiHandshake() {
     });
 
     const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
 
     rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create(std::move(clientKeyPair));
-    const rsp::client::RSPClient::TransportID transportId = client->createTcpTransport();
-    const rsp::transport::ConnectionHandle connection = client->connect(transportId, endpoint);
-    require(connection != nullptr, "client should complete the ASCII and identity handshakes over TCP");
+    const rsp::client::RSPClient::ClientConnectionID connectionId =
+        client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    require(client->hasConnections(), "client should track created connections");
+    require(client->hasConnection(connectionId), "client should track the new connection id");
+    require(client->connectionCount() == 1, "client should track one live connection");
+    require(client->connectionIds().size() == 1, "client should enumerate live connection ids");
 
     require(handshakeFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "server handshake pipeline should complete");
@@ -217,7 +128,7 @@ void testTcpAsciiHandshake() {
     require(resourceManager.pendingMessageCount() == 0,
         "authentication messages should not be exposed through the resource manager queue");
 
-    const auto clientPeerNodeId = client->peerNodeID(transportId);
+    const auto clientPeerNodeId = client->peerNodeID(connectionId);
     require(clientPeerNodeId.has_value(), "client encoding should learn the server node id during authentication");
     require(clientPeerNodeId.value() == resourceManager.nodeId(),
         "client encoding should store the resource manager node id");
@@ -229,7 +140,7 @@ void testTcpAsciiHandshake() {
 
     const rsp::proto::RSPMessage pingRequest =
         makePingRequestMessage(clientNodeId, resourceManager.nodeId(), "ping-nonce", 7, 123456);
-    require(client->send(transportId, pingRequest), "client should send a ping request after authentication");
+    require(client->send(pingRequest), "client should send a ping request after authentication");
     require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
         "client should receive a ping reply from the resource manager");
 
@@ -265,7 +176,10 @@ void testTcpAsciiHandshake() {
     require(queuedAtClient.route().entries(0).node_id().value() == serverMessage.route().entries(0).node_id().value(),
         "client should preserve the route payload across framing");
 
-    client->removeTransport(transportId);
+    require(client->removeConnection(connectionId), "client should remove an existing connection");
+    require(!client->hasConnection(connectionId), "removed connection should no longer be tracked");
+    require(client->connectionCount() == 0, "removing a connection should shrink the managed set");
+    require(!client->removeConnection(connectionId), "removing the same connection twice should fail");
     serverTransport->stop();
 }
 
@@ -275,76 +189,27 @@ int main() {
     try {
         rsp::client::RSPClient::Ptr client = rsp::client::RSPClient::create();
         require(client != nullptr, "client should be reference counted");
-        require(!client->hasTransports(), "client should start without transports");
-        require(client->transportCount() == 0, "client should start with zero transports");
+        require(!client->hasConnections(), "client should start without connections");
+        require(client->connectionCount() == 0, "client should start with zero connections");
 
         rsp::client::RSPClient::Ptr secondReference = client;
         require(secondReference.use_count() >= 2, "client should support shared ownership");
 
-        std::shared_ptr<MockTransport> mockTransport = std::make_shared<MockTransport>();
-        const rsp::client::RSPClient::TransportID mockTransportId = client->addTransport(mockTransport);
-        const rsp::client::RSPClient::TransportID tcpTransportId = client->createTcpTransport();
-
-        require(client->hasTransports(), "client should create transports");
-        require(client->transportCount() == 2, "client should track multiple transports");
-        require(client->hasTransport(mockTransportId), "client should track the mock transport");
-        require(client->hasTransport(tcpTransportId), "client should track the TCP transport");
-        require(mockTransportId != tcpTransportId, "client should return unique GUIDs for different transports");
-        require(client->transport(mockTransportId) == mockTransport, "client should expose the stored transport");
-        require(client->transport(rsp::GUID()) == nullptr, "client should reject unknown transport ids");
-
-        std::vector<rsp::client::RSPClient::TransportID> transportIds = client->transportIds();
-        require(transportIds.size() == 2, "client should enumerate transport ids");
-
-        rsp::transport::TransportHandle transport = client->transport(mockTransportId);
-        require(transport != nullptr, "client should return the managed transport");
-
-        rsp::transport::ConnectionHandle firstConnection = transport->connect("peer.example:1234");
-        require(firstConnection != nullptr, "client should connect a managed transport");
-        require(transport->connection() == firstConnection, "transport should store the active connection");
-        require(mockTransport->connectCount() == 1, "transport should connect once");
-        require(mockTransport->lastParameters() == "peer.example:1234", "transport should persist connection parameters");
-
-        rsp::transport::ConnectionHandle secondConnection = transport->reconnect();
-        require(secondConnection != nullptr, "client should reconnect using the stored parameters");
-        require(secondConnection != firstConnection, "reconnect should replace the previous connection");
-        require(transport->connection() == secondConnection, "transport should update the active connection after reconnect");
-        require(mockTransport->connectCount() == 2, "transport should reconnect through the transport");
-
-        transport->stop();
-        require(transport->connection() == nullptr, "stop should clear the active connection");
-
-        std::atomic<bool> concurrentFailure = false;
-        std::vector<std::thread> threads;
-        for (int i = 0; i < 4; ++i) {
-            threads.emplace_back([transport, &concurrentFailure]() {
-                try {
-                    for (int iteration = 0; iteration < 50; ++iteration) {
-                        rsp::transport::ConnectionHandle connection = transport->reconnect();
-                        if (connection == nullptr) {
-                            concurrentFailure = true;
-                            return;
-                        }
-
-                        (void)transport->connection();
-                        transport->stop();
-                    }
-                } catch (...) {
-                    concurrentFailure = true;
-                }
-            });
+        bool invalidTransportThrown = false;
+        try {
+            static_cast<void>(client->connectToResourceManager("invalid-transport-spec", "protobuf"));
+        } catch (const std::invalid_argument&) {
+            invalidTransportThrown = true;
         }
+        require(invalidTransportThrown, "client should reject malformed transport specifications");
 
-        for (std::thread& worker : threads) {
-            worker.join();
+        bool unsupportedTransportThrown = false;
+        try {
+            static_cast<void>(client->connectToResourceManager("udp:127.0.0.1:5555", "protobuf"));
+        } catch (const std::invalid_argument&) {
+            unsupportedTransportThrown = true;
         }
-
-        require(!concurrentFailure.load(), "client operations should remain safe under concurrent access");
-
-        require(client->removeTransport(mockTransportId), "client should remove an existing transport");
-        require(!client->hasTransport(mockTransportId), "removed transport should no longer be tracked");
-        require(!client->removeTransport(mockTransportId), "removing the same transport twice should fail");
-        require(client->transportCount() == 1, "removing a transport should shrink the managed set");
+        require(unsupportedTransportThrown, "client should reject unsupported transport names");
 
         testTcpAsciiHandshake();
 

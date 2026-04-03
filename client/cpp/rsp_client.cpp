@@ -4,13 +4,32 @@
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 #include "common/transport/transport_tcp.hpp"
 
+#include <optional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace rsp::client {
+
+namespace {
+
+bool splitTransportSpec(const std::string& transportSpec,
+                        std::string& transportName,
+                        std::string& transportParameters) {
+    const size_t separator = transportSpec.find(':');
+    if (separator == std::string::npos || separator == 0 || separator + 1 >= transportSpec.size()) {
+        return false;
+    }
+
+    transportName = transportSpec.substr(0, separator);
+    transportParameters = transportSpec.substr(separator + 1);
+    return true;
+}
+
+}  // namespace
 
 RSPClient::Ptr RSPClient::create() {
     return Ptr(new RSPClient(KeyPair::generateP256()));
@@ -35,70 +54,91 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
 void RSPClient::handleOutputMessage(rsp::proto::RSPMessage) {
 }
 
-RSPClient::TransportID RSPClient::createTcpTransport() {
-    return addTransport(std::make_shared<rsp::transport::TcpTransport>());
-}
-
-RSPClient::TransportID RSPClient::addTransport(const rsp::transport::TransportHandle& transport) {
-    if (transport == nullptr) {
-        throw std::invalid_argument("transport must not be null");
+RSPClient::ClientConnectionID RSPClient::connectToResourceManager(const std::string& transport,
+                                                                  const std::string& encoding) {
+    std::string transportName;
+    std::string transportParameters;
+    if (!splitTransportSpec(transport, transportName, transportParameters)) {
+        throw std::invalid_argument("transport must be in the format <name>:<parameters>");
     }
 
-    const TransportID transportId;
-
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    transports_.emplace(transportId, transport);
-    return transportId;
-}
-
-rsp::transport::ConnectionHandle RSPClient::connect(TransportID transportId, const std::string& parameters) const {
-    const rsp::transport::TransportHandle selectedTransport = transport(transportId);
+    const auto selectedTransport = createTransport(transportName);
     if (selectedTransport == nullptr) {
-        return nullptr;
+        throw std::invalid_argument("unsupported transport");
     }
 
-    const rsp::transport::ConnectionHandle connection = selectedTransport->connect(parameters);
+    const rsp::transport::ConnectionHandle connection = selectedTransport->connect(transportParameters);
     if (connection == nullptr) {
-        return nullptr;
+        throw std::runtime_error("failed to establish transport connection");
     }
 
-    if (!performAsciiHandshake(connection)) {
+    if (!performAsciiHandshake(connection, encoding)) {
         selectedTransport->stop();
-        return nullptr;
+        throw std::runtime_error("ASCII handshake failed");
     }
 
-    rsp::encoding::EncodingHandle previousEncoding;
-    const auto newEncoding = std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
+    const auto newEncoding = createEncoding(connection, encoding);
+    if (newEncoding == nullptr) {
+        selectedTransport->stop();
+        throw std::invalid_argument("unsupported encoding");
+    }
+
     if (!newEncoding->performInitialIdentityExchange() || !newEncoding->start()) {
+        newEncoding->stop();
         selectedTransport->stop();
-        return nullptr;
+        throw std::runtime_error("identity handshake failed");
     }
+
+    const ClientConnectionID connectionId;
 
     {
-        std::lock_guard<std::mutex> lock(transportsMutex_);
-        const auto iterator = encodings_.find(transportId);
-        if (iterator != encodings_.end()) {
-            previousEncoding = iterator->second;
-            iterator->second = newEncoding;
-        } else {
-            encodings_.emplace(transportId, newEncoding);
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        connections_.emplace(connectionId, ClientConnectionState{selectedTransport, newEncoding});
+    }
+
+    return connectionId;
+}
+
+bool RSPClient::send(const rsp::proto::RSPMessage& message) const {
+    rsp::MessageQueueHandle selectedQueue;
+    size_t selectedQueueSize = 0;
+    bool selectionMade = false;
+
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        for (const auto& [_, connectionState] : connections_) {
+            if (connectionState.encoding == nullptr) {
+                continue;
+            }
+
+            const auto outgoingQueue = connectionState.encoding->outgoingMessages();
+            if (outgoingQueue == nullptr) {
+                continue;
+            }
+
+            const size_t queueSize = outgoingQueue->size();
+            if (queueSize == 0) {
+                return outgoingQueue->push(message);
+            }
+
+            if (!selectionMade || queueSize < selectedQueueSize) {
+                selectedQueue = outgoingQueue;
+                selectedQueueSize = queueSize;
+                selectionMade = true;
+            }
         }
     }
 
-    if (previousEncoding != nullptr) {
-        previousEncoding->stop();
-    }
-
-    return connection;
+    return selectedQueue != nullptr && selectedQueue->push(message);
 }
 
-bool RSPClient::send(TransportID transportId, const rsp::proto::RSPMessage& message) const {
-    const auto selectedEncoding = encoding(transportId);
-    if (selectedEncoding == nullptr) {
+bool RSPClient::sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const {
+    const auto selectedConnection = connectionState(connectionId);
+    if (!selectedConnection.has_value() || selectedConnection->encoding == nullptr) {
         return false;
     }
 
-    const auto outgoingMessages = selectedEncoding->outgoingMessages();
+    const auto outgoingMessages = selectedConnection->encoding->outgoingMessages();
     return outgoingMessages != nullptr && outgoingMessages->push(message);
 }
 
@@ -110,84 +150,99 @@ std::size_t RSPClient::pendingMessageCount() const {
     return incomingMessages_ == nullptr ? 0 : incomingMessages_->size();
 }
 
-std::optional<rsp::NodeID> RSPClient::peerNodeID(TransportID transportId) const {
-    const auto selectedEncoding = encoding(transportId);
-    if (selectedEncoding == nullptr) {
+std::optional<rsp::NodeID> RSPClient::peerNodeID(ClientConnectionID connectionId) const {
+    const auto selectedConnection = connectionState(connectionId);
+    if (!selectedConnection.has_value() || selectedConnection->encoding == nullptr) {
         return std::nullopt;
     }
 
-    return selectedEncoding->peerNodeID();
+    return selectedConnection->encoding->peerNodeID();
 }
 
-bool RSPClient::hasTransports() const {
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    return !transports_.empty();
+bool RSPClient::hasConnections() const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    return !connections_.empty();
 }
 
-bool RSPClient::hasTransport(TransportID transportId) const {
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    return transports_.find(transportId) != transports_.end();
+bool RSPClient::hasConnection(ClientConnectionID connectionId) const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    return connections_.find(connectionId) != connections_.end();
 }
 
-std::size_t RSPClient::transportCount() const {
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    return transports_.size();
+std::size_t RSPClient::connectionCount() const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    return connections_.size();
 }
 
-std::vector<RSPClient::TransportID> RSPClient::transportIds() const {
-    std::vector<TransportID> transportIds;
+std::vector<RSPClient::ClientConnectionID> RSPClient::connectionIds() const {
+    std::vector<ClientConnectionID> connectionIds;
 
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    transportIds.reserve(transports_.size());
-    for (const auto& [transportId, _] : transports_) {
-        transportIds.push_back(transportId);
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    connectionIds.reserve(connections_.size());
+    for (const auto& [connectionId, _] : connections_) {
+        connectionIds.push_back(connectionId);
     }
 
-    return transportIds;
+    return connectionIds;
 }
 
-bool RSPClient::removeTransport(TransportID transportId) {
-    rsp::transport::TransportHandle removedTransport;
-    rsp::encoding::EncodingHandle removedEncoding;
+bool RSPClient::removeConnection(ClientConnectionID connectionId) {
+    ClientConnectionState removedConnection;
 
     {
-        std::lock_guard<std::mutex> lock(transportsMutex_);
-        const auto iterator = transports_.find(transportId);
-        if (iterator == transports_.end()) {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        const auto iterator = connections_.find(connectionId);
+        if (iterator == connections_.end()) {
             return false;
         }
 
-        removedTransport = iterator->second;
-        transports_.erase(iterator);
-
-        const auto encodingIterator = encodings_.find(transportId);
-        if (encodingIterator != encodings_.end()) {
-            removedEncoding = encodingIterator->second;
-            encodings_.erase(encodingIterator);
-        }
+        removedConnection = iterator->second;
+        connections_.erase(iterator);
     }
 
-    if (removedEncoding != nullptr) {
-        removedEncoding->stop();
+    if (removedConnection.encoding != nullptr) {
+        removedConnection.encoding->stop();
     }
 
-    removedTransport->stop();
+    if (removedConnection.transport != nullptr) {
+        removedConnection.transport->stop();
+    }
+
     return true;
 }
 
-rsp::transport::TransportHandle RSPClient::transport(TransportID transportId) const {
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    const auto iterator = transports_.find(transportId);
-    if (iterator == transports_.end()) {
+rsp::transport::TransportHandle RSPClient::createTransport(const std::string& transportName) const {
+    if (transportName == "tcp") {
+        return std::make_shared<rsp::transport::TcpTransport>();
+    }
+
+    return nullptr;
+}
+
+rsp::encoding::EncodingHandle RSPClient::createEncoding(const rsp::transport::ConnectionHandle& connection,
+                                                        const std::string& encoding) const {
+    if (connection == nullptr) {
         return nullptr;
     }
 
-    return iterator->second;
+    if (encoding == rsp::ascii_handshake::kEncoding) {
+        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
+    }
+
+    return nullptr;
 }
 
-bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection) const {
+bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection, const std::string& encoding) const {
+    if (encoding != rsp::ascii_handshake::kEncoding) {
+        return false;
+    }
+
     const auto selectedEncoding = rsp::ascii_handshake::performClientHandshake(connection);
     if (!selectedEncoding.has_value()) {
+        return false;
+    }
+
+    if (*selectedEncoding != encoding) {
         return false;
     }
 
@@ -195,11 +250,11 @@ bool RSPClient::performAsciiHandshake(const rsp::transport::ConnectionHandle& co
     return true;
 }
 
-rsp::encoding::EncodingHandle RSPClient::encoding(TransportID transportId) const {
-    std::lock_guard<std::mutex> lock(transportsMutex_);
-    const auto iterator = encodings_.find(transportId);
-    if (iterator == encodings_.end()) {
-        return nullptr;
+std::optional<RSPClient::ClientConnectionState> RSPClient::connectionState(ClientConnectionID connectionId) const {
+    std::lock_guard<std::mutex> lock(connectionsMutex_);
+    const auto iterator = connections_.find(connectionId);
+    if (iterator == connections_.end()) {
+        return std::nullopt;
     }
 
     return iterator->second;
