@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client/cpp_full/rsp_client.hpp"
+#include "os/os_socket.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -26,6 +27,8 @@ public:
     ResourceService& operator=(const ResourceService&) = delete;
     ResourceService(ResourceService&&) = delete;
     ResourceService& operator=(ResourceService&&) = delete;
+
+    ClientConnectionID connectToResourceManager(const std::string& transportSpec, const std::string& encoding);
 
 private:
     struct ManagedSocketState {
@@ -86,6 +89,10 @@ private:
 
     static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
     static std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId);
+    static void fillProtoAddress(const rsp::os::IPAddress& address, rsp::proto::Address* protoAddress);
+
+    rsp::proto::ResourceAdvertisement buildResourceAdvertisement() const;
+    bool sendResourceAdvertisement(ClientConnectionID connectionId) const;
 
     mutable std::mutex socketsMutex_;
     std::map<rsp::GUID, std::shared_ptr<ManagedSocketState>> managedSockets_;

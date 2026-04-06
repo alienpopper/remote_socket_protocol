@@ -44,8 +44,12 @@ public:
     RSPCLIENT_API std::size_t connectionCount() const;
     RSPCLIENT_API std::vector<ClientConnectionID> connectionIds() const;
     RSPCLIENT_API bool removeConnection(ClientConnectionID connectionId);
+    RSPCLIENT_API std::optional<rsp::NodeID> peerNodeID(ClientConnectionID connectionId) const;
 
     RSPCLIENT_API bool ping(rsp::NodeID nodeId);
+    RSPCLIENT_API bool queryResources(rsp::NodeID nodeId,
+                                      const std::string& query = std::string(),
+                                      uint32_t maxRecords = 0);
 
     RSPCLIENT_API std::optional<rsp::proto::SocketReply> connectTCPEx(rsp::NodeID nodeId,
                                                                          const std::string& hostPort,
@@ -106,6 +110,8 @@ public:
     RSPCLIENT_API bool socketClose(const rsp::GUID& socketId);
     RSPCLIENT_API bool tryDequeueSocketReply(rsp::proto::SocketReply& reply);
     RSPCLIENT_API std::size_t pendingSocketReplyCount() const;
+    RSPCLIENT_API bool tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement);
+    RSPCLIENT_API std::size_t pendingResourceAdvertisementCount() const;
     RSPCLIENT_API void registerSocketRoute(const rsp::GUID& socketId, rsp::NodeID nodeId);
 
 private:
@@ -136,6 +142,7 @@ private:
     bool shouldHandleLocally(const rsp::proto::RSPMessage& message) const;
     void handlePingReply(const rsp::proto::RSPMessage& message);
     void handleSocketReply(const rsp::proto::RSPMessage& message);
+    void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
     void runNativeSocketBridge(const rsp::GUID& socketId,
                                const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
     void stopNativeSocketBridges();
@@ -153,6 +160,7 @@ private:
     std::map<rsp::GUID, PendingConnectState> pendingConnects_;
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::SocketReply> pendingSocketReplies_;
+    std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
     std::map<rsp::GUID, std::deque<rsp::proto::SocketReply>> socketReplyQueues_;
     std::set<rsp::GUID> awaitedSocketReplies_;
     std::map<rsp::GUID, std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges_;

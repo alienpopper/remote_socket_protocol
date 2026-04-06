@@ -1,9 +1,12 @@
 #include "os/os_socket.hpp"
 
 #include <cstring>
+#include <set>
 #include <string>
 
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -22,6 +25,38 @@ SocketHandle fromNative(int socketHandle) {
 
 std::string portString(uint16_t port) {
     return std::to_string(port);
+}
+
+void insertAddress(const sockaddr* address, std::set<IPAddress>& addresses) {
+    if (address == nullptr) {
+        return;
+    }
+
+    if (address->sa_family == AF_INET) {
+        const auto* ipv4Address = reinterpret_cast<const sockaddr_in*>(address);
+        const uint32_t hostAddress = ntohl(ipv4Address->sin_addr.s_addr);
+        if ((hostAddress >> 24) == 127 || hostAddress == 0) {
+            return;
+        }
+
+        IPAddress entry;
+        entry.family = IPAddressFamily::IPv4;
+        entry.ipv4 = hostAddress;
+        addresses.insert(entry);
+        return;
+    }
+
+    if (address->sa_family == AF_INET6) {
+        const auto* ipv6Address = reinterpret_cast<const sockaddr_in6*>(address);
+        if (IN6_IS_ADDR_LOOPBACK(&ipv6Address->sin6_addr) || IN6_IS_ADDR_UNSPECIFIED(&ipv6Address->sin6_addr)) {
+            return;
+        }
+
+        IPAddress entry;
+        entry.family = IPAddressFamily::IPv6;
+        std::memcpy(entry.ipv6.data(), ipv6Address->sin6_addr.s6_addr, entry.ipv6.size());
+        addresses.insert(entry);
+    }
 }
 
 }  // namespace
@@ -130,6 +165,29 @@ int sendSocket(SocketHandle socketHandle, const uint8_t* data, uint32_t length) 
 
 int recvSocket(SocketHandle socketHandle, uint8_t* buffer, uint32_t length) {
     return static_cast<int>(recv(toNative(socketHandle), buffer, length, 0));
+}
+
+std::vector<IPAddress> listNonLocalAddresses() {
+    std::set<IPAddress> addresses;
+    ifaddrs* interfaceAddresses = nullptr;
+    if (getifaddrs(&interfaceAddresses) != 0) {
+        return {};
+    }
+
+    for (ifaddrs* current = interfaceAddresses; current != nullptr; current = current->ifa_next) {
+        if (current->ifa_addr == nullptr || current->ifa_flags == 0) {
+            continue;
+        }
+
+        if ((current->ifa_flags & IFF_UP) == 0 || (current->ifa_flags & IFF_LOOPBACK) != 0) {
+            continue;
+        }
+
+        insertAddress(current->ifa_addr, addresses);
+    }
+
+    freeifaddrs(interfaceAddresses);
+    return {addresses.begin(), addresses.end()};
 }
 
 void closeSocket(SocketHandle socketHandle) {

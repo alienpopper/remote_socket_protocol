@@ -7,8 +7,10 @@
 #include "common/transport/transport.hpp"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace rsp::resource_manager {
@@ -28,6 +30,9 @@ public:
     size_t clientTransportCount() const;
     void setNewEncodingCallback(NewEncodingCallback callback);
     size_t activeEncodingCount() const;
+    size_t resourceAdvertisementCount() const;
+    bool hasResourceAdvertisement(const rsp::NodeID& nodeId) const;
+    std::optional<rsp::proto::ResourceAdvertisement> resourceAdvertisement(const rsp::NodeID& nodeId) const;
     bool sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const;
     bool routeAndSend(const rsp::proto::RSPMessage& message) const;
     bool isForThisNode(const rsp::proto::RSPMessage& message) const;
@@ -43,6 +48,7 @@ private:
     /*messages produced by this RM, not routed through*/
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
 
+    void eraseResourceAdvertisement(const rsp::NodeID& nodeId) const;
     void registerTransportCallbacks();
     void registerTransportCallback(const rsp::transport::ListeningTransportHandle& transport);
     void enqueueAcceptedConnection(const rsp::transport::ConnectionHandle& connection);
@@ -50,6 +56,8 @@ private:
 
     mutable std::mutex encodingsMutex_;
     std::vector<rsp::encoding::EncodingHandle> activeEncodings_;
+    mutable std::mutex resourceAdvertisementsMutex_;
+    mutable std::map<rsp::NodeID, rsp::proto::ResourceAdvertisement> resourceAdvertisements_;
     mutable std::mutex newEncodingCallbackMutex_;
     NewEncodingCallback newEncodingCallback_;
     rsp::MessageQueueHandle incomingMessages_;

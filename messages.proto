@@ -67,6 +67,48 @@ message RouteUpdate {
     repeated RouteEntry entries = 2;
 }
 
+message Address {
+    uint32 ipv4 = 1;
+    bytes ipv6 = 2;
+}
+
+message AddressRange{
+    Address start_address = 1; //0 means any address
+    Address end_address = 2;
+}
+
+message PortRange {
+    uint32 start_port = 1; //0 means any port
+    uint32 end_port = 2;
+}
+
+message ResourceTCPConnect{
+    optional NodeId node_id = 1;
+    repeated Address source_addresses = 2;
+}
+
+message ResourceTCPListen{
+    optional NodeId node_id = 1;
+    repeated Address listen_address = 2;
+    PortRange allowed_range = 3;
+}
+
+message ResourceRecord{
+    oneof resource_type {
+        ResourceTCPConnect tcp_connect = 1;
+        ResourceTCPListen tcp_listen = 2;
+    }
+}
+
+message ResourceAdvertisement{
+    repeated ResourceRecord records = 1;
+}
+
+message ResourceQuery{
+    string query = 1;
+    uint32 max_records = 2;
+}
+
 enum ERROR_CODE{
     UNKNOWN_ERROR = 0;
     UNKNOWN_MESSAGE_TYPE = 1;
@@ -186,6 +228,8 @@ message RSPMessage {
         SocketClose socket_close = 13;
         ListenTCPRequest listen_tcp_request = 14;
         AcceptTCP accept_tcp = 15;
+        ResourceAdvertisement resource_advertisement = 16;
+        ResourceQuery resource_query = 17;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong

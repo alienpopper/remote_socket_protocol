@@ -1,6 +1,7 @@
 #define RSPCLIENT_STATIC
 
 #include "client/cpp/rsp_client.hpp"
+#include "client/cpp/rsp_client_message.hpp"
 #include "resource_service/resource_service.hpp"
 
 #include "common/transport/transport_tcp.hpp"
@@ -12,6 +13,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -45,6 +47,54 @@ bool waitForCondition(const std::function<bool()>& condition) {
     }
 
     return condition();
+}
+
+std::string normalizeAddress(const rsp::os::IPAddress& address) {
+    if (address.family == rsp::os::IPAddressFamily::IPv4) {
+        return std::string("4:") + std::to_string(address.ipv4);
+    }
+
+    return std::string("6:") + std::string(reinterpret_cast<const char*>(address.ipv6.data()), address.ipv6.size());
+}
+
+std::string normalizeAddress(const rsp::proto::Address& address) {
+    if (!address.ipv6().empty()) {
+        return std::string("6:") + address.ipv6();
+    }
+
+    return std::string("4:") + std::to_string(address.ipv4());
+}
+
+std::set<std::string> expectedAdvertisedAddresses() {
+    std::set<std::string> addresses;
+    for (const auto& address : rsp::os::listNonLocalAddresses()) {
+        addresses.insert(normalizeAddress(address));
+    }
+
+    return addresses;
+}
+
+std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
+    if (nodeId.value().size() != 16) {
+        return std::nullopt;
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    std::memcpy(&high, nodeId.value().data(), sizeof(high));
+    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
+    return rsp::NodeID(high, low);
+}
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
 }
 
 bool sendAllSocket(const rsp::os::SocketHandle socketHandle, const std::string& data) {
@@ -125,6 +175,21 @@ std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId)
     std::memcpy(&high, socketId.value().data(), sizeof(high));
     std::memcpy(&low, socketId.value().data() + sizeof(high), sizeof(low));
     return rsp::GUID(high, low);
+}
+
+std::optional<rsp::NodeID> findTcpConnectNodeId(const rsp::proto::ResourceAdvertisement& advertisement) {
+    for (const auto& record : advertisement.records()) {
+        if (!record.has_tcp_connect() || !record.tcp_connect().has_node_id()) {
+            continue;
+        }
+
+        const auto nodeId = fromProtoNodeId(record.tcp_connect().node_id());
+        if (nodeId.has_value()) {
+            return nodeId;
+        }
+    }
+
+    return std::nullopt;
 }
 
 class TestSocketServer {
@@ -359,8 +424,52 @@ void testResourceServiceConnectsToResourceManager() {
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
             "resource manager should keep the resource service connection active");
+        require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
+            return resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
+            }),
+            "resource manager should store a resource advertisement for the resource service node");
     require(resourceManager.pendingMessageCount() == 0,
             "resource manager should not expose authentication traffic through its incoming message queue");
+
+        const auto advertisement = resourceManager.resourceAdvertisement(resourceServiceNodeId);
+        require(advertisement.has_value(), "resource manager should return the stored resource advertisement");
+        require(advertisement->records_size() == 2,
+            "resource service should advertise TCP connect and TCP listen capabilities");
+
+        const auto expectedAddresses = expectedAdvertisedAddresses();
+        bool sawTcpConnect = false;
+        bool sawTcpListen = false;
+        for (const auto& record : advertisement->records()) {
+        if (record.has_tcp_connect()) {
+            sawTcpConnect = true;
+            std::set<std::string> advertisedAddresses;
+            for (const auto& address : record.tcp_connect().source_addresses()) {
+            advertisedAddresses.insert(normalizeAddress(address));
+            }
+
+            require(advertisedAddresses == expectedAddresses,
+                "resource manager should store all non-local addresses in the TCP connect advertisement");
+        }
+
+        if (record.has_tcp_listen()) {
+            sawTcpListen = true;
+            std::set<std::string> advertisedAddresses;
+            for (const auto& address : record.tcp_listen().listen_address()) {
+            advertisedAddresses.insert(normalizeAddress(address));
+            }
+
+            require(advertisedAddresses == expectedAddresses,
+                "resource manager should store all non-local addresses in the TCP listen advertisement");
+            require(record.tcp_listen().has_allowed_range(),
+                "resource service should advertise an allowed listen port range");
+            require(record.tcp_listen().allowed_range().start_port() == 0 &&
+                record.tcp_listen().allowed_range().end_port() == 0,
+                "resource service should currently advertise an unrestricted listen port range");
+        }
+        }
+
+        require(sawTcpConnect, "resource service should send a TCP connect advertisement record");
+        require(sawTcpListen, "resource service should send a TCP listen advertisement record");
 
     require(resourceService->removeConnection(connectionId), "resource service should remove an existing connection");
     require(!resourceService->hasConnections(), "resource service should have no remaining connections");
@@ -425,6 +534,252 @@ void testClientExchangesTcpDataThroughResourceService() {
 
     serverTransport->stop();
 }
+
+void testClientDiscoversResourceServiceThroughResourceQuery() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto client = rsp::client::RSPClientMessage::create();
+
+    const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate the resource service and client for discovery test");
+    require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
+                return resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
+            }),
+            "resource manager should store the resource service advertisement before discovery queries run");
+
+    rsp::proto::RSPMessage query;
+    *query.mutable_source() = toProtoNodeId(client->nodeId());
+    *query.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
+    query.mutable_resource_query();
+    require(client->send(query),
+            "client should send a resource query to the resource manager");
+
+    require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
+            "client should receive a resource advertisement reply from the resource manager");
+
+    rsp::proto::RSPMessage reply;
+    require(client->tryDequeueMessage(reply),
+            "client should dequeue the resource advertisement reply");
+    require(reply.has_resource_advertisement(),
+            "resource query reply should contain a resource advertisement");
+
+    const auto& advertisement = reply.resource_advertisement();
+    require(advertisement.records_size() == 2,
+            "resource query should return the resource service TCP connect and listen records");
+
+    const auto expectedAddresses = expectedAdvertisedAddresses();
+    bool sawTcpConnect = false;
+    bool sawTcpListen = false;
+    for (const auto& record : advertisement.records()) {
+        if (record.has_tcp_connect()) {
+            sawTcpConnect = true;
+            require(record.tcp_connect().has_node_id(),
+                    "resource manager should stamp TCP connect records with the owning node id");
+            const auto nodeId = fromProtoNodeId(record.tcp_connect().node_id());
+            require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
+                    "resource manager should identify the resource service on TCP connect records");
+
+            std::set<std::string> advertisedAddresses;
+            for (const auto& address : record.tcp_connect().source_addresses()) {
+                advertisedAddresses.insert(normalizeAddress(address));
+            }
+            require(advertisedAddresses == expectedAddresses,
+                    "resource query should return all advertised TCP connect addresses");
+        }
+
+        if (record.has_tcp_listen()) {
+            sawTcpListen = true;
+            require(record.tcp_listen().has_node_id(),
+                    "resource manager should stamp TCP listen records with the owning node id");
+            const auto nodeId = fromProtoNodeId(record.tcp_listen().node_id());
+            require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
+                    "resource manager should identify the resource service on TCP listen records");
+
+            std::set<std::string> advertisedAddresses;
+            for (const auto& address : record.tcp_listen().listen_address()) {
+                advertisedAddresses.insert(normalizeAddress(address));
+            }
+            require(advertisedAddresses == expectedAddresses,
+                    "resource query should return all advertised TCP listen addresses");
+            require(record.tcp_listen().has_allowed_range() &&
+                        record.tcp_listen().allowed_range().start_port() == 0 &&
+                        record.tcp_listen().allowed_range().end_port() == 0,
+                    "resource query should preserve the unrestricted listen port range");
+        }
+    }
+
+    require(sawTcpConnect, "resource query reply should include a TCP connect record");
+    require(sawTcpListen, "resource query reply should include a TCP listen record");
+
+    require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its discovery test connection");
+    require(client->removeConnection(clientConnectionId),
+            "client should remove its discovery test connection");
+
+    serverTransport->stop();
+}
+
+    void testClientDiscoversTcpConnectResourceAndExchangesData() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+
+        auto resourceService = rsp::resource_service::ResourceService::create();
+        auto client = rsp::client::RSPClient::create();
+
+        const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate the resource service and client for discovery-driven connect test");
+        require(waitForCondition([&resourceManager]() { return resourceManager.resourceAdvertisementCount() == 1; }),
+            "resource manager should store one discovered resource advertisement before client lookup");
+
+        const auto resourceManagerNodeId = client->peerNodeID(clientConnectionId);
+        require(resourceManagerNodeId.has_value(),
+            "client should discover the resource manager node id from its authenticated connection");
+        require(client->queryResources(*resourceManagerNodeId, "tcp connect"),
+            "client should query the resource manager for TCP connect resources");
+        require(waitForCondition([&client]() { return client->pendingResourceAdvertisementCount() == 1; }),
+            "client should receive a resource advertisement response for the TCP connect query");
+
+        rsp::proto::ResourceAdvertisement advertisement;
+        require(client->tryDequeueResourceAdvertisement(advertisement),
+            "client should dequeue the discovered TCP connect advertisement");
+        const auto discoveredResourceServiceNodeId = findTcpConnectNodeId(advertisement);
+        require(discoveredResourceServiceNodeId.has_value(),
+            "client should discover a resource service node id from a TCP connect advertisement record");
+
+        TestSocketServer socketServer;
+        const std::string greeting = "discover-connect-greeting";
+        const std::string clientPayload = "discover-connect-payload";
+        const std::string serverResponse = "discover-connect-response";
+        socketServer.start(greeting, clientPayload, serverResponse);
+
+        const auto socketId = client->connectTCP(*discoveredResourceServiceNodeId, socketServer.endpoint());
+        require(socketId.has_value(),
+            "client should connect through the discovered TCP connect resource without test-supplied node ids");
+
+        const auto receivedGreeting = client->socketRecv(*socketId, static_cast<uint32_t>(greeting.size()));
+        require(receivedGreeting.has_value(),
+            "client should receive greeting bytes from the TCP server through the discovered resource service");
+        require(*receivedGreeting == greeting,
+            "client should receive the expected greeting bytes through the discovered resource service");
+
+        require(client->socketSend(*socketId, clientPayload),
+            "client should send payload bytes through the discovered resource service");
+
+        const auto receivedResponse = client->socketRecv(*socketId, static_cast<uint32_t>(serverResponse.size()));
+        require(receivedResponse.has_value(),
+            "client should receive response bytes from the TCP server through the discovered resource service");
+        require(*receivedResponse == serverResponse,
+            "client should receive the expected response bytes through the discovered resource service");
+
+        require(client->socketClose(*socketId),
+            "client should close the discovered TCP connection through the resource service");
+        socketServer.wait();
+
+        require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its discovery-driven connect test connection");
+        require(client->removeConnection(clientConnectionId),
+            "client should remove its discovery-driven connect test connection");
+
+        serverTransport->stop();
+    }
+
+    void testEmptyResourceAdvertisementClearsStoredResourceServiceRecords() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+
+        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        const auto connectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
+            "resource manager should authenticate the resource service before clearing advertisements");
+        require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
+            return resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
+            }),
+            "resource manager should store the initial resource service advertisement");
+
+        rsp::proto::RSPMessage message;
+        *message.mutable_source() = toProtoNodeId(resourceServiceNodeId);
+        *message.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
+        message.mutable_resource_advertisement();
+        require(resourceService->send(message),
+            "resource service should send an empty resource advertisement to clear stored records");
+
+        require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
+            return !resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
+            }),
+            "resource manager should erase stored advertisements for a node that sends an empty advertisement");
+
+        require(resourceService->removeConnection(connectionId),
+            "resource service should remove its empty-advertisement test connection");
+        serverTransport->stop();
+    }
+
+    void testFailedRouteClearsStoredResourceServiceRecords() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        const rsp::NodeID unroutableNodeId{rsp::GUID()};
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+
+        auto client = rsp::client::RSPClientMessage::create();
+        const auto connectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
+            "resource manager should authenticate the client before route-failure cleanup");
+
+        rsp::proto::RSPMessage advertisementMessage;
+        *advertisementMessage.mutable_source() = toProtoNodeId(unroutableNodeId);
+        *advertisementMessage.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
+        advertisementMessage.mutable_resource_advertisement()->add_records()->mutable_tcp_connect();
+        require(client->send(advertisementMessage),
+            "client should send a resource advertisement for an unroutable node id");
+        require(waitForCondition([&resourceManager, &unroutableNodeId]() {
+            return resourceManager.hasResourceAdvertisement(unroutableNodeId);
+            }),
+            "resource manager should store advertisements even when the advertised node id is not routable");
+
+        rsp::proto::RSPMessage message;
+        *message.mutable_source() = toProtoNodeId(resourceManager.nodeId());
+        *message.mutable_destination() = toProtoNodeId(unroutableNodeId);
+        message.mutable_ping_request()->mutable_nonce()->set_value("route-failure");
+        message.mutable_ping_request()->set_sequence(1);
+        require(!resourceManager.routeAndSend(message),
+            "routeAndSend should fail when no active route exists for the destination node id");
+        require(!resourceManager.hasResourceAdvertisement(unroutableNodeId),
+            "routeAndSend failure should erase stored advertisements for the destination node");
+
+        require(client->removeConnection(connectionId),
+            "client should remove its route-failure cleanup test connection");
+        serverTransport->stop();
+    }
 
 void testClientReceivesAsyncSocketDataThroughResourceService() {
     auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
@@ -877,6 +1232,10 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 int main() {
     try {
         testResourceServiceConnectsToResourceManager();
+        testEmptyResourceAdvertisementClearsStoredResourceServiceRecords();
+        testFailedRouteClearsStoredResourceServiceRecords();
+        testClientDiscoversResourceServiceThroughResourceQuery();
+        testClientDiscoversTcpConnectResourceAndExchangesData();
         testClientExchangesTcpDataThroughResourceService();
         testClientReceivesAsyncSocketDataThroughResourceService();
         testClientExchangesTcpDataThroughNativeSocketBridge();

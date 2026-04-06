@@ -1,10 +1,13 @@
 #include "os/os_socket.hpp"
 
 #include <atomic>
+#include <set>
 #include <string>
 
+#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <winsock2.h>
+#include <iphlpapi.h>
 #include <ws2tcpip.h>
 
 namespace rsp::os {
@@ -23,6 +26,38 @@ SocketHandle fromNative(SOCKET socketHandle) {
 
 std::string portString(uint16_t port) {
     return std::to_string(port);
+}
+
+void insertAddress(const sockaddr* address, std::set<IPAddress>& addresses) {
+    if (address == nullptr) {
+        return;
+    }
+
+    if (address->sa_family == AF_INET) {
+        const auto* ipv4Address = reinterpret_cast<const sockaddr_in*>(address);
+        const uint32_t hostAddress = ntohl(ipv4Address->sin_addr.s_addr);
+        if ((hostAddress >> 24) == 127 || hostAddress == 0) {
+            return;
+        }
+
+        IPAddress entry;
+        entry.family = IPAddressFamily::IPv4;
+        entry.ipv4 = hostAddress;
+        addresses.insert(entry);
+        return;
+    }
+
+    if (address->sa_family == AF_INET6) {
+        const auto* ipv6Address = reinterpret_cast<const sockaddr_in6*>(address);
+        if (IN6_IS_ADDR_LOOPBACK(&ipv6Address->sin6_addr) || IN6_IS_ADDR_UNSPECIFIED(&ipv6Address->sin6_addr)) {
+            return;
+        }
+
+        IPAddress entry;
+        entry.family = IPAddressFamily::IPv6;
+        std::memcpy(entry.ipv6.data(), &ipv6Address->sin6_addr, entry.ipv6.size());
+        addresses.insert(entry);
+    }
 }
 
 }  // namespace
@@ -176,6 +211,50 @@ int sendSocket(SocketHandle socketHandle, const uint8_t* data, uint32_t length) 
 
 int recvSocket(SocketHandle socketHandle, uint8_t* buffer, uint32_t length) {
     return recv(toNative(socketHandle), reinterpret_cast<char*>(buffer), static_cast<int>(length), 0);
+}
+
+std::vector<IPAddress> listNonLocalAddresses() {
+    ULONG bufferSize = 16 * 1024;
+    std::vector<uint8_t> buffer(bufferSize);
+    IP_ADAPTER_ADDRESSES* adapterAddresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+
+    ULONG result = GetAdaptersAddresses(AF_UNSPEC,
+                                        GAA_FLAG_SKIP_ANYCAST |
+                                            GAA_FLAG_SKIP_MULTICAST |
+                                            GAA_FLAG_SKIP_DNS_SERVER,
+                                        nullptr,
+                                        adapterAddresses,
+                                        &bufferSize);
+    if (result == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(bufferSize);
+        adapterAddresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+        result = GetAdaptersAddresses(AF_UNSPEC,
+                                      GAA_FLAG_SKIP_ANYCAST |
+                                          GAA_FLAG_SKIP_MULTICAST |
+                                          GAA_FLAG_SKIP_DNS_SERVER,
+                                      nullptr,
+                                      adapterAddresses,
+                                      &bufferSize);
+    }
+
+    if (result != NO_ERROR) {
+        return {};
+    }
+
+    std::set<IPAddress> addresses;
+    for (IP_ADAPTER_ADDRESSES* adapter = adapterAddresses; adapter != nullptr; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+            continue;
+        }
+
+        for (IP_ADAPTER_UNICAST_ADDRESS* unicast = adapter->FirstUnicastAddress;
+             unicast != nullptr;
+             unicast = unicast->Next) {
+            insertAddress(unicast->Address.lpSockaddr, addresses);
+        }
+    }
+
+    return {addresses.begin(), addresses.end()};
 }
 
 void closeSocket(SocketHandle socketHandle) {

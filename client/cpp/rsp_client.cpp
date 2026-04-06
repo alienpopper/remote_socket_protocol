@@ -134,6 +134,11 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
+    if (message.has_resource_advertisement()) {
+        handleResourceAdvertisement(message);
+        return true;
+    }
+
     return false;
 }
 
@@ -178,6 +183,10 @@ bool RSPClient::removeConnection(ClientConnectionID connectionId) {
     return messageClient_->removeConnection(connectionId);
 }
 
+std::optional<rsp::NodeID> RSPClient::peerNodeID(ClientConnectionID connectionId) const {
+    return messageClient_->peerNodeID(connectionId);
+}
+
 bool RSPClient::ping(rsp::NodeID nodeId) {
     const std::string nonce = rsp::GUID().toString();
     rsp::ping_trace::start(nonce);
@@ -220,6 +229,21 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     rsp::ping_trace::record(nonce, "source_ping_wait_completed");
     pendingPings_.erase(nonce);
     return true;
+}
+
+bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uint32_t maxRecords) {
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    auto* resourceQuery = request.mutable_resource_query();
+    if (!query.empty()) {
+        resourceQuery->set_query(query);
+    }
+    if (maxRecords > 0) {
+        resourceQuery->set_max_records(maxRecords);
+    }
+
+    return messageClient_->send(request);
 }
 
 std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
@@ -689,6 +713,22 @@ std::size_t RSPClient::pendingSocketReplyCount() const {
     return pendingSocketReplies_.size();
 }
 
+bool RSPClient::tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (pendingResourceAdvertisements_.empty()) {
+        return false;
+    }
+
+    advertisement = pendingResourceAdvertisements_.front();
+    pendingResourceAdvertisements_.pop_front();
+    return true;
+}
+
+std::size_t RSPClient::pendingResourceAdvertisementCount() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return pendingResourceAdvertisements_.size();
+}
+
 void RSPClient::registerSocketRoute(const rsp::GUID& socketId, rsp::NodeID nodeId) {
     std::lock_guard<std::mutex> lock(stateMutex_);
     socketRoutes_[socketId] = nodeId;
@@ -855,6 +895,12 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::os::closeSocket(nativeSocketBridge->bridgeSocket);
+}
+
+void RSPClient::handleResourceAdvertisement(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    pendingResourceAdvertisements_.push_back(message.resource_advertisement());
+    stateChanged_.notify_all();
 }
 
 void RSPClient::runNativeSocketBridge(const rsp::GUID& socketId,

@@ -26,6 +26,34 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     return protoNodeId;
 }
 
+std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
+    if (nodeId.value().size() != 16) {
+        return std::nullopt;
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    std::memcpy(&high, nodeId.value().data(), sizeof(high));
+    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
+    return rsp::NodeID(high, low);
+}
+
+void setNodeIdIfPresent(rsp::proto::ResourceRecord* record, const rsp::NodeID& nodeId) {
+    if (record == nullptr) {
+        return;
+    }
+
+    const auto protoNodeId = toProtoNodeId(nodeId);
+    if (record->has_tcp_connect()) {
+        *record->mutable_tcp_connect()->mutable_node_id() = protoNodeId;
+        return;
+    }
+
+    if (record->has_tcp_listen()) {
+        *record->mutable_tcp_listen()->mutable_node_id() = protoNodeId;
+    }
+}
+
 class PendingConnectionQueue : public rsp::MessageQueue<rsp::transport::ConnectionHandle> {
 public:
     explicit PendingConnectionQueue(ResourceManager& owner) : owner_(owner) {
@@ -158,7 +186,51 @@ int ResourceManager::run() const {
     return 0;
 }
 
-bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
+bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
+    if (message.has_resource_advertisement()) {
+        if (!message.has_source()) {
+            return false;
+        }
+
+        const auto nodeId = fromProtoNodeId(message.source());
+        if (!nodeId.has_value()) {
+            return false;
+        }
+
+        if (message.resource_advertisement().records_size() == 0) {
+            eraseResourceAdvertisement(*nodeId);
+            return true;
+        }
+
+        std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+        resourceAdvertisements_[*nodeId] = message.resource_advertisement();
+        return true;
+    }
+
+    if (message.has_resource_query()) {
+        if (!message.has_source()) {
+            return false;
+        }
+
+        rsp::proto::RSPMessage reply;
+        *reply.mutable_source() = toProtoNodeId(keyPair().nodeID());
+        *reply.mutable_destination() = message.source();
+
+        {
+            std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+            for (const auto& [nodeId, advertisement] : resourceAdvertisements_) {
+                for (const auto& record : advertisement.records()) {
+                    auto* replyRecord = reply.mutable_resource_advertisement()->add_records();
+                    *replyRecord = record;
+                    setNodeIdIfPresent(replyRecord, nodeId);
+                }
+            }
+        }
+
+        const auto queue = outputQueue();
+        return queue != nullptr && queue->push(std::move(reply));
+    }
+
     return false;
 }
 
@@ -166,6 +238,11 @@ void ResourceManager::handleOutputMessage(rsp::proto::RSPMessage message) {
     if (!routeAndSend(message)) {
         std::cerr << "ResourceManager failed to route outgoing message" << std::endl;
     }
+}
+
+void ResourceManager::eraseResourceAdvertisement(const rsp::NodeID& nodeId) const {
+    std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+    resourceAdvertisements_.erase(nodeId);
 }
 
 void ResourceManager::addClientTransport(const rsp::transport::ListeningTransportHandle& transport) {
@@ -185,6 +262,26 @@ void ResourceManager::setNewEncodingCallback(NewEncodingCallback callback) {
 size_t ResourceManager::activeEncodingCount() const {
     std::lock_guard<std::mutex> lock(encodingsMutex_);
     return activeEncodings_.size();
+}
+
+size_t ResourceManager::resourceAdvertisementCount() const {
+    std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+    return resourceAdvertisements_.size();
+}
+
+bool ResourceManager::hasResourceAdvertisement(const rsp::NodeID& nodeId) const {
+    std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+    return resourceAdvertisements_.find(nodeId) != resourceAdvertisements_.end();
+}
+
+std::optional<rsp::proto::ResourceAdvertisement> ResourceManager::resourceAdvertisement(const rsp::NodeID& nodeId) const {
+    std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
+    const auto iterator = resourceAdvertisements_.find(nodeId);
+    if (iterator == resourceAdvertisements_.end()) {
+        return std::nullopt;
+    }
+
+    return iterator->second;
 }
 
 bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const {
@@ -217,6 +314,8 @@ bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const 
         return false;
     }
 
+    const auto destinationNodeId = fromProtoNodeId(message.destination());
+
     rsp::encoding::EncodingHandle selectedEncoding;
 
     {
@@ -239,11 +338,19 @@ bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const 
     }
 
     if (selectedEncoding == nullptr) {
+        if (destinationNodeId.has_value()) {
+            eraseResourceAdvertisement(*destinationNodeId);
+        }
         return false;
     }
 
     const auto outgoingMessages = selectedEncoding->outgoingMessages();
-    return outgoingMessages != nullptr && outgoingMessages->push(message);
+    const bool sent = outgoingMessages != nullptr && outgoingMessages->push(message);
+    if (!sent && destinationNodeId.has_value()) {
+        eraseResourceAdvertisement(*destinationNodeId);
+    }
+
+    return sent;
 }
 
 bool ResourceManager::isForThisNode(const rsp::proto::RSPMessage& message) const {
