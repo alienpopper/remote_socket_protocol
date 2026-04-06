@@ -14,7 +14,7 @@ namespace rsp::encoding {
 
 class Encoding {
 public:
-    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages, const rsp::KeyPair& localKeyPair);
+    Encoding(rsp::transport::ConnectionHandle connection, rsp::MessageQueueHandle receivedMessages, rsp::KeyPair localKeyPair);
     virtual ~Encoding();
 
     Encoding(const Encoding&) = delete;
@@ -33,6 +33,7 @@ protected:
     void enqueueReceived(rsp::proto::RSPMessage message) const;
     rsp::proto::RSPMessage normalizeOutgoingMessage(rsp::proto::RSPMessage message) const;
     void setPeerNodeID(const rsp::NodeID& nodeId);
+    const rsp::KeyPair& localKeyPair() const;
 
 private:
     virtual bool readMessage(rsp::proto::RSPMessage& message) = 0;
@@ -45,7 +46,7 @@ private:
     rsp::transport::ConnectionHandle connection_;
     rsp::MessageQueueHandle receivedMessages_;
     rsp::MessageQueueHandle outgoingMessages_;
-    const rsp::KeyPair* localKeyPair_;
+    rsp::KeyPair localKeyPair_;
     std::optional<rsp::NodeID> peerNodeId_;
     bool running_;
     std::thread readThread_;

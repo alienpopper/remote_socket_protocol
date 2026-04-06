@@ -12,7 +12,7 @@ public:
 
     ProtobufEncoding(rsp::transport::ConnectionHandle connection,
                      rsp::MessageQueueHandle receivedMessages,
-                     const rsp::KeyPair& localKeyPair);
+                     rsp::KeyPair localKeyPair);
 
 private:
     bool readMessage(rsp::proto::RSPMessage& message) override;

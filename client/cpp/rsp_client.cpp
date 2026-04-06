@@ -1,6 +1,7 @@
 #include "client/cpp/rsp_client.hpp"
 
 #include "common/base_types.hpp"
+#include "common/ping_trace.hpp"
 
 #include <chrono>
 #include <cstring>
@@ -27,6 +28,32 @@ rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
     rsp::proto::DateTime protoDateTime;
     protoDateTime.set_milliseconds_since_epoch(dateTime.millisecondsSinceEpoch());
     return protoDateTime;
+}
+
+void recordClientDequeueEvent(const rsp::proto::RSPMessage& message, const rsp::NodeID& localNodeId) {
+    if (!rsp::ping_trace::isEnabled()) {
+        return;
+    }
+
+    const std::string localNodeIdValue = toProtoNodeId(localNodeId).value();
+    if (message.has_ping_request() && message.has_destination() && message.destination().value() == localNodeIdValue) {
+        rsp::ping_trace::recordForMessage(message, "destination_client_poll_dequeue");
+    } else if (message.has_ping_reply() && message.has_destination() && message.destination().value() == localNodeIdValue) {
+        rsp::ping_trace::recordForMessage(message, "source_client_poll_dequeue");
+    }
+}
+
+void recordNodeInputEnqueueEvent(const rsp::proto::RSPMessage& message, const rsp::NodeID& localNodeId) {
+    if (!rsp::ping_trace::isEnabled()) {
+        return;
+    }
+
+    const std::string localNodeIdValue = toProtoNodeId(localNodeId).value();
+    if (message.has_ping_request() && message.has_destination() && message.destination().value() == localNodeIdValue) {
+        rsp::ping_trace::recordForMessage(message, "destination_node_input_enqueued");
+    } else if (message.has_ping_reply() && message.has_destination() && message.destination().value() == localNodeIdValue) {
+        rsp::ping_trace::recordForMessage(message, "source_node_input_enqueued");
+    }
 }
 
 }  // namespace
@@ -71,7 +98,12 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
 }
 
 void RSPClient::handleOutputMessage(rsp::proto::RSPMessage message) {
-    if (!messageClient_->send(message)) {
+    const bool sent = messageClient_->send(message);
+    if (sent && rsp::ping_trace::isEnabled() && message.has_ping_reply()) {
+        rsp::ping_trace::recordForMessage(message, "destination_reply_send_enqueued");
+    }
+
+    if (!sent) {
         std::cerr << "RSPClient failed to send message produced by node handler" << std::endl;
     }
 }
@@ -103,6 +135,8 @@ bool RSPClient::removeConnection(ClientConnectionID connectionId) {
 
 bool RSPClient::ping(rsp::NodeID nodeId) {
     const std::string nonce = rsp::GUID().toString();
+    rsp::ping_trace::start(nonce);
+    rsp::ping_trace::record(nonce, "source_ping_call_start");
     const uint32_t sequence = [this, &nonce, &nodeId]() {
         std::lock_guard<std::mutex> lock(stateMutex_);
         const uint32_t nextSequence = nextPingSequence_++;
@@ -122,6 +156,7 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
         pendingPings_.erase(nonce);
         return false;
     }
+    rsp::ping_trace::record(nonce, "source_request_send_enqueued");
 
     std::unique_lock<std::mutex> lock(stateMutex_);
     const bool replied = stateChanged_.wait_for(
@@ -137,6 +172,7 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
         return false;
     }
 
+    rsp::ping_trace::record(nonce, "source_ping_wait_completed");
     pendingPings_.erase(nonce);
     return true;
 }
@@ -152,6 +188,7 @@ void RSPClient::receiveLoop() {
 
         rsp::proto::RSPMessage message;
         if (messageClient_ != nullptr && messageClient_->tryDequeueMessage(message)) {
+            recordClientDequeueEvent(message, keyPair().nodeID());
             dispatchIncomingMessage(std::move(message));
             continue;
         }
@@ -165,6 +202,7 @@ void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
         return;
     }
 
+    recordNodeInputEnqueueEvent(message, keyPair().nodeID());
     if (!enqueueInput(std::move(message))) {
         std::cerr << "RSPClient failed to enqueue inbound message on node input queue" << std::endl;
     }
@@ -183,6 +221,10 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
         return;
     }
 
+    if (rsp::ping_trace::isEnabled()) {
+        rsp::ping_trace::recordForMessage(message, "source_ping_reply_handler_start");
+    }
+
     std::lock_guard<std::mutex> lock(stateMutex_);
     const auto iterator = pendingPings_.find(message.ping_reply().nonce().value());
     if (iterator == pendingPings_.end()) {
@@ -198,6 +240,9 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
     }
 
     iterator->second.completed = true;
+    if (rsp::ping_trace::isEnabled()) {
+        rsp::ping_trace::recordForMessage(message, "source_ping_reply_completed");
+    }
     stateChanged_.notify_all();
 }
 

@@ -1,6 +1,7 @@
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
 
+#include "common/ping_trace.hpp"
 #include "messages.pb.h"
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
@@ -8,6 +9,7 @@
 #include "common/transport/transport.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cstring>
 #include <chrono>
 #include <functional>
@@ -16,9 +18,30 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace {
+
+struct PingStats {
+    double minimumMilliseconds = 0.0;
+    double averageMilliseconds = 0.0;
+    double maximumMilliseconds = 0.0;
+};
+
+struct PingBreakdown {
+    std::vector<std::pair<std::string, double>> segments;
+    double serializationMilliseconds = 0.0;
+    double threadWakeupMilliseconds = 0.0;
+    double transmissionMilliseconds = 0.0;
+    double handlerMilliseconds = 0.0;
+    double totalMilliseconds = 0.0;
+};
+
+struct ClientToClientPingResults {
+    PingStats stats;
+    PingBreakdown breakdown;
+};
 
 class TestResourceManager : public rsp::resource_manager::ResourceManager {
 public:
@@ -60,6 +83,101 @@ bool waitForCondition(const std::function<bool()>& condition) {
     return condition();
 }
 
+using TraceEventTimes = std::unordered_map<std::string, rsp::ping_trace::Clock::time_point>;
+
+TraceEventTimes indexTraceEvents(const rsp::ping_trace::TraceSnapshot& snapshot) {
+    TraceEventTimes eventTimes;
+    for (const auto& event : snapshot.events) {
+        eventTimes.emplace(event.name, event.timestamp);
+    }
+
+    return eventTimes;
+}
+
+const rsp::ping_trace::Clock::time_point& requireEventTime(const TraceEventTimes& eventTimes,
+                                                           const std::string& eventName) {
+    const auto iterator = eventTimes.find(eventName);
+    if (iterator == eventTimes.end()) {
+        throw std::runtime_error("missing trace event: " + eventName);
+    }
+
+    return iterator->second;
+}
+
+double elapsedMilliseconds(const rsp::ping_trace::Clock::time_point& start,
+                           const rsp::ping_trace::Clock::time_point& end) {
+    return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+double addBreakdownSegment(PingBreakdown& breakdown,
+                           const TraceEventTimes& eventTimes,
+                           const std::string& label,
+                           const std::string& startEvent,
+                           const std::string& endEvent) {
+    const double duration = elapsedMilliseconds(requireEventTime(eventTimes, startEvent),
+                                                requireEventTime(eventTimes, endEvent));
+    breakdown.segments.emplace_back(label, duration);
+    return duration;
+}
+
+PingBreakdown buildPingBreakdown(const rsp::ping_trace::TraceSnapshot& snapshot) {
+    const TraceEventTimes eventTimes = indexTraceEvents(snapshot);
+    PingBreakdown breakdown;
+
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source call setup", "source_ping_call_start", "source_request_send_enqueued");
+
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source send queue wait", "source_request_send_enqueued", "source_request_send_worker_start");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source send worker dispatch", "source_request_send_worker_start", "source_request_serialize_start");
+    breakdown.serializationMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source serialize", "source_request_serialize_start", "source_request_serialize_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source socket send", "source_request_serialize_done", "source_request_transport_send_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source to RM receive", "source_request_transport_send_done", "rm_request_read_complete");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM receive enqueue", "rm_request_read_complete", "rm_request_received_queue_enqueued");
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM route and forward send queue wait", "rm_request_received_queue_enqueued", "rm_forward_request_send_worker_start");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM forward send worker dispatch", "rm_forward_request_send_worker_start", "rm_forward_request_serialize_start");
+    breakdown.serializationMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM forward serialize", "rm_forward_request_serialize_start", "rm_forward_request_serialize_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM forward socket send", "rm_forward_request_serialize_done", "rm_forward_request_transport_send_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "RM to destination receive", "rm_forward_request_transport_send_done", "destination_request_read_complete");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination receive enqueue", "destination_request_read_complete", "destination_request_received_queue_enqueued");
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination client poll wait", "destination_request_received_queue_enqueued", "destination_client_poll_dequeue");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination local handling to reply enqueue", "destination_client_poll_dequeue", "destination_reply_send_enqueued");
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination reply send queue wait", "destination_reply_send_enqueued", "destination_reply_send_worker_start");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination reply send worker dispatch", "destination_reply_send_worker_start", "destination_reply_serialize_start");
+    breakdown.serializationMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination reply serialize", "destination_reply_serialize_start", "destination_reply_serialize_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination reply socket send", "destination_reply_serialize_done", "destination_reply_transport_send_done");
+    breakdown.transmissionMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "destination to source receive", "destination_reply_transport_send_done", "source_reply_read_complete");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source reply enqueue", "source_reply_read_complete", "source_reply_received_queue_enqueued");
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source client poll wait", "source_reply_received_queue_enqueued", "source_client_poll_dequeue");
+    breakdown.handlerMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source local handling to reply completion", "source_client_poll_dequeue", "source_ping_reply_completed");
+    breakdown.threadWakeupMilliseconds += addBreakdownSegment(
+        breakdown, eventTimes, "source waiter wakeup", "source_ping_reply_completed", "source_ping_wait_completed");
+
+    breakdown.totalMilliseconds = elapsedMilliseconds(requireEventTime(eventTimes, "source_ping_call_start"),
+                                                      requireEventTime(eventTimes, "source_ping_wait_completed"));
+    return breakdown;
+}
 rsp::proto::RSPMessage makeRouteUpdateMessage(const std::array<uint8_t, 16>& nodeIdBytes, uint32_t hopsAway) {
     rsp::proto::RSPMessage message;
     auto* entry = message.mutable_route()->add_entries();
@@ -185,7 +303,7 @@ void testTcpAsciiHandshake() {
     serverTransport->stop();
 }
 
-void testClientToClientRouting() {
+ClientToClientPingResults testClientToClientRouting() {
     auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
     TestResourceManager resourceManager({serverTransport});
 
@@ -213,10 +331,43 @@ void testClientToClientRouting() {
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
         "resource manager should authenticate both client connections");
 
-    require(firstClient->ping(secondClientNodeId), "high-level client should route a ping to another client through the resource manager");
+    std::vector<double> roundTripDelayMilliseconds;
+    roundTripDelayMilliseconds.reserve(100);
+
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        const auto pingStart = std::chrono::steady_clock::now();
+        require(firstClient->ping(secondClientNodeId), "high-level client should route a ping to another client through the resource manager");
+        const auto pingEnd = std::chrono::steady_clock::now();
+        roundTripDelayMilliseconds.push_back(
+            std::chrono::duration<double, std::milli>(pingEnd - pingStart).count());
+    }
+
+    const auto [minimumIterator, maximumIterator] =
+        std::minmax_element(roundTripDelayMilliseconds.begin(), roundTripDelayMilliseconds.end());
+    double totalMilliseconds = 0.0;
+    for (const double sampleMilliseconds : roundTripDelayMilliseconds) {
+        totalMilliseconds += sampleMilliseconds;
+    }
+
+    const PingStats stats{
+        *minimumIterator,
+        totalMilliseconds / static_cast<double>(roundTripDelayMilliseconds.size()),
+        *maximumIterator,
+    };
+
+    rsp::ping_trace::reset();
+    rsp::ping_trace::setEnabled(true);
+    require(firstClient->ping(secondClientNodeId), "instrumented ping should complete successfully");
+    rsp::ping_trace::setEnabled(false);
+
+    const auto traces = rsp::ping_trace::snapshotAll();
+    require(traces.size() == 1, "instrumented ping should produce exactly one trace snapshot");
+    const PingBreakdown breakdown = buildPingBreakdown(traces.front());
 
     require(firstClient->removeConnection(firstConnectionId), "high-level client should remove an existing connection");
     require(secondClient->removeConnection(secondConnectionId), "second high-level client should remove an existing connection");
+
+    return ClientToClientPingResults{stats, breakdown};
 }
 
 }  // namespace
@@ -248,7 +399,31 @@ int main() {
         require(unsupportedTransportThrown, "client should reject unsupported transport names");
 
         testTcpAsciiHandshake();
-        testClientToClientRouting();
+                const ClientToClientPingResults clientToClientPingResults = testClientToClientRouting();
+
+                std::cout << "client-to-client ping round-trip stats over 100 pings: min="
+                                    << clientToClientPingResults.stats.minimumMilliseconds
+                                    << " ms avg="
+                                    << clientToClientPingResults.stats.averageMilliseconds
+                                    << " ms max="
+                                    << clientToClientPingResults.stats.maximumMilliseconds
+                                    << " ms\n";
+
+                std::cout << "instrumented steady-state ping breakdown: total="
+                                    << clientToClientPingResults.breakdown.totalMilliseconds
+                                    << " ms serialization="
+                                    << clientToClientPingResults.breakdown.serializationMilliseconds
+                                    << " ms thread_wakeup="
+                                    << clientToClientPingResults.breakdown.threadWakeupMilliseconds
+                                    << " ms transmission="
+                                    << clientToClientPingResults.breakdown.transmissionMilliseconds
+                                    << " ms handler="
+                                    << clientToClientPingResults.breakdown.handlerMilliseconds
+                                    << " ms\n";
+
+                for (const auto& [label, duration] : clientToClientPingResults.breakdown.segments) {
+                        std::cout << "  " << label << ": " << duration << " ms\n";
+                }
 
         std::cout << "client_test passed\n";
         return 0;

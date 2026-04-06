@@ -9,7 +9,11 @@ message Uuid {
 }
 
 message NodeId {
-  bytes value = 1;
+  bytes value = 1; //uuid
+}
+
+message SocketID {
+    bytes value = 1; //uuid
 }
 
 message DateTime {
@@ -86,6 +90,58 @@ message PingReply {
     DateTime time_replied = 4;
 }
 
+enum SOCKET_STATUS {
+  SUCCESS = 0;
+    CONNECT_REFUSED = 1;
+    CONNECT_TIMEOUT = 2;
+    SOCKET_CLOSED = 3;
+    SOCKET_DATA = 4;
+    SOCKET_ERROR = 5;
+    NEW_CONNECTION = 6;
+}
+
+message SocketReply {
+    SOCKET_STATUS error = 1;
+    optional string message = 2;
+    optional SocketID new_socket_id = 3;
+    optional bytes data = 4;
+}
+
+message ConnectTCPReply {
+  SocketReply reply = 1;
+}
+
+
+message ConnectTCPRequest {
+    string host_port = 1;
+    optional bool reuse_addr = 2;
+    optional uint32 source_port = 3;
+    optional uint32 timeout_ms = 4;
+    optional uint32 retries = 5; //maximum 5
+    optional uint32 retry_ms = 6; //maximum 5 seconds
+    optional bool async_data = 7;
+    optional bool use_socket = 8;
+}
+
+
+message SocketSend { 
+   SocketID socket_number = 1;
+   uint64 index = 3; //incrementing for out-of-order and missing
+   bytes data = 2;
+}
+
+message SocketRecv {
+    SocketID socket_number = 1;
+    uint64 index = 3; //incrementing for out-of-order and missing
+    optional uint32 max_bytes = 2;
+    optional uint32 wait_ms = 4; //wait up to ms for max_bytes
+}
+
+message SocketClose {
+    SocketID socket_number = 1;
+}
+
+
 message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
@@ -97,6 +153,8 @@ message RSPMessage {
       Error error = 6;
       PingRequest ping_request = 7;
       PingReply ping_reply = 8;
+      ConnectTCPRequest connect_tcp_request = 9;
+      ConnectTCPReply connect_tcp_reply = 10;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong

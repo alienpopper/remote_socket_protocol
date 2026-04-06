@@ -1,8 +1,10 @@
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 
 #include "common/base_types.hpp"
+#include "common/ping_trace.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 namespace rsp::encoding::protobuf {
@@ -26,12 +28,52 @@ uint32_t readUint32(const uint8_t* data) {
            static_cast<uint32_t>(data[3]);
 }
 
+std::string toProtoNodeIdValue(const rsp::NodeID& nodeId) {
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    return value;
+}
+
+std::string classifySendPrefix(const rsp::proto::RSPMessage& message, const rsp::KeyPair& localKeyPair) {
+    const std::string localNodeId = toProtoNodeIdValue(localKeyPair.nodeID());
+
+    if (message.has_ping_request()) {
+        if (message.source().value() == localNodeId) {
+            return "source_request";
+        }
+
+        return "rm_forward_request";
+    }
+
+    if (message.has_ping_reply() && message.source().value() == localNodeId) {
+        return "destination_reply";
+    }
+
+    return "";
+}
+
+void recordSendEvent(const rsp::proto::RSPMessage& message,
+                     const rsp::KeyPair& localKeyPair,
+                     const std::string& suffix) {
+    if (!rsp::ping_trace::isEnabled()) {
+        return;
+    }
+
+    const std::string prefix = classifySendPrefix(message, localKeyPair);
+    if (!prefix.empty()) {
+        rsp::ping_trace::recordForMessage(message, prefix + "_" + suffix);
+    }
+}
+
 }  // namespace
 
 ProtobufEncoding::ProtobufEncoding(rsp::transport::ConnectionHandle connection,
                                    rsp::MessageQueueHandle receivedMessages,
-                                   const rsp::KeyPair& localKeyPair)
-    : Encoding(std::move(connection), std::move(receivedMessages), localKeyPair) {
+                                   rsp::KeyPair localKeyPair)
+    : Encoding(std::move(connection), std::move(receivedMessages), std::move(localKeyPair)) {
 }
 
 bool ProtobufEncoding::readMessage(rsp::proto::RSPMessage& message) {
@@ -70,17 +112,24 @@ bool ProtobufEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
     }
 
     std::string payload;
+    recordSendEvent(message, localKeyPair(), "serialize_start");
     if (!message.SerializeToString(&payload) || payload.size() > kMaxFrameLength) {
         return false;
     }
+    recordSendEvent(message, localKeyPair(), "serialize_done");
 
     std::string header;
     header.reserve(kFrameHeaderSize);
     appendUint32(header, kFrameMagic);
     appendUint32(header, static_cast<uint32_t>(payload.size()));
 
-    return activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
-           activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
+    const bool sent = activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
+                      activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
+    if (sent) {
+        recordSendEvent(message, localKeyPair(), "transport_send_done");
+    }
+
+    return sent;
 }
 
 }  // namespace rsp::encoding::protobuf

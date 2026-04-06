@@ -1,0 +1,2 @@
+CLIENT_CPP_FULL_RSP_CLIENT_SOURCE = client/cpp_full/rsp_client.cpp
+CLIENT_CPP_FULL_RSP_CLIENT_HEADER = client/cpp_full/rsp_client.hpp

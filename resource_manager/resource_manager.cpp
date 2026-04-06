@@ -2,6 +2,7 @@
 
 #include "common/ascii_handshake.hpp"
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
+#include "common/ping_trace.hpp"
 
 #include <cstring>
 #include <functional>
@@ -203,7 +204,12 @@ bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessag
     }
 
     const auto outgoingMessages = selectedEncoding->outgoingMessages();
-    return outgoingMessages != nullptr && outgoingMessages->push(message);
+    const bool queued = outgoingMessages != nullptr && outgoingMessages->push(message);
+    if (queued && rsp::ping_trace::isEnabled() && message.has_ping_request()) {
+        rsp::ping_trace::recordForMessage(message, "rm_forward_send_enqueued");
+    }
+
+    return queued;
 }
 
 bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const {
@@ -338,7 +344,7 @@ rsp::encoding::EncodingHandle ResourceManager::createEncodingForConnection(const
     }
 
     if (*selectedEncoding == rsp::ascii_handshake::kEncoding) {
-        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair());
+        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair().duplicate());
     }
 
     return nullptr;
