@@ -121,6 +121,53 @@ private:
     std::string endpoint_;
 };
 
+class PeriodicTestSocketServer {
+public:
+    PeriodicTestSocketServer() : transport_(std::make_shared<rsp::transport::TcpTransport>()) {
+        transport_->setNewConnectionCallback([this](const rsp::transport::ConnectionHandle& connection) {
+            try {
+                connectionPromise_.set_value(connection);
+            } catch (...) {
+                connectionPromise_.set_exception(std::current_exception());
+            }
+        });
+        endpoint_ = findSocketServerEndpoint(transport_);
+    }
+
+    ~PeriodicTestSocketServer() {
+        transport_->stop();
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+    }
+
+    std::string endpoint() const {
+        return endpoint_;
+    }
+
+    void start(const std::vector<std::string>& messages, uint32_t intervalMilliseconds) {
+        worker_ = std::thread([this, messages, intervalMilliseconds]() {
+            auto future = connectionPromise_.get_future();
+            require(future.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                    "periodic socket server should accept a TCP connection");
+            const auto connection = future.get();
+            require(connection != nullptr, "periodic socket server should receive a connection handle");
+            for (const auto& message : messages) {
+                require(connection->sendAll(reinterpret_cast<const uint8_t*>(message.data()), static_cast<uint32_t>(message.size())),
+                        "periodic socket server should send periodic bytes");
+                std::this_thread::sleep_for(std::chrono::milliseconds(intervalMilliseconds));
+            }
+            connection->close();
+        });
+    }
+
+private:
+    std::shared_ptr<rsp::transport::TcpTransport> transport_;
+    std::promise<rsp::transport::ConnectionHandle> connectionPromise_;
+    std::thread worker_;
+    std::string endpoint_;
+};
+
 void testResourceServiceConnectsToResourceManager() {
     auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
     TestResourceManager resourceManager({serverTransport});
@@ -238,12 +285,219 @@ void testClientExchangesTcpDataThroughResourceService() {
     serverTransport->stop();
 }
 
+void testClientReceivesAsyncSocketDataThroughResourceService() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto client = rsp::client::RSPClient::create();
+
+    const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endpoints for async socket test");
+    require(client->ping(resourceServiceNodeId),
+            "client should ping the resource service before async socket test");
+
+    PeriodicTestSocketServer socketServer;
+    const std::vector<std::string> periodicMessages = {"tick-1", "tick-2", "tick-3"};
+    std::string expectedStream;
+    for (const auto& message : periodicMessages) {
+        expectedStream += message;
+    }
+    socketServer.start(periodicMessages, 100);
+
+    const auto socketId = client->connectTCP(resourceServiceNodeId, socketServer.endpoint(), 0, 0, 0, true);
+    require(socketId.has_value(), "client should receive a socket id for async socket connection");
+
+    bool sawAsyncSocketReply = false;
+    std::string receivedStream;
+    const auto recvReply = client->socketRecvReply(*socketId, 32);
+    require(recvReply.has_value(), "client should receive a socket reply when socket_recv is used on an async socket");
+    if (recvReply->error() == rsp::proto::ASYNC_SOCKET) {
+        sawAsyncSocketReply = true;
+    } else if (recvReply->error() == rsp::proto::SOCKET_DATA && recvReply->has_data()) {
+        receivedStream += recvReply->data();
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while ((!sawAsyncSocketReply || receivedStream.size() < expectedStream.size()) &&
+           std::chrono::steady_clock::now() < deadline) {
+        rsp::proto::SocketReply reply;
+        if (client->tryDequeueSocketReply(reply)) {
+            if (reply.error() == rsp::proto::ASYNC_SOCKET) {
+                sawAsyncSocketReply = true;
+            } else if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
+                receivedStream += reply.data();
+            }
+            continue;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    require(sawAsyncSocketReply,
+            "socket_recv on an async socket should eventually reply with ASYNC_SOCKET");
+    require(receivedStream == expectedStream,
+        "client should receive the expected periodic async socket payload stream in order");
+
+    require(client->socketClose(*socketId), "client should close the async socket through the resource service");
+    require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its async test connection");
+    require(client->removeConnection(clientConnectionId),
+            "client should remove its async test connection");
+
+    serverTransport->stop();
+}
+
+    void testSocketOwnershipByNodeIdThroughResourceService() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+
+        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto ownerClient = rsp::client::RSPClient::create();
+        auto otherClient = rsp::client::RSPClient::create();
+
+        const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto ownerConnectionId = ownerClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto otherConnectionId = otherClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
+            "resource manager should authenticate the resource service and both clients");
+        require(ownerClient->ping(resourceServiceNodeId),
+            "owner client should ping the resource service before the socket ownership test");
+        require(otherClient->ping(resourceServiceNodeId),
+            "second client should ping the resource service before the socket ownership test");
+
+        TestSocketServer exclusiveSocketServer;
+        const std::string exclusiveGreeting = "exclusive-greeting";
+        const std::string exclusivePayload = "exclusive-payload";
+        const std::string exclusiveResponse = "exclusive-response";
+        exclusiveSocketServer.start(exclusiveGreeting, exclusivePayload, exclusiveResponse);
+
+        const auto exclusiveSocketId = ownerClient->connectTCP(resourceServiceNodeId, exclusiveSocketServer.endpoint());
+        require(exclusiveSocketId.has_value(), "owner client should receive an exclusive socket id");
+        otherClient->registerSocketRoute(*exclusiveSocketId, resourceServiceNodeId);
+
+        const auto mismatchReply = otherClient->socketRecvReply(*exclusiveSocketId, 64);
+        require(mismatchReply.has_value(), "second client should receive a reply for exclusive socket recv");
+        require(mismatchReply->error() == rsp::proto::NODEID_MISMATCH,
+            "exclusive socket recv from a different node id should return NODEID_MISMATCH");
+
+        const auto ownerGreeting = ownerClient->socketRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveGreeting.size()));
+        require(ownerGreeting.has_value(), "owner client should still be able to receive from its exclusive socket");
+        require(*ownerGreeting == exclusiveGreeting,
+            "owner client should receive the expected exclusive socket greeting");
+        require(ownerClient->socketSend(*exclusiveSocketId, exclusivePayload),
+            "owner client should still be able to send on its exclusive socket");
+        const auto ownerResponse = ownerClient->socketRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveResponse.size()));
+        require(ownerResponse.has_value(), "owner client should still be able to receive the exclusive socket response");
+        require(*ownerResponse == exclusiveResponse,
+            "owner client should receive the expected exclusive socket response");
+        require(ownerClient->socketClose(*exclusiveSocketId), "owner client should close its exclusive socket");
+
+        TestSocketServer sharedSocketServer;
+        const std::string sharedGreeting = "shared-greeting";
+        const std::string sharedPayload = "shared-payload";
+        const std::string sharedResponse = "shared-response";
+        sharedSocketServer.start(sharedGreeting, sharedPayload, sharedResponse);
+
+        const auto sharedSocketId = ownerClient->connectTCP(resourceServiceNodeId, sharedSocketServer.endpoint(), 0, 0, 0, false, true);
+        require(sharedSocketId.has_value(), "owner client should receive a shared socket id");
+        otherClient->registerSocketRoute(*sharedSocketId, resourceServiceNodeId);
+
+        const auto sharedGreetingReply = otherClient->socketRecvReply(*sharedSocketId, 64);
+        require(sharedGreetingReply.has_value(), "second client should receive a reply for shared socket recv");
+        require(sharedGreetingReply->error() == rsp::proto::SOCKET_DATA,
+            "shared socket recv from a different node id should succeed");
+        require(sharedGreetingReply->has_data() && sharedGreetingReply->data() == sharedGreeting,
+            "second client should receive the shared socket greeting");
+        require(otherClient->socketSend(*sharedSocketId, sharedPayload),
+            "second client should be able to send on a shared socket");
+        const auto sharedResponseReply = otherClient->socketRecvReply(*sharedSocketId, 64);
+        require(sharedResponseReply.has_value(), "second client should receive the shared socket response");
+        require(sharedResponseReply->error() == rsp::proto::SOCKET_DATA,
+            "shared socket response should succeed for a different node id");
+        require(sharedResponseReply->has_data() && sharedResponseReply->data() == sharedResponse,
+            "second client should receive the shared socket response");
+        require(otherClient->socketClose(*sharedSocketId), "second client should be able to close a shared socket");
+
+        require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its ownership test connection");
+        require(ownerClient->removeConnection(ownerConnectionId),
+            "owner client should remove its ownership test connection");
+        require(otherClient->removeConnection(otherConnectionId),
+            "second client should remove its ownership test connection");
+
+        serverTransport->stop();
+    }
+
+        void testSharedSocketRejectsUnsupportedOptions() {
+            auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+            TestResourceManager resourceManager({serverTransport});
+
+            rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+            const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+            const std::string endpoint = findListeningEndpoint(serverTransport);
+            const std::string transportSpec = std::string("tcp:") + endpoint;
+
+            auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+            auto client = rsp::client::RSPClient::create();
+
+            const auto resourceServiceConnectionId =
+            resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+            require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+                "resource manager should authenticate both endpoints for shared socket option validation");
+            require(client->ping(resourceServiceNodeId),
+                "client should ping the resource service before shared socket option validation");
+
+            const auto sharedAsyncReply = client->connectTCPReply(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, true, true);
+            require(sharedAsyncReply.has_value(),
+                "share_socket combined with async_data should receive a reply");
+            require(sharedAsyncReply->error() == rsp::proto::INVALID_FLAGS,
+                "share_socket combined with async_data should return INVALID_FLAGS");
+
+            const auto sharedUseSocketReply = client->connectTCPReply(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
+            require(sharedUseSocketReply.has_value(),
+                "share_socket combined with use_socket should receive a reply");
+            require(sharedUseSocketReply->error() == rsp::proto::INVALID_FLAGS,
+                "share_socket combined with use_socket should return INVALID_FLAGS");
+
+            require(resourceService->removeConnection(resourceServiceConnectionId),
+                "resource service should remove its shared option validation connection");
+            require(client->removeConnection(clientConnectionId),
+                "client should remove its shared option validation connection");
+
+            serverTransport->stop();
+        }
+
 }  // namespace
 
 int main() {
     try {
         testResourceServiceConnectsToResourceManager();
         testClientExchangesTcpDataThroughResourceService();
+        testClientReceivesAsyncSocketDataThroughResourceService();
+        testSocketOwnershipByNodeIdThroughResourceService();
+        testSharedSocketRejectsUnsupportedOptions();
         std::cout << "resource service test passed" << std::endl;
         return 0;
     } catch (const std::exception& exception) {

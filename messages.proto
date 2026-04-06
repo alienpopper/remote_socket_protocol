@@ -96,31 +96,34 @@ enum SOCKET_STATUS {
     CONNECT_TIMEOUT = 2;
     SOCKET_CLOSED = 3;
     SOCKET_DATA = 4;
-    SOCKET_ERROR = 5;
+    SOCKET_ERROR = 5; //error reported from the underlying OS socket
     NEW_CONNECTION = 6;
+    ASYNC_SOCKET = 7; //synchronous operation attempted on an async socket
+    NODEID_MISMATCH = 9;
+    INVALID_FLAGS = 10;
 }
 
 message SocketReply {
-    SOCKET_STATUS error = 1;
-    optional string message = 2;
-    optional SocketID new_socket_id = 3;
-    optional bytes data = 4;
-}
-
-message ConnectTCPReply {
-  SocketReply reply = 1;
+    SocketID socket_id = 1;
+    SOCKET_STATUS error = 2;
+    optional string message = 3;
+    optional SocketID new_socket_id = 4;
+    optional int32 socket_error_code = 5; //error code reported from the underlying OS socket
+    optional bytes data = 6;
 }
 
 
 message ConnectTCPRequest {
     string host_port = 1;
-    optional bool reuse_addr = 2;
-    optional uint32 source_port = 3;
-    optional uint32 timeout_ms = 4;
-    optional uint32 retries = 5; //maximum 5
-    optional uint32 retry_ms = 6; //maximum 5 seconds
-    optional bool async_data = 7;
-    optional bool use_socket = 8;
+    SocketID socket_number = 2;
+    optional bool reuse_addr = 3;
+    optional uint32 source_port = 4;
+    optional uint32 timeout_ms = 5;
+    optional uint32 retries = 6; //maximum 5
+    optional uint32 retry_ms = 7; //maximum 5 seconds
+    optional bool async_data = 8;
+    optional bool use_socket = 9;
+    optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
 }
 
 
@@ -154,11 +157,10 @@ message RSPMessage {
       PingRequest ping_request = 7;
       PingReply ping_reply = 8;
       ConnectTCPRequest connect_tcp_request = 9;
-      ConnectTCPReply connect_tcp_reply = 10;
-      SocketReply socket_reply = 11;
-      SocketSend socket_send = 12;
-      SocketRecv socket_recv = 13;
-      SocketClose socket_close = 14;
+        SocketReply socket_reply = 10;
+        SocketSend socket_send = 11;
+        SocketRecv socket_recv = 12;
+        SocketClose socket_close = 13;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong
