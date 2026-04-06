@@ -5,7 +5,9 @@
 
 #include <chrono>
 #include <cstring>
+#include <deque>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -94,6 +96,16 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
+    if (message.has_connect_tcp_reply()) {
+        handleConnectTCPReply(message);
+        return true;
+    }
+
+    if (message.has_socket_reply()) {
+        handleSocketReply(message);
+        return true;
+    }
+
     return false;
 }
 
@@ -177,6 +189,187 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     return true;
 }
 
+std::optional<rsp::GUID> RSPClient::connectTCP(rsp::NodeID nodeId,
+                                               const std::string& hostPort,
+                                               uint32_t timeoutMilliseconds,
+                                               uint32_t retries,
+                                               uint32_t retryMilliseconds) {
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    request.mutable_connect_tcp_request()->set_host_port(hostPort);
+    request.mutable_connect_tcp_request()->set_use_socket(false);
+    if (timeoutMilliseconds > 0) {
+        request.mutable_connect_tcp_request()->set_timeout_ms(timeoutMilliseconds);
+    }
+    if (retries > 0) {
+        request.mutable_connect_tcp_request()->set_retries(retries);
+    }
+    if (retryMilliseconds > 0) {
+        request.mutable_connect_tcp_request()->set_retry_ms(retryMilliseconds);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingConnect_ = PendingConnectState{};
+    }
+
+    if (!messageClient_->send(request)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingConnect_.reset();
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return stopping_ || (pendingConnect_.has_value() && pendingConnect_->completed);
+    });
+    if (!replied || stopping_ || !pendingConnect_.has_value()) {
+        pendingConnect_.reset();
+        return std::nullopt;
+    }
+
+    const auto socketId = pendingConnect_->socketId;
+    pendingConnect_.reset();
+    if (socketId.has_value()) {
+        socketRoutes_[*socketId] = nodeId;
+    }
+
+    return socketId;
+}
+
+bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
+    rsp::NodeID destination;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        const auto iterator = socketRoutes_.find(socketId);
+        if (iterator == socketRoutes_.end()) {
+            return false;
+        }
+
+        destination = iterator->second;
+    }
+
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(destination);
+    *request.mutable_socket_send()->mutable_socket_number() = toProtoSocketId(socketId);
+    request.mutable_socket_send()->set_data(data);
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingSocketReplies_.clear();
+    }
+
+    if (!messageClient_->send(request)) {
+        return false;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return stopping_ || !pendingSocketReplies_.empty();
+    });
+    if (!replied || stopping_ || pendingSocketReplies_.empty()) {
+        pendingSocketReplies_.clear();
+        return false;
+    }
+
+    const rsp::proto::SocketReply reply = pendingSocketReplies_.front();
+    pendingSocketReplies_.pop_front();
+    return reply.error() == rsp::proto::SUCCESS;
+}
+
+std::optional<std::string> RSPClient::socketRecv(const rsp::GUID& socketId,
+                                                 uint32_t maxBytes,
+                                                 uint32_t waitMilliseconds) {
+    rsp::NodeID destination;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        const auto iterator = socketRoutes_.find(socketId);
+        if (iterator == socketRoutes_.end()) {
+            return std::nullopt;
+        }
+
+        destination = iterator->second;
+    }
+
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(destination);
+    *request.mutable_socket_recv()->mutable_socket_number() = toProtoSocketId(socketId);
+    request.mutable_socket_recv()->set_max_bytes(maxBytes);
+    if (waitMilliseconds > 0) {
+        request.mutable_socket_recv()->set_wait_ms(waitMilliseconds);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingSocketReplies_.clear();
+    }
+
+    if (!messageClient_->send(request)) {
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return stopping_ || !pendingSocketReplies_.empty();
+    });
+    if (!replied || stopping_ || pendingSocketReplies_.empty()) {
+        pendingSocketReplies_.clear();
+        return std::nullopt;
+    }
+
+    const rsp::proto::SocketReply reply = pendingSocketReplies_.front();
+    pendingSocketReplies_.pop_front();
+    if (reply.error() != rsp::proto::SOCKET_DATA && reply.error() != rsp::proto::SUCCESS) {
+        return std::nullopt;
+    }
+
+    return reply.has_data() ? std::optional<std::string>(reply.data()) : std::optional<std::string>(std::string());
+}
+
+bool RSPClient::socketClose(const rsp::GUID& socketId) {
+    rsp::NodeID destination;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        const auto iterator = socketRoutes_.find(socketId);
+        if (iterator == socketRoutes_.end()) {
+            return false;
+        }
+
+        destination = iterator->second;
+        pendingSocketReplies_.clear();
+    }
+
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(destination);
+    *request.mutable_socket_close()->mutable_socket_number() = toProtoSocketId(socketId);
+
+    if (!messageClient_->send(request)) {
+        return false;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return stopping_ || !pendingSocketReplies_.empty();
+    });
+    if (!replied || stopping_ || pendingSocketReplies_.empty()) {
+        pendingSocketReplies_.clear();
+        return false;
+    }
+
+    const rsp::proto::SocketReply reply = pendingSocketReplies_.front();
+    pendingSocketReplies_.pop_front();
+    if (reply.error() == rsp::proto::SUCCESS) {
+        socketRoutes_.erase(socketId);
+        return true;
+    }
+
+    return false;
+}
+
 void RSPClient::receiveLoop() {
     while (true) {
         {
@@ -244,6 +437,55 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
         rsp::ping_trace::recordForMessage(message, "source_ping_reply_completed");
     }
     stateChanged_.notify_all();
+}
+
+void RSPClient::handleConnectTCPReply(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!pendingConnect_.has_value()) {
+        return;
+    }
+
+    pendingConnect_->completed = true;
+    if (message.connect_tcp_reply().has_reply() &&
+        message.connect_tcp_reply().reply().error() == rsp::proto::SUCCESS &&
+        message.connect_tcp_reply().reply().has_new_socket_id()) {
+        pendingConnect_->socketId = fromProtoSocketId(message.connect_tcp_reply().reply().new_socket_id());
+    }
+
+    stateChanged_.notify_all();
+}
+
+void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    pendingSocketReplies_.push_back(message.socket_reply());
+    stateChanged_.notify_all();
+}
+
+rsp::proto::NodeId RSPClient::toProtoNodeId(const rsp::NodeID& nodeId) {
+    return ::rsp::client::toProtoNodeId(nodeId);
+}
+
+rsp::proto::SocketID RSPClient::toProtoSocketId(const rsp::GUID& socketId) {
+    rsp::proto::SocketID protoSocketId;
+    std::string value(16, '\0');
+    const uint64_t high = socketId.high();
+    const uint64_t low = socketId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoSocketId.set_value(value);
+    return protoSocketId;
+}
+
+std::optional<rsp::GUID> RSPClient::fromProtoSocketId(const rsp::proto::SocketID& socketId) {
+    if (socketId.value().size() != 16) {
+        return std::nullopt;
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    std::memcpy(&high, socketId.value().data(), sizeof(high));
+    std::memcpy(&low, socketId.value().data() + sizeof(high), sizeof(low));
+    return rsp::GUID(high, low);
 }
 
 }  // namespace rsp::client

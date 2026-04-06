@@ -155,6 +155,10 @@ message RSPMessage {
       PingReply ping_reply = 8;
       ConnectTCPRequest connect_tcp_request = 9;
       ConnectTCPReply connect_tcp_reply = 10;
+      SocketReply socket_reply = 11;
+      SocketSend socket_send = 12;
+      SocketRecv socket_recv = 13;
+      SocketClose socket_close = 14;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong
