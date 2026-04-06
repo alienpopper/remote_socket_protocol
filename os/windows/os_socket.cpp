@@ -54,6 +54,55 @@ bool isValidSocket(SocketHandle socketHandle) {
     return toNative(socketHandle) != INVALID_SOCKET;
 }
 
+bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket) {
+    firstSocket = invalidSocket();
+    secondSocket = invalidSocket();
+
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET) {
+        return false;
+    }
+
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    if (bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 ||
+        listen(listener, 1) != 0) {
+        closesocket(listener);
+        return false;
+    }
+
+    int addressLength = sizeof(address);
+    if (getsockname(listener, reinterpret_cast<sockaddr*>(&address), &addressLength) != 0) {
+        closesocket(listener);
+        return false;
+    }
+
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (clientSocket == INVALID_SOCKET) {
+        closesocket(listener);
+        return false;
+    }
+
+    if (connect(clientSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+        closesocket(clientSocket);
+        closesocket(listener);
+        return false;
+    }
+
+    SOCKET serverSocket = accept(listener, nullptr, nullptr);
+    closesocket(listener);
+    if (serverSocket == INVALID_SOCKET) {
+        closesocket(clientSocket);
+        return false;
+    }
+
+    firstSocket = fromNative(clientSocket);
+    secondSocket = fromNative(serverSocket);
+    return true;
+}
+
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog) {
     addrinfo hints = {};
     hints.ai_family = AF_UNSPEC;

@@ -13,6 +13,8 @@ void shutdownSockets();
 SocketHandle invalidSocket();
 bool isValidSocket(SocketHandle socketHandle);
 
+bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket);
+
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog);
 SocketHandle acceptSocket(SocketHandle listener);
 SocketHandle connectTcp(const std::string& address, uint16_t port);

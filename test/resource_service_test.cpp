@@ -5,6 +5,7 @@
 
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
+#include "os/os_socket.hpp"
 
 #include <chrono>
 #include <functional>
@@ -44,6 +45,39 @@ bool waitForCondition(const std::function<bool()>& condition) {
     }
 
     return condition();
+}
+
+bool sendAllSocket(const rsp::os::SocketHandle socketHandle, const std::string& data) {
+    std::size_t bytesSent = 0;
+    while (bytesSent < data.size()) {
+        const int result = rsp::os::sendSocket(socketHandle,
+                                               reinterpret_cast<const uint8_t*>(data.data()) + bytesSent,
+                                               static_cast<uint32_t>(data.size() - bytesSent));
+        if (result <= 0) {
+            return false;
+        }
+
+        bytesSent += static_cast<std::size_t>(result);
+    }
+
+    return true;
+}
+
+std::optional<std::string> recvExactSocket(const rsp::os::SocketHandle socketHandle, std::size_t bytesToRead) {
+    std::string data(bytesToRead, '\0');
+    std::size_t totalRead = 0;
+    while (totalRead < bytesToRead) {
+        const int result = rsp::os::recvSocket(socketHandle,
+                                               reinterpret_cast<uint8_t*>(data.data()) + totalRead,
+                                               static_cast<uint32_t>(bytesToRead - totalRead));
+        if (result <= 0) {
+            return std::nullopt;
+        }
+
+        totalRead += static_cast<std::size_t>(result);
+    }
+
+    return data;
 }
 
 std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
@@ -358,6 +392,57 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
     serverTransport->stop();
 }
 
+void testClientExchangesTcpDataThroughNativeSocketBridge() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto client = rsp::client::RSPClient::create();
+
+    const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endpoints for native socket bridge test");
+    require(client->ping(resourceServiceNodeId),
+            "client should ping the resource service before the native socket bridge test");
+
+    TestSocketServer socketServer;
+    const std::string greeting = "bridge-greeting";
+    const std::string clientPayload = "bridge-payload";
+    const std::string serverResponse = "bridge-response";
+    socketServer.start(greeting, clientPayload, serverResponse);
+
+    const auto localSocket = client->connectTCPSocket(resourceServiceNodeId, socketServer.endpoint());
+    require(localSocket.has_value(), "client should receive a local native socket for the TCP bridge");
+
+    const auto receivedGreeting = recvExactSocket(*localSocket, greeting.size());
+    require(receivedGreeting.has_value(), "client should receive bridge greeting bytes via the native socket");
+    require(*receivedGreeting == greeting, "client should receive the expected bridge greeting bytes");
+
+    require(sendAllSocket(*localSocket, clientPayload),
+            "client should send payload bytes via the native socket bridge");
+
+    const auto receivedResponse = recvExactSocket(*localSocket, serverResponse.size());
+    require(receivedResponse.has_value(), "client should receive bridge response bytes via the native socket");
+    require(*receivedResponse == serverResponse, "client should receive the expected bridge response bytes");
+
+    rsp::os::closeSocket(*localSocket);
+    require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its native socket bridge test connection");
+    require(client->removeConnection(clientConnectionId),
+            "client should remove its native socket bridge test connection");
+
+    serverTransport->stop();
+}
+
     void testSocketOwnershipByNodeIdThroughResourceService() {
         auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
         TestResourceManager resourceManager({serverTransport});
@@ -496,6 +581,7 @@ int main() {
         testResourceServiceConnectsToResourceManager();
         testClientExchangesTcpDataThroughResourceService();
         testClientReceivesAsyncSocketDataThroughResourceService();
+        testClientExchangesTcpDataThroughNativeSocketBridge();
         testSocketOwnershipByNodeIdThroughResourceService();
         testSharedSocketRejectsUnsupportedOptions();
         std::cout << "resource service test passed" << std::endl;

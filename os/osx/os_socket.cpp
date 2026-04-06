@@ -41,6 +41,19 @@ bool isValidSocket(SocketHandle socketHandle) {
     return toNative(socketHandle) >= 0;
 }
 
+bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket) {
+    int sockets[2] = {-1, -1};
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+        firstSocket = invalidSocket();
+        secondSocket = invalidSocket();
+        return false;
+    }
+
+    firstSocket = fromNative(sockets[0]);
+    secondSocket = fromNative(sockets[1]);
+    return true;
+}
+
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog) {
     addrinfo hints = {};
     hints.ai_family = AF_UNSPEC;
