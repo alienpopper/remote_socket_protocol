@@ -43,8 +43,10 @@ public:
     RSPCLIENT_API std::size_t connectionCount() const;
     RSPCLIENT_API std::vector<ClientConnectionID> connectionIds() const;
     RSPCLIENT_API bool removeConnection(ClientConnectionID connectionId);
+
     RSPCLIENT_API bool ping(rsp::NodeID nodeId);
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> connectTCPReply(rsp::NodeID nodeId,
+
+    RSPCLIENT_API std::optional<rsp::proto::SocketReply> connectTCPEx(rsp::NodeID nodeId,
                                                                          const std::string& hostPort,
                                                                          uint32_t timeoutMilliseconds = 0,
                                                                          uint32_t retries = 0,
@@ -61,7 +63,7 @@ public:
                                                       bool shareSocket = false,
                                                       bool useSocket = false);
     RSPCLIENT_API bool socketSend(const rsp::GUID& socketId, const std::string& data);
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> socketRecvReply(const rsp::GUID& socketId,
+    RSPCLIENT_API std::optional<rsp::proto::SocketReply> socketRecvEx(const rsp::GUID& socketId,
                                                                          uint32_t maxBytes = 4096,
                                                                          uint32_t waitMilliseconds = 0);
     RSPCLIENT_API std::optional<std::string> socketRecv(const rsp::GUID& socketId,

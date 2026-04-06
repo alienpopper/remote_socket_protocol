@@ -320,7 +320,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
 
     bool sawAsyncSocketReply = false;
     std::string receivedStream;
-    const auto recvReply = client->socketRecvReply(*socketId, 32);
+    const auto recvReply = client->socketRecvEx(*socketId, 32);
     require(recvReply.has_value(), "client should receive a socket reply when socket_recv is used on an async socket");
     if (recvReply->error() == rsp::proto::ASYNC_SOCKET) {
         sawAsyncSocketReply = true;
@@ -394,7 +394,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
         require(exclusiveSocketId.has_value(), "owner client should receive an exclusive socket id");
         otherClient->registerSocketRoute(*exclusiveSocketId, resourceServiceNodeId);
 
-        const auto mismatchReply = otherClient->socketRecvReply(*exclusiveSocketId, 64);
+        const auto mismatchReply = otherClient->socketRecvEx(*exclusiveSocketId, 64);
         require(mismatchReply.has_value(), "second client should receive a reply for exclusive socket recv");
         require(mismatchReply->error() == rsp::proto::NODEID_MISMATCH,
             "exclusive socket recv from a different node id should return NODEID_MISMATCH");
@@ -421,7 +421,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
         require(sharedSocketId.has_value(), "owner client should receive a shared socket id");
         otherClient->registerSocketRoute(*sharedSocketId, resourceServiceNodeId);
 
-        const auto sharedGreetingReply = otherClient->socketRecvReply(*sharedSocketId, 64);
+        const auto sharedGreetingReply = otherClient->socketRecvEx(*sharedSocketId, 64);
         require(sharedGreetingReply.has_value(), "second client should receive a reply for shared socket recv");
         require(sharedGreetingReply->error() == rsp::proto::SOCKET_DATA,
             "shared socket recv from a different node id should succeed");
@@ -429,7 +429,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
             "second client should receive the shared socket greeting");
         require(otherClient->socketSend(*sharedSocketId, sharedPayload),
             "second client should be able to send on a shared socket");
-        const auto sharedResponseReply = otherClient->socketRecvReply(*sharedSocketId, 64);
+        const auto sharedResponseReply = otherClient->socketRecvEx(*sharedSocketId, 64);
         require(sharedResponseReply.has_value(), "second client should receive the shared socket response");
         require(sharedResponseReply->error() == rsp::proto::SOCKET_DATA,
             "shared socket response should succeed for a different node id");
@@ -469,13 +469,13 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
             require(client->ping(resourceServiceNodeId),
                 "client should ping the resource service before shared socket option validation");
 
-            const auto sharedAsyncReply = client->connectTCPReply(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, true, true);
+            const auto sharedAsyncReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, true, true);
             require(sharedAsyncReply.has_value(),
                 "share_socket combined with async_data should receive a reply");
             require(sharedAsyncReply->error() == rsp::proto::INVALID_FLAGS,
                 "share_socket combined with async_data should return INVALID_FLAGS");
 
-            const auto sharedUseSocketReply = client->connectTCPReply(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
+            const auto sharedUseSocketReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
             require(sharedUseSocketReply.has_value(),
                 "share_socket combined with use_socket should receive a reply");
             require(sharedUseSocketReply->error() == rsp::proto::INVALID_FLAGS,

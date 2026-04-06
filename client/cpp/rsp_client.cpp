@@ -188,7 +188,7 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     return true;
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::connectTCPReply(rsp::NodeID nodeId,
+std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
                                                                   const std::string& hostPort,
                                                                   uint32_t timeoutMilliseconds,
                                                                   uint32_t retries,
@@ -261,7 +261,7 @@ std::optional<rsp::GUID> RSPClient::connectTCP(rsp::NodeID nodeId,
                                                bool asyncData,
                                                bool shareSocket,
                                                bool useSocket) {
-    const auto reply = connectTCPReply(nodeId,
+    const auto reply = connectTCPEx(nodeId,
                                        hostPort,
                                        timeoutMilliseconds,
                                        retries,
@@ -310,7 +310,7 @@ bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
 std::optional<std::string> RSPClient::socketRecv(const rsp::GUID& socketId,
                                                  uint32_t maxBytes,
                                                  uint32_t waitMilliseconds) {
-    const auto reply = socketRecvReply(socketId, maxBytes, waitMilliseconds);
+    const auto reply = socketRecvEx(socketId, maxBytes, waitMilliseconds);
     if (!reply.has_value()) {
         return std::nullopt;
     }
@@ -322,7 +322,7 @@ std::optional<std::string> RSPClient::socketRecv(const rsp::GUID& socketId,
     return reply->has_data() ? std::optional<std::string>(reply->data()) : std::optional<std::string>(std::string());
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::socketRecvReply(const rsp::GUID& socketId,
+std::optional<rsp::proto::SocketReply> RSPClient::socketRecvEx(const rsp::GUID& socketId,
                                                                   uint32_t maxBytes,
                                                                   uint32_t waitMilliseconds) {
     rsp::NodeID destination;
