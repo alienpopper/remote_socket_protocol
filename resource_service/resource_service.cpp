@@ -50,6 +50,14 @@ bool ResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
         return handleConnectTCPRequest(message);
     }
 
+    if (message.has_listen_tcp_request()) {
+        return handleListenTCPRequest(message);
+    }
+
+    if (message.has_accept_tcp()) {
+        return handleAcceptTCP(message);
+    }
+
     if (message.has_socket_send()) {
         return handleSocketSend(message);
     }
@@ -152,6 +160,203 @@ bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& mess
     return true;
 }
 
+bool ResourceService::handleListenTCPRequest(const rsp::proto::RSPMessage& message) {
+    if (!message.has_source()) {
+        return false;
+    }
+
+    const auto& request = message.listen_tcp_request();
+    if (!request.has_socket_number()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
+    }
+
+    const auto socketId = fromProtoSocketId(request.socket_number());
+    if (!socketId.has_value()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
+    }
+
+    if (request.host_port().empty()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "host_port is required", &*socketId));
+    }
+
+    const bool asyncAccept = request.has_async_accept() && request.async_accept();
+    if (!asyncAccept) {
+        if (request.has_share_child_sockets() && request.share_child_sockets()) {
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::INVALID_FLAGS,
+                                               "share_child_sockets requires async_accept",
+                                               &*socketId));
+        }
+
+        if (request.has_children_use_socket() && request.children_use_socket()) {
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::INVALID_FLAGS,
+                                               "children_use_socket requires async_accept",
+                                               &*socketId));
+        }
+
+        if (request.has_children_async_data() && request.children_async_data()) {
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::INVALID_FLAGS,
+                                               "children_async_data requires async_accept",
+                                               &*socketId));
+        }
+    }
+
+    auto tcpTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto listenerState = std::make_shared<ManagedListenerState>();
+    listenerState->transport = tcpTransport;
+    listenerState->requesterNodeId = message.source();
+    listenerState->socketId = *socketId;
+    listenerState->asyncAccept = asyncAccept;
+    listenerState->shareListeningSocket = request.has_share_listening_socket() && request.share_listening_socket();
+    listenerState->shareChildSockets = request.has_share_child_sockets() && request.share_child_sockets();
+    listenerState->childrenUseSocket = request.has_children_use_socket() && request.children_use_socket();
+    listenerState->childrenAsyncData = request.has_children_async_data() && request.children_async_data();
+    tcpTransport->setNewConnectionCallback([this, listenerState](const rsp::transport::ConnectionHandle& connection) {
+        handleAcceptedConnection(listenerState, connection);
+    });
+
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        if (managedSockets_.find(*socketId) != managedSockets_.end() ||
+            managedListeningSockets_.find(*socketId) != managedListeningSockets_.end()) {
+            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_IN_USE, "socket id already exists", &*socketId));
+        }
+    }
+
+    if (!tcpTransport->listen(request.host_port())) {
+        tcpTransport->stop();
+        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "tcp listen failed", &*socketId));
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        managedListeningSockets_.emplace(*socketId, listenerState);
+    }
+
+    const bool sent = send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
+    if (!sent) {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        managedListeningSockets_.erase(*socketId);
+        stopManagedListener(listenerState);
+        return false;
+    }
+
+    return true;
+}
+
+bool ResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& message) {
+    const auto& request = message.accept_tcp();
+    const auto listenSocketId = fromProtoSocketId(request.listen_socket_number());
+    if (!listenSocketId.has_value()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid listen socket id"));
+    }
+
+    std::shared_ptr<ManagedListenerState> listenerState;
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        const auto iterator = managedListeningSockets_.find(*listenSocketId);
+        if (iterator == managedListeningSockets_.end()) {
+            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "listen socket not found", &*listenSocketId));
+        }
+
+        listenerState = iterator->second;
+    }
+
+    if (!validateListeningSocketAccess(message, listenerState)) {
+        return send(makeSocketReplyMessage(message,
+                                           rsp::proto::NODEID_MISMATCH,
+                                           "listen socket is owned by a different node id",
+                                           &*listenSocketId));
+    }
+
+    if (listenerState->asyncAccept) {
+        return send(makeSocketReplyMessage(message,
+                                           rsp::proto::ASYNC_SOCKET,
+                                           "accept_tcp is ignored when async_accept is enabled",
+                                           &*listenSocketId));
+    }
+
+    rsp::transport::ConnectionHandle acceptedConnection;
+    {
+        std::unique_lock<std::mutex> lock(listenerState->acceptedMutex);
+        const auto timeout = request.has_timeout_ms() ? request.timeout_ms() : 0u;
+        if (listenerState->acceptedConnections.empty()) {
+            const auto ready = timeout > 0
+                                   ? listenerState->acceptedChanged.wait_for(lock,
+                                                                             std::chrono::milliseconds(timeout),
+                                                                             [listenerState]() {
+                                                                                 return listenerState->stopping.load() ||
+                                                                                        !listenerState->acceptedConnections.empty();
+                                                                             })
+                                   : listenerState->acceptedChanged.wait_for(lock,
+                                                                             std::chrono::seconds(5),
+                                                                             [listenerState]() {
+                                                                                 return listenerState->stopping.load() ||
+                                                                                        !listenerState->acceptedConnections.empty();
+                                                                             });
+            if (!ready) {
+                return send(makeSocketReplyMessage(message, rsp::proto::TIMED_OUT, "accept timed out", &*listenSocketId));
+            }
+        }
+
+        if (listenerState->stopping.load() || listenerState->acceptedConnections.empty()) {
+            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "listen socket closed", &*listenSocketId));
+        }
+
+        acceptedConnection = listenerState->acceptedConnections.front();
+        listenerState->acceptedConnections.pop_front();
+    }
+
+    const auto childSocketId = request.has_new_socket_number()
+                                   ? fromProtoSocketId(request.new_socket_number())
+                                   : std::optional<rsp::GUID>(rsp::GUID());
+    if (!childSocketId.has_value()) {
+        if (acceptedConnection != nullptr) {
+            acceptedConnection->close();
+        }
+        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid new_socket_number", &*listenSocketId));
+    }
+
+    auto socketState = std::make_shared<ManagedSocketState>();
+    socketState->connection = acceptedConnection;
+    socketState->requesterNodeId = message.source();
+    socketState->socketId = *childSocketId;
+    socketState->asyncData = request.has_child_async_data() && request.child_async_data();
+    socketState->shareSocket = request.has_share_child_socket() && request.share_child_socket();
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        if (managedSockets_.find(*childSocketId) != managedSockets_.end() ||
+            managedListeningSockets_.find(*childSocketId) != managedListeningSockets_.end()) {
+            if (socketState->connection != nullptr) {
+                socketState->connection->close();
+            }
+            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_IN_USE, "socket id already exists", &*listenSocketId));
+        }
+
+        managedSockets_.emplace(*childSocketId, socketState);
+    }
+
+    auto reply = makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*listenSocketId);
+    *reply.mutable_socket_reply()->mutable_new_socket_id() = toProtoSocketId(*childSocketId);
+    const bool sent = send(reply);
+    if (!sent) {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        managedSockets_.erase(*childSocketId);
+        stopManagedSocket(socketState);
+        return false;
+    }
+
+    if (socketState->asyncData) {
+        socketState->readThread = std::thread([this, socketState]() {
+            runAsyncReadLoop(socketState);
+        });
+    }
+
+    return true;
+}
+
 bool ResourceService::handleSocketSend(const rsp::proto::RSPMessage& message) {
     const auto socketId = fromProtoSocketId(message.socket_send().socket_number());
     if (!socketId.has_value()) {
@@ -236,6 +441,30 @@ bool ResourceService::handleSocketClose(const rsp::proto::RSPMessage& message) {
         return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
     }
 
+    std::shared_ptr<ManagedListenerState> removedListener;
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        const auto iterator = managedListeningSockets_.find(*socketId);
+        if (iterator != managedListeningSockets_.end()) {
+            removedListener = iterator->second;
+            managedListeningSockets_.erase(iterator);
+        }
+    }
+
+    if (removedListener != nullptr) {
+        if (!validateListeningSocketAccess(message, removedListener)) {
+            std::lock_guard<std::mutex> lock(socketsMutex_);
+            managedListeningSockets_.emplace(*socketId, removedListener);
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::NODEID_MISMATCH,
+                                               "listen socket is owned by a different node id",
+                                               &*socketId));
+        }
+
+        stopManagedListener(removedListener);
+        return send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
+    }
+
     std::shared_ptr<ManagedSocketState> removedSocket;
     {
         std::lock_guard<std::mutex> lock(socketsMutex_);
@@ -258,6 +487,56 @@ bool ResourceService::handleSocketClose(const rsp::proto::RSPMessage& message) {
     stopManagedSocket(removedSocket);
 
     return send(makeSocketReplyMessage(message, rsp::proto::SUCCESS));
+}
+
+void ResourceService::handleAcceptedConnection(const std::shared_ptr<ManagedListenerState>& listenerState,
+                                              const rsp::transport::ConnectionHandle& connection) {
+    if (listenerState == nullptr || connection == nullptr || listenerState->stopping.load()) {
+        if (connection != nullptr) {
+            connection->close();
+        }
+        return;
+    }
+
+    if (!listenerState->asyncAccept) {
+        std::lock_guard<std::mutex> lock(listenerState->acceptedMutex);
+        listenerState->acceptedConnections.push_back(connection);
+        listenerState->acceptedChanged.notify_all();
+        return;
+    }
+
+    auto socketState = std::make_shared<ManagedSocketState>();
+    socketState->connection = connection;
+    socketState->requesterNodeId = listenerState->requesterNodeId;
+    socketState->socketId = rsp::GUID();
+    socketState->asyncData = listenerState->childrenAsyncData;
+    socketState->shareSocket = listenerState->shareChildSockets;
+    {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        while (managedSockets_.find(socketState->socketId) != managedSockets_.end() ||
+               managedListeningSockets_.find(socketState->socketId) != managedListeningSockets_.end()) {
+            socketState->socketId = rsp::GUID();
+        }
+        managedSockets_.emplace(socketState->socketId, socketState);
+    }
+
+    auto reply = makeSocketReplyMessage(listenerState->requesterNodeId,
+                                        rsp::proto::NEW_CONNECTION,
+                                        std::string(),
+                                        &listenerState->socketId);
+    *reply.mutable_socket_reply()->mutable_new_socket_id() = toProtoSocketId(socketState->socketId);
+    if (!send(reply)) {
+        std::lock_guard<std::mutex> lock(socketsMutex_);
+        managedSockets_.erase(socketState->socketId);
+        stopManagedSocket(socketState);
+        return;
+    }
+
+    if (socketState->asyncData) {
+        socketState->readThread = std::thread([this, socketState]() {
+            runAsyncReadLoop(socketState);
+        });
+    }
 }
 
 void ResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSocketState>& socketState) {
@@ -314,6 +593,19 @@ bool ResourceService::validateSocketAccess(const rsp::proto::RSPMessage& message
     return message.source().value() == socketState->requesterNodeId.value();
 }
 
+bool ResourceService::validateListeningSocketAccess(const rsp::proto::RSPMessage& message,
+                                                    const std::shared_ptr<ManagedListenerState>& listenerState) const {
+    if (listenerState == nullptr || listenerState->shareListeningSocket) {
+        return true;
+    }
+
+    if (!message.has_source()) {
+        return false;
+    }
+
+    return message.source().value() == listenerState->requesterNodeId.value();
+}
+
 rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
                                                                rsp::proto::SOCKET_STATUS status,
                                                                const std::string& errorMessage,
@@ -323,6 +615,10 @@ rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto:
     if (effectiveSocketId == nullptr) {
         if (request.has_connect_tcp_request() && request.connect_tcp_request().has_socket_number()) {
             derivedSocketId = fromProtoSocketId(request.connect_tcp_request().socket_number());
+        } else if (request.has_listen_tcp_request() && request.listen_tcp_request().has_socket_number()) {
+            derivedSocketId = fromProtoSocketId(request.listen_tcp_request().socket_number());
+        } else if (request.has_accept_tcp()) {
+            derivedSocketId = fromProtoSocketId(request.accept_tcp().listen_socket_number());
         } else if (request.has_socket_send()) {
             derivedSocketId = fromProtoSocketId(request.socket_send().socket_number());
         } else if (request.has_socket_recv()) {
@@ -377,11 +673,41 @@ void ResourceService::stopManagedSocket(const std::shared_ptr<ManagedSocketState
     }
 }
 
+void ResourceService::stopManagedListener(const std::shared_ptr<ManagedListenerState>& listenerState) {
+    if (listenerState == nullptr) {
+        return;
+    }
+
+    listenerState->stopping.store(true);
+    listenerState->acceptedChanged.notify_all();
+    if (listenerState->transport != nullptr) {
+        listenerState->transport->stop();
+    }
+
+    std::deque<rsp::transport::ConnectionHandle> acceptedConnections;
+    {
+        std::lock_guard<std::mutex> lock(listenerState->acceptedMutex);
+        acceptedConnections.swap(listenerState->acceptedConnections);
+    }
+
+    for (auto& connection : acceptedConnections) {
+        if (connection != nullptr) {
+            connection->close();
+        }
+    }
+}
+
 void ResourceService::closeAllManagedSockets() {
     std::map<rsp::GUID, std::shared_ptr<ManagedSocketState>> removedSockets;
+    std::map<rsp::GUID, std::shared_ptr<ManagedListenerState>> removedListeners;
     {
         std::lock_guard<std::mutex> lock(socketsMutex_);
         removedSockets.swap(managedSockets_);
+        removedListeners.swap(managedListeningSockets_);
+    }
+
+    for (auto& [_, listenerState] : removedListeners) {
+        stopManagedListener(listenerState);
     }
 
     for (auto& [_, socketState] : removedSockets) {

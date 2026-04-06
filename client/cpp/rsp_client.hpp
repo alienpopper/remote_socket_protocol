@@ -63,6 +63,34 @@ public:
                                                       bool asyncData = false,
                                                       bool shareSocket = false,
                                                       bool useSocket = false);
+    RSPCLIENT_API std::optional<rsp::proto::SocketReply> listenTCPEx(rsp::NodeID nodeId,
+                                                                     const std::string& hostPort,
+                                                                     uint32_t timeoutMilliseconds = 0,
+                                                                     bool asyncAccept = false,
+                                                                     bool shareListeningSocket = false,
+                                                                     bool shareChildSockets = false,
+                                                                     bool childrenUseSocket = false,
+                                                                     bool childrenAsyncData = false);
+    RSPCLIENT_API std::optional<rsp::GUID> listenTCP(rsp::NodeID nodeId,
+                                                     const std::string& hostPort,
+                                                     uint32_t timeoutMilliseconds = 0,
+                                                     bool asyncAccept = false,
+                                                     bool shareListeningSocket = false,
+                                                     bool shareChildSockets = false,
+                                                     bool childrenUseSocket = false,
+                                                     bool childrenAsyncData = false);
+    RSPCLIENT_API std::optional<rsp::proto::SocketReply> acceptTCPEx(const rsp::GUID& listenSocketId,
+                                                                     const std::optional<rsp::GUID>& newSocketId = std::nullopt,
+                                                                     uint32_t timeoutMilliseconds = 0,
+                                                                     bool shareChildSocket = false,
+                                                                     bool childUseSocket = false,
+                                                                     bool childAsyncData = false);
+    RSPCLIENT_API std::optional<rsp::GUID> acceptTCP(const rsp::GUID& listenSocketId,
+                                                     const std::optional<rsp::GUID>& newSocketId = std::nullopt,
+                                                     uint32_t timeoutMilliseconds = 0,
+                                                     bool shareChildSocket = false,
+                                                     bool childUseSocket = false,
+                                                     bool childAsyncData = false);
     RSPCLIENT_API std::optional<rsp::os::SocketHandle> connectTCPSocket(rsp::NodeID nodeId,
                                                                         const std::string& hostPort,
                                                                         uint32_t timeoutMilliseconds = 0,
@@ -96,6 +124,7 @@ private:
         rsp::os::SocketHandle bridgeSocket = 0;
         std::atomic<bool> stopping = false;
         std::atomic<bool> remoteClosed = false;
+        std::thread worker;
     };
 
     explicit RSPClient(KeyPair keyPair);
@@ -110,6 +139,7 @@ private:
     void runNativeSocketBridge(const rsp::GUID& socketId,
                                const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
     void stopNativeSocketBridges();
+    void stopNativeSocketBridgesForNode(const rsp::NodeID& nodeId);
     static rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId);
     static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
     static std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId);
@@ -121,6 +151,7 @@ private:
     std::condition_variable stateChanged_;
     std::map<std::string, PendingPingState> pendingPings_;
     std::map<rsp::GUID, PendingConnectState> pendingConnects_;
+    std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::SocketReply> pendingSocketReplies_;
     std::map<rsp::GUID, std::deque<rsp::proto::SocketReply>> socketReplyQueues_;
     std::set<rsp::GUID> awaitedSocketReplies_;

@@ -102,6 +102,31 @@ std::string findSocketServerEndpoint(const std::shared_ptr<rsp::transport::TcpTr
     throw std::runtime_error("failed to find an available TCP port for socket server test");
 }
 
+std::string findAvailableEndpoint(uint16_t firstPort, uint16_t lastPort) {
+    for (uint16_t port = firstPort; port < lastPort; ++port) {
+        auto probeTransport = std::make_shared<rsp::transport::TcpTransport>();
+        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
+        if (probeTransport->listen(endpoint)) {
+            probeTransport->stop();
+            return endpoint;
+        }
+    }
+
+    throw std::runtime_error("failed to find an available TCP port");
+}
+
+std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId) {
+    if (socketId.value().size() != 16) {
+        return std::nullopt;
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    std::memcpy(&high, socketId.value().data(), sizeof(high));
+    std::memcpy(&low, socketId.value().data() + sizeof(high), sizeof(low));
+    return rsp::GUID(high, low);
+}
+
 class TestSocketServer {
 public:
     TestSocketServer() : transport_(std::make_shared<rsp::transport::TcpTransport>()) {
@@ -128,31 +153,46 @@ public:
 
     void start(const std::string& greeting, const std::string& expectedPayload, const std::string& response) {
         worker_ = std::thread([this, greeting, expectedPayload, response]() {
+            try {
             auto future = connectionPromise_.get_future();
             require(future.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
-                    "socket server should accept a TCP connection");
+                "socket server should accept a TCP connection");
             const auto connection = future.get();
             require(connection != nullptr, "socket server should receive a connection handle");
             require(connection->sendAll(reinterpret_cast<const uint8_t*>(greeting.data()), static_cast<uint32_t>(greeting.size())),
-                    "socket server should send greeting bytes");
+                "socket server should send greeting bytes");
 
             std::vector<uint8_t> payload(expectedPayload.size());
             require(connection->readExact(payload.data(), static_cast<uint32_t>(payload.size())),
-                    "socket server should read the client payload");
+                "socket server should read the client payload");
             require(std::string(reinterpret_cast<const char*>(payload.data()), payload.size()) == expectedPayload,
-                    "socket server should receive the expected client payload");
+                "socket server should receive the expected client payload");
 
             require(connection->sendAll(reinterpret_cast<const uint8_t*>(response.data()), static_cast<uint32_t>(response.size())),
-                    "socket server should send response bytes");
+                "socket server should send response bytes");
             connection->close();
+            } catch (...) {
+            workerException_ = std::current_exception();
+            }
         });
     }
+
+        void wait() {
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+
+        if (workerException_ != nullptr) {
+            std::rethrow_exception(workerException_);
+        }
+        }
 
 private:
     std::shared_ptr<rsp::transport::TcpTransport> transport_;
     std::promise<rsp::transport::ConnectionHandle> connectionPromise_;
     std::thread worker_;
     std::string endpoint_;
+        std::exception_ptr workerException_;
 };
 
 class PeriodicTestSocketServer {
@@ -181,18 +221,32 @@ public:
 
     void start(const std::vector<std::string>& messages, uint32_t intervalMilliseconds) {
         worker_ = std::thread([this, messages, intervalMilliseconds]() {
-            auto future = connectionPromise_.get_future();
-            require(future.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
-                    "periodic socket server should accept a TCP connection");
-            const auto connection = future.get();
-            require(connection != nullptr, "periodic socket server should receive a connection handle");
-            for (const auto& message : messages) {
-                require(connection->sendAll(reinterpret_cast<const uint8_t*>(message.data()), static_cast<uint32_t>(message.size())),
-                        "periodic socket server should send periodic bytes");
-                std::this_thread::sleep_for(std::chrono::milliseconds(intervalMilliseconds));
+            try {
+                auto future = connectionPromise_.get_future();
+                require(future.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+                        "periodic socket server should accept a TCP connection");
+                const auto connection = future.get();
+                require(connection != nullptr, "periodic socket server should receive a connection handle");
+                for (const auto& message : messages) {
+                    require(connection->sendAll(reinterpret_cast<const uint8_t*>(message.data()), static_cast<uint32_t>(message.size())),
+                            "periodic socket server should send periodic bytes");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(intervalMilliseconds));
+                }
+                connection->close();
+            } catch (...) {
+                workerException_ = std::current_exception();
             }
-            connection->close();
         });
+    }
+
+    void wait() {
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+
+        if (workerException_ != nullptr) {
+            std::rethrow_exception(workerException_);
+        }
     }
 
 private:
@@ -200,6 +254,58 @@ private:
     std::promise<rsp::transport::ConnectionHandle> connectionPromise_;
     std::thread worker_;
     std::string endpoint_;
+    std::exception_ptr workerException_;
+};
+
+class TestSocketClientPeer {
+public:
+    ~TestSocketClientPeer() {
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+    }
+
+    void start(const std::string& endpoint,
+               const std::string& greeting,
+               const std::string& expectedPayload,
+               const std::string& response) {
+        worker_ = std::thread([this, endpoint, greeting, expectedPayload, response]() {
+            try {
+            auto transport = std::make_shared<rsp::transport::TcpTransport>();
+            const auto connection = transport->connect(endpoint);
+            require(connection != nullptr, "socket client peer should connect to the listener endpoint");
+            require(connection->sendAll(reinterpret_cast<const uint8_t*>(greeting.data()), static_cast<uint32_t>(greeting.size())),
+                "socket client peer should send greeting bytes");
+
+            std::vector<uint8_t> payload(expectedPayload.size());
+            require(connection->readExact(payload.data(), static_cast<uint32_t>(payload.size())),
+                "socket client peer should read the accepted socket payload");
+            require(std::string(reinterpret_cast<const char*>(payload.data()), payload.size()) == expectedPayload,
+                "socket client peer should receive the expected accepted socket payload");
+
+            require(connection->sendAll(reinterpret_cast<const uint8_t*>(response.data()), static_cast<uint32_t>(response.size())),
+                "socket client peer should send response bytes");
+            connection->close();
+            transport->stop();
+            } catch (...) {
+            workerException_ = std::current_exception();
+            }
+        });
+    }
+
+        void wait() {
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+
+        if (workerException_ != nullptr) {
+            std::rethrow_exception(workerException_);
+        }
+        }
+
+private:
+    std::thread worker_;
+        std::exception_ptr workerException_;
 };
 
 void testResourceServiceConnectsToResourceManager() {
@@ -310,6 +416,7 @@ void testClientExchangesTcpDataThroughResourceService() {
     require(*receivedResponse == serverResponse, "client should receive the expected response bytes");
 
     require(client->socketClose(*socketId), "client should close the remote TCP socket through the resource service");
+    socketServer.wait();
 
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its resource manager connection");
@@ -384,6 +491,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
         "client should receive the expected periodic async socket payload stream in order");
 
     require(client->socketClose(*socketId), "client should close the async socket through the resource service");
+    socketServer.wait();
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its async test connection");
     require(client->removeConnection(clientConnectionId),
@@ -435,6 +543,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     require(*receivedResponse == serverResponse, "client should receive the expected bridge response bytes");
 
     rsp::os::closeSocket(*localSocket);
+    socketServer.wait();
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its native socket bridge test connection");
     require(client->removeConnection(clientConnectionId),
@@ -442,6 +551,148 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
     serverTransport->stop();
 }
+
+    void testClientAcceptsTcpConnectionThroughResourceService() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+        const std::string listenerEndpoint = findAvailableEndpoint(35300, 35400);
+
+        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto client = rsp::client::RSPClient::create();
+
+        const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endpoints for listen/accept test");
+        require(client->ping(resourceServiceNodeId),
+            "client should ping the resource service before listen/accept test");
+
+        const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint);
+        require(listenSocketId.has_value(), "client should receive a listening socket id from the resource service");
+
+        TestSocketClientPeer peer;
+        const std::string greeting = "accept-greeting";
+        const std::string clientPayload = "accept-payload";
+        const std::string response = "accept-response";
+        peer.start(listenerEndpoint, greeting, clientPayload, response);
+
+        const auto childSocketId = client->acceptTCP(*listenSocketId, std::nullopt, 5000);
+        require(childSocketId.has_value(), "client should accept an inbound TCP connection through the resource service");
+
+        const auto receivedGreeting = client->socketRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
+        require(receivedGreeting.has_value(), "accepted socket should receive greeting bytes from the peer");
+        require(*receivedGreeting == greeting, "accepted socket should receive the expected greeting bytes");
+
+        require(client->socketSend(*childSocketId, clientPayload),
+            "accepted socket should send payload bytes to the peer");
+
+        const auto receivedResponse = client->socketRecv(*childSocketId, static_cast<uint32_t>(response.size()));
+        require(receivedResponse.has_value(), "accepted socket should receive response bytes from the peer");
+        require(*receivedResponse == response, "accepted socket should receive the expected response bytes");
+
+        require(client->socketClose(*childSocketId), "client should close the accepted child socket");
+        require(client->socketClose(*listenSocketId), "client should close the listening socket");
+        peer.wait();
+
+        require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its listen/accept test connection");
+        require(client->removeConnection(clientConnectionId),
+            "client should remove its listen/accept test connection");
+
+        serverTransport->stop();
+    }
+
+    void testClientReceivesAsyncAcceptedTcpConnectionThroughResourceService() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+        const std::string listenerEndpoint = findAvailableEndpoint(35400, 35500);
+
+        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto client = rsp::client::RSPClient::create();
+
+        const auto resourceServiceConnectionId =
+        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endpoints for async accept test");
+        require(client->ping(resourceServiceNodeId),
+            "client should ping the resource service before async accept test");
+
+        const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint, 0, true);
+        require(listenSocketId.has_value(), "client should receive an async listening socket id");
+
+        const auto acceptReply = client->acceptTCPEx(*listenSocketId, std::nullopt, 10);
+        require(acceptReply.has_value(), "accept on an async listener should receive a reply");
+        require(acceptReply->error() == rsp::proto::ASYNC_SOCKET,
+            "accept on an async listener should return ASYNC_SOCKET");
+
+        TestSocketClientPeer peer;
+        const std::string greeting = "async-accept-greeting";
+        const std::string clientPayload = "async-accept-payload";
+        const std::string response = "async-accept-response";
+        peer.start(listenerEndpoint, greeting, clientPayload, response);
+
+        rsp::proto::SocketReply newConnectionReply;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        bool receivedNewConnection = false;
+        while (std::chrono::steady_clock::now() < deadline) {
+        if (!client->tryDequeueSocketReply(newConnectionReply)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        if (newConnectionReply.error() == rsp::proto::NEW_CONNECTION &&
+            newConnectionReply.has_socket_id() &&
+            newConnectionReply.has_new_socket_id()) {
+            const auto replyListenSocketId = fromProtoSocketId(newConnectionReply.socket_id());
+            if (replyListenSocketId.has_value() && *replyListenSocketId == *listenSocketId) {
+            receivedNewConnection = true;
+            break;
+            }
+        }
+        }
+
+        require(receivedNewConnection, "client should receive a NEW_CONNECTION reply for async accept");
+        const auto childSocketId = fromProtoSocketId(newConnectionReply.new_socket_id());
+        require(childSocketId.has_value(), "NEW_CONNECTION reply should include a child socket id");
+
+        const auto receivedGreeting = client->socketRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
+        require(receivedGreeting.has_value(), "async accepted socket should receive greeting bytes from the peer");
+        require(*receivedGreeting == greeting, "async accepted socket should receive the expected greeting bytes");
+
+        require(client->socketSend(*childSocketId, clientPayload),
+            "async accepted socket should send payload bytes to the peer");
+
+        const auto receivedResponse = client->socketRecv(*childSocketId, static_cast<uint32_t>(response.size()));
+        require(receivedResponse.has_value(), "async accepted socket should receive response bytes from the peer");
+        require(*receivedResponse == response, "async accepted socket should receive the expected response bytes");
+
+        require(client->socketClose(*childSocketId), "client should close the async accepted child socket");
+        require(client->socketClose(*listenSocketId), "client should close the async listening socket");
+        peer.wait();
+
+        require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its async accept test connection");
+        require(client->removeConnection(clientConnectionId),
+            "client should remove its async accept test connection");
+
+        serverTransport->stop();
+    }
 
     void testSocketOwnershipByNodeIdThroughResourceService() {
         auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
@@ -495,6 +746,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(*ownerResponse == exclusiveResponse,
             "owner client should receive the expected exclusive socket response");
         require(ownerClient->socketClose(*exclusiveSocketId), "owner client should close its exclusive socket");
+        exclusiveSocketServer.wait();
 
         TestSocketServer sharedSocketServer;
         const std::string sharedGreeting = "shared-greeting";
@@ -521,6 +773,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(sharedResponseReply->has_data() && sharedResponseReply->data() == sharedResponse,
             "second client should receive the shared socket response");
         require(otherClient->socketClose(*sharedSocketId), "second client should be able to close a shared socket");
+        sharedSocketServer.wait();
 
         require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its ownership test connection");
@@ -574,6 +827,51 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             serverTransport->stop();
         }
 
+            void testListeningSocketRejectsUnsupportedOptions() {
+            auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+            TestResourceManager resourceManager({serverTransport});
+
+            rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+            const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+            const std::string endpoint = findListeningEndpoint(serverTransport);
+            const std::string transportSpec = std::string("tcp:") + endpoint;
+            const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
+
+            auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+            auto client = rsp::client::RSPClient::create();
+
+            const auto resourceServiceConnectionId =
+                resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+            require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+                "resource manager should authenticate both endpoints for listening option validation");
+            require(client->ping(resourceServiceNodeId),
+                "client should ping the resource service before listening option validation");
+
+            const auto sharedChildrenReply =
+                client->listenTCPEx(resourceServiceNodeId, listenerEndpoint, 0, false, false, true);
+            require(sharedChildrenReply.has_value(),
+                "share_child_sockets without async_accept should receive a reply");
+            require(sharedChildrenReply->error() == rsp::proto::INVALID_FLAGS,
+                "share_child_sockets without async_accept should return INVALID_FLAGS");
+
+            const auto asyncChildrenReply =
+                client->listenTCPEx(resourceServiceNodeId, listenerEndpoint, 0, false, false, false, false, true);
+            require(asyncChildrenReply.has_value(),
+                "children_async_data without async_accept should receive a reply");
+            require(asyncChildrenReply->error() == rsp::proto::INVALID_FLAGS,
+                "children_async_data without async_accept should return INVALID_FLAGS");
+
+            require(resourceService->removeConnection(resourceServiceConnectionId),
+                "resource service should remove its listening option validation connection");
+            require(client->removeConnection(clientConnectionId),
+                "client should remove its listening option validation connection");
+
+            serverTransport->stop();
+            }
+
 }  // namespace
 
 int main() {
@@ -582,8 +880,11 @@ int main() {
         testClientExchangesTcpDataThroughResourceService();
         testClientReceivesAsyncSocketDataThroughResourceService();
         testClientExchangesTcpDataThroughNativeSocketBridge();
+        testClientAcceptsTcpConnectionThroughResourceService();
+        testClientReceivesAsyncAcceptedTcpConnectionThroughResourceService();
         testSocketOwnershipByNodeIdThroughResourceService();
         testSharedSocketRejectsUnsupportedOptions();
+        testListeningSocketRejectsUnsupportedOptions();
         std::cout << "resource service test passed" << std::endl;
         return 0;
     } catch (const std::exception& exception) {

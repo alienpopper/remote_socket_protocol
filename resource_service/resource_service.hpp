@@ -3,6 +3,8 @@
 #include "client/cpp_full/rsp_client.hpp"
 
 #include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -37,17 +39,38 @@ private:
         std::thread readThread;
     };
 
+    struct ManagedListenerState {
+        rsp::transport::ListeningTransportHandle transport;
+        rsp::proto::NodeId requesterNodeId;
+        rsp::GUID socketId;
+        bool asyncAccept = false;
+        bool shareListeningSocket = false;
+        bool shareChildSockets = false;
+        bool childrenUseSocket = false;
+        bool childrenAsyncData = false;
+        std::atomic<bool> stopping = false;
+        std::mutex acceptedMutex;
+        std::condition_variable acceptedChanged;
+        std::deque<rsp::transport::ConnectionHandle> acceptedConnections;
+    };
+
     explicit ResourceService(KeyPair keyPair);
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
 
     bool handleConnectTCPRequest(const rsp::proto::RSPMessage& message);
+    bool handleListenTCPRequest(const rsp::proto::RSPMessage& message);
+    bool handleAcceptTCP(const rsp::proto::RSPMessage& message);
     bool handleSocketSend(const rsp::proto::RSPMessage& message);
     bool handleSocketRecv(const rsp::proto::RSPMessage& message);
     bool handleSocketClose(const rsp::proto::RSPMessage& message);
     void runAsyncReadLoop(const std::shared_ptr<ManagedSocketState>& socketState);
+    void handleAcceptedConnection(const std::shared_ptr<ManagedListenerState>& listenerState,
+                                 const rsp::transport::ConnectionHandle& connection);
     bool validateSocketAccess(const rsp::proto::RSPMessage& message,
                               const std::shared_ptr<ManagedSocketState>& socketState) const;
+    bool validateListeningSocketAccess(const rsp::proto::RSPMessage& message,
+                                      const std::shared_ptr<ManagedListenerState>& listenerState) const;
 
     rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
                                                   rsp::proto::SOCKET_STATUS status,
@@ -58,6 +81,7 @@ private:
                                                   const std::string& errorMessage = std::string(),
                                                   const rsp::GUID* socketId = nullptr) const;
     void stopManagedSocket(const std::shared_ptr<ManagedSocketState>& socketState);
+    void stopManagedListener(const std::shared_ptr<ManagedListenerState>& listenerState);
     void closeAllManagedSockets();
 
     static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
@@ -65,6 +89,7 @@ private:
 
     mutable std::mutex socketsMutex_;
     std::map<rsp::GUID, std::shared_ptr<ManagedSocketState>> managedSockets_;
+    std::map<rsp::GUID, std::shared_ptr<ManagedListenerState>> managedListeningSockets_;
 };
 
 }  // namespace rsp::resource_service

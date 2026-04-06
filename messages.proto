@@ -101,15 +101,18 @@ enum SOCKET_STATUS {
     ASYNC_SOCKET = 7; //synchronous operation attempted on an async socket
     NODEID_MISMATCH = 9;
     INVALID_FLAGS = 10;
+    SOCKET_IN_USE = 11;
+    TIMED_OUT = 12;
 }
 
 message SocketReply {
     SocketID socket_id = 1;
     SOCKET_STATUS error = 2;
     optional string message = 3;
-    optional SocketID new_socket_id = 4;
-    optional int32 socket_error_code = 5; //error code reported from the underlying OS socket
-    optional bytes data = 6;
+    optional string new_socket_remote_address = 4;
+    optional SocketID new_socket_id = 5;  //RS chosen if async, client chosen if blocking
+    optional int32 socket_error_code = 6; //error code reported from the underlying OS socket
+    optional bytes data = 7;
 }
 
 
@@ -126,6 +129,26 @@ message ConnectTCPRequest {
     optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
 }
 
+message ListenTCPRequest {
+    string host_port = 1;
+    SocketID socket_number = 2;
+    optional bool reuse_addr = 3;
+    optional uint32 timeout_ms = 4;
+    optional bool async_accept = 5;
+    optional bool share_listening_socket = 6; //different nodeIDs are allowed to use this socket
+    optional bool share_child_sockets = 7; //only valid if async_accept
+    optional bool children_use_socket = 8; //only valid if async_accept
+    optional bool children_async_data = 9; //only valid if async_accept
+}
+
+message AcceptTCP {
+    SocketID listen_socket_number = 1;
+    optional SocketID new_socket_number = 2;  //if not provided, RS will choose one
+    optional uint32 timeout_ms = 3;
+    optional bool share_child_socket = 4;
+    optional bool child_use_socket = 5;
+  optional bool child_async_data = 6;
+}
 
 message SocketSend { 
    SocketID socket_number = 1;
@@ -161,6 +184,8 @@ message RSPMessage {
         SocketSend socket_send = 11;
         SocketRecv socket_recv = 12;
         SocketClose socket_close = 13;
+        ListenTCPRequest listen_tcp_request = 14;
+        AcceptTCP accept_tcp = 15;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong
