@@ -96,6 +96,10 @@ GUID parseUuid(const rsp::proto::Uuid& uuid, const char* fieldName) {
     return deserializeGuidBytes(uuid.value(), fieldName);
 }
 
+GUID parseEndorsementType(const rsp::proto::EndorsementType& endorsementType, const char* fieldName) {
+    return deserializeGuidBytes(endorsementType.value(), fieldName);
+}
+
 void setMessageFields(rsp::proto::Endorsement* message, NodeID subject, NodeID endorsementService,
                       GUID endorsementType, Buffer endorsementValue, DateTime validUntil,
                       Buffer signature) {
@@ -105,6 +109,38 @@ void setMessageFields(rsp::proto::Endorsement* message, NodeID subject, NodeID e
     message->set_endorsement_value(bufferToString(endorsementValue));
     message->mutable_valid_until()->set_milliseconds_since_epoch(validUntil.millisecondsSinceEpoch());
     message->set_signature(bufferToString(signature));
+}
+
+bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                             const Endorsement& endorsement) {
+    switch (tree.node_type_case()) {
+        case rsp::proto::ERDAbstractSyntaxTree::kEquals:
+            return tree.equals().has_lhs() && tree.equals().has_rhs() &&
+                   evaluateRequirementTree(tree.equals().lhs(), endorsement) ==
+                       evaluateRequirementTree(tree.equals().rhs(), endorsement);
+        case rsp::proto::ERDAbstractSyntaxTree::kAnd:
+            return tree.and_().has_lhs() && tree.and_().has_rhs() &&
+                   evaluateRequirementTree(tree.and_().lhs(), endorsement) &&
+                   evaluateRequirementTree(tree.and_().rhs(), endorsement);
+        case rsp::proto::ERDAbstractSyntaxTree::kOr:
+            return tree.or_().has_lhs() && tree.or_().has_rhs() &&
+                   (evaluateRequirementTree(tree.or_().lhs(), endorsement) ||
+                    evaluateRequirementTree(tree.or_().rhs(), endorsement));
+        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
+            return tree.type_equals().has_type() &&
+                   endorsement.endorsementType() ==
+                       parseEndorsementType(tree.type_equals().type(), "invalid requirement endorsement type length");
+        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
+            return bufferToString(endorsement.endorsementValue()) == tree.value_equals().value();
+        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+            return tree.signer_equals().has_signer() &&
+                   endorsement.endorsementService() ==
+                       parseNodeId(tree.signer_equals().signer(), "invalid requirement signer length");
+        case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
+            return false;
+    }
+
+    return false;
 }
 
 }  // namespace
@@ -213,6 +249,19 @@ void Endorsement::validateMessage(const rsp::proto::Endorsement& message, bool r
 
     if (requireSignature && message.signature().empty()) {
         throw makeError("endorsement missing signature");
+    }
+}
+
+bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirement,
+                                  const Endorsement& endorsement) {
+    if (!requirement.has_tree()) {
+        return false;
+    }
+
+    try {
+        return evaluateRequirementTree(requirement.tree(), endorsement);
+    } catch (const std::runtime_error&) {
+        return false;
     }
 }
 

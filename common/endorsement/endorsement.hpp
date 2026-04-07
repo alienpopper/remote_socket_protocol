@@ -38,4 +38,7 @@ private:
     rsp::proto::Endorsement message_;
 };
 
+bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirement,
+                                  const Endorsement& endorsement);
+
 }  // namespace rsp
