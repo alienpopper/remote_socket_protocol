@@ -1,5 +1,7 @@
 #include "os/os_socket.hpp"
 
+#include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <set>
 #include <string>
@@ -9,6 +11,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 namespace rsp::os {
@@ -18,6 +21,8 @@ namespace {
 int toNative(SocketHandle socketHandle) {
     return static_cast<int>(socketHandle);
 }
+
+std::atomic<uint64_t> g_localListenerCounter = 1;
 
 SocketHandle fromNative(int socketHandle) {
     return static_cast<SocketHandle>(socketHandle);
@@ -87,6 +92,60 @@ bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket) {
     firstSocket = fromNative(sockets[0]);
     secondSocket = fromNative(sockets[1]);
     return true;
+}
+
+bool createLocalListenerSocket(SocketHandle& listenerSocket, std::string& endpoint, int backlog) {
+    listenerSocket = invalidSocket();
+
+    const int socketHandle = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socketHandle < 0) {
+        return false;
+    }
+
+    sockaddr_un address = {};
+    address.sun_family = AF_UNIX;
+    endpoint.assign(1, '\0');
+    endpoint += "rsp-local-";
+    endpoint += std::to_string(getpid());
+    endpoint += "-";
+    endpoint += std::to_string(g_localListenerCounter.fetch_add(1));
+    if (endpoint.size() > sizeof(address.sun_path)) {
+        close(socketHandle);
+        return false;
+    }
+
+    std::memcpy(address.sun_path, endpoint.data(), endpoint.size());
+    const auto addressLength = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + endpoint.size());
+    if (bind(socketHandle, reinterpret_cast<const sockaddr*>(&address), addressLength) != 0 ||
+        listen(socketHandle, backlog) != 0) {
+        close(socketHandle);
+        return false;
+    }
+
+    listenerSocket = fromNative(socketHandle);
+    return true;
+}
+
+SocketHandle connectLocalListenerSocket(const std::string& endpoint) {
+    sockaddr_un address = {};
+    address.sun_family = AF_UNIX;
+    if (endpoint.empty() || endpoint.size() > sizeof(address.sun_path)) {
+        return invalidSocket();
+    }
+
+    const int socketHandle = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socketHandle < 0) {
+        return invalidSocket();
+    }
+
+    std::memcpy(address.sun_path, endpoint.data(), endpoint.size());
+    const auto addressLength = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + endpoint.size());
+    if (connect(socketHandle, reinterpret_cast<const sockaddr*>(&address), addressLength) != 0) {
+        close(socketHandle);
+        return invalidSocket();
+    }
+
+    return fromNative(socketHandle);
 }
 
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog) {

@@ -117,6 +117,7 @@ RSPClient::RSPClient(KeyPair keyPair)
 }
 
 RSPClient::~RSPClient() {
+    stopNativeListenBridges();
     stopNativeSocketBridges();
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -187,6 +188,7 @@ std::vector<RSPClient::ClientConnectionID> RSPClient::connectionIds() const {
 bool RSPClient::removeConnection(ClientConnectionID connectionId) {
     const auto peerNodeId = messageClient_->peerNodeID(connectionId);
     if (peerNodeId.has_value()) {
+        stopNativeListenBridgesForNode(*peerNodeId);
         stopNativeSocketBridgesForNode(*peerNodeId);
     }
 
@@ -434,6 +436,39 @@ std::optional<rsp::GUID> RSPClient::listenTCP(rsp::NodeID nodeId,
     return fromProtoSocketId(reply->socket_id());
 }
 
+std::optional<rsp::os::SocketHandle> RSPClient::listenTCPSocket(rsp::NodeID nodeId,
+                                                                const std::string& hostPort,
+                                                                uint32_t timeoutMilliseconds) {
+    const auto listenSocketId = listenTCP(nodeId, hostPort, timeoutMilliseconds);
+    if (!listenSocketId.has_value()) {
+        return std::nullopt;
+    }
+
+    rsp::os::SocketHandle listenerSocket = rsp::os::invalidSocket();
+    std::string localEndpoint;
+    if (!rsp::os::createLocalListenerSocket(listenerSocket, localEndpoint)) {
+        socketClose(*listenSocketId);
+        return std::nullopt;
+    }
+
+    auto bridgeState = std::make_shared<NativeListenBridgeState>();
+    bridgeState->listenSocketId = *listenSocketId;
+    bridgeState->nodeId = nodeId;
+    bridgeState->localEndpoint = std::move(localEndpoint);
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        nativeListenBridges_[*listenSocketId] = bridgeState;
+    }
+
+    bridgeState->worker = std::thread([weakSelf = weak_from_this(), bridgeState]() {
+        if (const auto self = weakSelf.lock()) {
+            self->runNativeListenSocketBridge(bridgeState);
+        }
+    });
+
+    return listenerSocket;
+}
+
 std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& listenSocketId,
                                                               const std::optional<rsp::GUID>& newSocketId,
                                                               uint32_t timeoutMilliseconds,
@@ -534,49 +569,8 @@ std::optional<rsp::os::SocketHandle> RSPClient::acceptTCPSocket(const rsp::GUID&
         return std::nullopt;
     }
 
-    auto bridgeState = std::make_shared<NativeSocketBridgeState>();
-    bridgeState->bridgeSocket = bridgeSocket;
-
-    std::deque<rsp::proto::SocketReply> bufferedReplies;
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        nativeSocketBridges_[*socketId] = bridgeState;
-        const auto queuedReplies = socketReplyQueues_.find(*socketId);
-        if (queuedReplies != socketReplyQueues_.end()) {
-            bufferedReplies = std::move(queuedReplies->second);
-            socketReplyQueues_.erase(queuedReplies);
-            for (const auto& reply : bufferedReplies) {
-                removeBufferedReply(pendingSocketReplies_, reply);
-            }
-        }
-    }
-
-    for (const auto& reply : bufferedReplies) {
-        if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
-            if (!sendAllToSocket(bridgeState->bridgeSocket,
-                                 reinterpret_cast<const uint8_t*>(reply.data().data()),
-                                 reply.data().size())) {
-                bridgeState->stopping.store(true);
-                rsp::os::closeSocket(bridgeState->bridgeSocket);
-                break;
-            }
-
-            continue;
-        }
-
-        bridgeState->remoteClosed.store(true);
-        bridgeState->stopping.store(true);
-        rsp::os::closeSocket(bridgeState->bridgeSocket);
-        break;
-    }
-
-    bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId = *socketId, bridgeState]() {
-        if (const auto self = weakSelf.lock()) {
-            self->runNativeSocketBridge(socketId, bridgeState);
-        } else {
-            rsp::os::closeSocket(bridgeState->bridgeSocket);
-        }
-    });
+    const auto bridgeState = attachNativeSocketBridge(*socketId, bridgeSocket);
+    startNativeSocketBridgeWorker(*socketId, bridgeState);
 
     return applicationSocket;
 }
@@ -606,14 +600,23 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nod
         return std::nullopt;
     }
 
+    const auto bridgeState = attachNativeSocketBridge(*socketId, bridgeSocket);
+    startNativeSocketBridgeWorker(*socketId, bridgeState);
+
+    return applicationSocket;
+}
+
+std::shared_ptr<RSPClient::NativeSocketBridgeState> RSPClient::attachNativeSocketBridge(
+    const rsp::GUID& socketId,
+    rsp::os::SocketHandle bridgeSocket) {
     auto bridgeState = std::make_shared<NativeSocketBridgeState>();
     bridgeState->bridgeSocket = bridgeSocket;
 
     std::deque<rsp::proto::SocketReply> bufferedReplies;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        nativeSocketBridges_[*socketId] = bridgeState;
-        const auto queuedReplies = socketReplyQueues_.find(*socketId);
+        nativeSocketBridges_[socketId] = bridgeState;
+        const auto queuedReplies = socketReplyQueues_.find(socketId);
         if (queuedReplies != socketReplyQueues_.end()) {
             bufferedReplies = std::move(queuedReplies->second);
             socketReplyQueues_.erase(queuedReplies);
@@ -642,15 +645,18 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nod
         break;
     }
 
-    bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId = *socketId, bridgeState]() {
+    return bridgeState;
+}
+
+void RSPClient::startNativeSocketBridgeWorker(const rsp::GUID& socketId,
+                                              const std::shared_ptr<NativeSocketBridgeState>& bridgeState) {
+    bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId, bridgeState]() {
         if (const auto self = weakSelf.lock()) {
             self->runNativeSocketBridge(socketId, bridgeState);
         } else {
             rsp::os::closeSocket(bridgeState->bridgeSocket);
         }
     });
-
-    return applicationSocket;
 }
 
 bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
@@ -1032,6 +1038,48 @@ void RSPClient::runNativeSocketBridge(const rsp::GUID& socketId,
 
 }
 
+void RSPClient::runNativeListenSocketBridge(const std::shared_ptr<NativeListenBridgeState>& bridgeState) {
+    while (!bridgeState->stopping.load()) {
+        const auto reply = acceptTCPEx(bridgeState->listenSocketId, std::nullopt, 100, false, false, true);
+        if (bridgeState->stopping.load()) {
+            break;
+        }
+
+        if (!reply.has_value()) {
+            break;
+        }
+
+        if (reply->error() == rsp::proto::TIMED_OUT) {
+            continue;
+        }
+
+        if ((reply->error() != rsp::proto::SUCCESS && reply->error() != rsp::proto::NEW_CONNECTION) ||
+            !reply->has_new_socket_id()) {
+            if (reply->error() == rsp::proto::SOCKET_CLOSED) {
+                break;
+            }
+
+            continue;
+        }
+
+        const auto socketId = fromProtoSocketId(reply->new_socket_id());
+        if (!socketId.has_value()) {
+            continue;
+        }
+
+        const auto bridgeSocket = rsp::os::connectLocalListenerSocket(bridgeState->localEndpoint);
+        if (!rsp::os::isValidSocket(bridgeSocket)) {
+            socketClose(*socketId);
+            break;
+        }
+
+        const auto socketBridge = attachNativeSocketBridge(*socketId, bridgeSocket);
+        startNativeSocketBridgeWorker(*socketId, socketBridge);
+    }
+
+    socketClose(bridgeState->listenSocketId);
+}
+
 void RSPClient::stopNativeSocketBridges() {
     std::vector<std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges;
     {
@@ -1046,6 +1094,27 @@ void RSPClient::stopNativeSocketBridges() {
         bridgeState->remoteClosed.store(true);
         bridgeState->stopping.store(true);
         rsp::os::closeSocket(bridgeState->bridgeSocket);
+        if (bridgeState->worker.joinable() && bridgeState->worker.get_id() != std::this_thread::get_id()) {
+            bridgeState->worker.join();
+        }
+    }
+}
+
+void RSPClient::stopNativeListenBridges() {
+    std::vector<std::shared_ptr<NativeListenBridgeState>> nativeListenBridges;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        for (auto& [_, bridgeState] : nativeListenBridges_) {
+            nativeListenBridges.push_back(bridgeState);
+        }
+        nativeListenBridges_.clear();
+    }
+
+    for (auto& bridgeState : nativeListenBridges) {
+        bridgeState->stopping.store(true);
+    }
+
+    for (auto& bridgeState : nativeListenBridges) {
         if (bridgeState->worker.joinable() && bridgeState->worker.get_id() != std::this_thread::get_id()) {
             bridgeState->worker.join();
         }
@@ -1072,6 +1141,32 @@ void RSPClient::stopNativeSocketBridgesForNode(const rsp::NodeID& nodeId) {
         bridgeState->remoteClosed.store(true);
         bridgeState->stopping.store(true);
         rsp::os::closeSocket(bridgeState->bridgeSocket);
+        if (bridgeState->worker.joinable() && bridgeState->worker.get_id() != std::this_thread::get_id()) {
+            bridgeState->worker.join();
+        }
+    }
+}
+
+void RSPClient::stopNativeListenBridgesForNode(const rsp::NodeID& nodeId) {
+    std::map<rsp::GUID, std::shared_ptr<NativeListenBridgeState>> nativeListenBridges;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        for (auto iterator = nativeListenBridges_.begin(); iterator != nativeListenBridges_.end();) {
+            if (iterator->second->nodeId == nodeId) {
+                nativeListenBridges.emplace(iterator->first, iterator->second);
+                iterator = nativeListenBridges_.erase(iterator);
+                continue;
+            }
+
+            ++iterator;
+        }
+    }
+
+    for (auto& [_, bridgeState] : nativeListenBridges) {
+        bridgeState->stopping.store(true);
+    }
+
+    for (auto& [_, bridgeState] : nativeListenBridges) {
         if (bridgeState->worker.joinable() && bridgeState->worker.get_id() != std::this_thread::get_id()) {
             bridgeState->worker.join();
         }

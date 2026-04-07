@@ -1,6 +1,10 @@
 #include "os/os_socket.hpp"
 
+#include <atomic>
+#include <cstddef>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <set>
 #include <string>
 
@@ -9,6 +13,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 namespace rsp::os {
@@ -18,6 +23,10 @@ namespace {
 int toNative(SocketHandle socketHandle) {
     return static_cast<int>(socketHandle);
 }
+
+std::atomic<uint64_t> g_localListenerCounter = 1;
+std::mutex g_localListenerPathsMutex;
+std::map<SocketHandle, std::string> g_localListenerPaths;
 
 SocketHandle fromNative(int socketHandle) {
     return static_cast<SocketHandle>(socketHandle);
@@ -87,6 +96,69 @@ bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket) {
     firstSocket = fromNative(sockets[0]);
     secondSocket = fromNative(sockets[1]);
     return true;
+}
+
+bool createLocalListenerSocket(SocketHandle& listenerSocket, std::string& endpoint, int backlog) {
+    listenerSocket = invalidSocket();
+
+    const int socketHandle = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socketHandle < 0) {
+        return false;
+    }
+
+    sockaddr_un address = {};
+    address.sun_family = AF_UNIX;
+    endpoint = "/tmp/rsp-local-" + std::to_string(getpid()) + "-" + std::to_string(g_localListenerCounter.fetch_add(1));
+    if (endpoint.size() >= sizeof(address.sun_path)) {
+        close(socketHandle);
+        return false;
+    }
+
+#ifdef __APPLE__
+    address.sun_len = static_cast<uint8_t>(sizeof(sockaddr_un));
+#endif
+    std::memcpy(address.sun_path, endpoint.c_str(), endpoint.size() + 1);
+    unlink(endpoint.c_str());
+    const auto addressLength = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + endpoint.size() + 1);
+    if (bind(socketHandle, reinterpret_cast<const sockaddr*>(&address), addressLength) != 0 ||
+        listen(socketHandle, backlog) != 0) {
+        unlink(endpoint.c_str());
+        close(socketHandle);
+        return false;
+    }
+
+    listenerSocket = fromNative(socketHandle);
+    {
+        std::lock_guard<std::mutex> lock(g_localListenerPathsMutex);
+        g_localListenerPaths[listenerSocket] = endpoint;
+    }
+
+    return true;
+}
+
+SocketHandle connectLocalListenerSocket(const std::string& endpoint) {
+    sockaddr_un address = {};
+    address.sun_family = AF_UNIX;
+    if (endpoint.empty() || endpoint.size() >= sizeof(address.sun_path)) {
+        return invalidSocket();
+    }
+
+    const int socketHandle = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (socketHandle < 0) {
+        return invalidSocket();
+    }
+
+#ifdef __APPLE__
+    address.sun_len = static_cast<uint8_t>(sizeof(sockaddr_un));
+#endif
+    std::memcpy(address.sun_path, endpoint.c_str(), endpoint.size() + 1);
+    const auto addressLength = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + endpoint.size() + 1);
+    if (connect(socketHandle, reinterpret_cast<const sockaddr*>(&address), addressLength) != 0) {
+        close(socketHandle);
+        return invalidSocket();
+    }
+
+    return fromNative(socketHandle);
 }
 
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog) {
@@ -192,6 +264,20 @@ std::vector<IPAddress> listNonLocalAddresses() {
 
 void closeSocket(SocketHandle socketHandle) {
     if (isValidSocket(socketHandle)) {
+        std::string path;
+        {
+            std::lock_guard<std::mutex> lock(g_localListenerPathsMutex);
+            const auto iterator = g_localListenerPaths.find(socketHandle);
+            if (iterator != g_localListenerPaths.end()) {
+                path = iterator->second;
+                g_localListenerPaths.erase(iterator);
+            }
+        }
+
+        if (!path.empty()) {
+            unlink(path.c_str());
+        }
+
         close(toNative(socketHandle));
     }
 }

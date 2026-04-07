@@ -5,6 +5,7 @@
 #include "common/node.hpp"
 #include "os/os_socket.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <cstddef>
@@ -83,6 +84,9 @@ public:
                                                      bool shareChildSockets = false,
                                                      bool childrenUseSocket = false,
                                                      bool childrenAsyncData = false);
+    RSPCLIENT_API std::optional<rsp::os::SocketHandle> listenTCPSocket(rsp::NodeID nodeId,
+                                                                       const std::string& hostPort,
+                                                                       uint32_t timeoutMilliseconds = 0);
     RSPCLIENT_API std::optional<rsp::proto::SocketReply> acceptTCPEx(const rsp::GUID& listenSocketId,
                                                                      const std::optional<rsp::GUID>& newSocketId = std::nullopt,
                                                                      uint32_t timeoutMilliseconds = 0,
@@ -136,6 +140,14 @@ private:
         std::thread worker;
     };
 
+    struct NativeListenBridgeState {
+        rsp::GUID listenSocketId;
+        rsp::NodeID nodeId;
+        std::string localEndpoint;
+        std::atomic<bool> stopping = false;
+        std::thread worker;
+    };
+
     explicit RSPClient(KeyPair keyPair);
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
@@ -146,10 +158,17 @@ private:
     void handlePingReply(const rsp::proto::RSPMessage& message);
     void handleSocketReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
+    std::shared_ptr<NativeSocketBridgeState> attachNativeSocketBridge(const rsp::GUID& socketId,
+                                                                      rsp::os::SocketHandle bridgeSocket);
+    void startNativeSocketBridgeWorker(const rsp::GUID& socketId,
+                                       const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
     void runNativeSocketBridge(const rsp::GUID& socketId,
                                const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
+    void runNativeListenSocketBridge(const std::shared_ptr<NativeListenBridgeState>& bridgeState);
     void stopNativeSocketBridges();
     void stopNativeSocketBridgesForNode(const rsp::NodeID& nodeId);
+    void stopNativeListenBridges();
+    void stopNativeListenBridgesForNode(const rsp::NodeID& nodeId);
     static rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId);
     static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
     static std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId);
@@ -167,6 +186,7 @@ private:
     std::map<rsp::GUID, std::deque<rsp::proto::SocketReply>> socketReplyQueues_;
     std::set<rsp::GUID> awaitedSocketReplies_;
     std::map<rsp::GUID, std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges_;
+    std::map<rsp::GUID, std::shared_ptr<NativeListenBridgeState>> nativeListenBridges_;
     std::map<rsp::GUID, rsp::NodeID> socketRoutes_;
     uint32_t nextPingSequence_ = 1;
     bool stopping_ = false;

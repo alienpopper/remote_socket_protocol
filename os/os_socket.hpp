@@ -39,6 +39,8 @@ SocketHandle invalidSocket();
 bool isValidSocket(SocketHandle socketHandle);
 
 bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket);
+bool createLocalListenerSocket(SocketHandle& listenerSocket, std::string& endpoint, int backlog = 16);
+SocketHandle connectLocalListenerSocket(const std::string& endpoint);
 
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog);
 SocketHandle acceptSocket(SocketHandle listener);

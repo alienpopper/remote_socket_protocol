@@ -1,6 +1,7 @@
 #include "os/os_socket.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <set>
 #include <string>
 
@@ -136,6 +137,50 @@ bool createSocketPair(SocketHandle& firstSocket, SocketHandle& secondSocket) {
     firstSocket = fromNative(clientSocket);
     secondSocket = fromNative(serverSocket);
     return true;
+}
+
+bool createLocalListenerSocket(SocketHandle& listenerSocket, std::string& endpoint, int backlog) {
+    listenerSocket = invalidSocket();
+
+    SOCKET socketHandle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socketHandle == INVALID_SOCKET) {
+        return false;
+    }
+
+    sockaddr_in address = {};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    if (bind(socketHandle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 ||
+        listen(socketHandle, backlog) != 0) {
+        closesocket(socketHandle);
+        return false;
+    }
+
+    int addressLength = sizeof(address);
+    if (getsockname(socketHandle, reinterpret_cast<sockaddr*>(&address), &addressLength) != 0) {
+        closesocket(socketHandle);
+        return false;
+    }
+
+    listenerSocket = fromNative(socketHandle);
+    endpoint = "127.0.0.1:" + std::to_string(ntohs(address.sin_port));
+    return true;
+}
+
+SocketHandle connectLocalListenerSocket(const std::string& endpoint) {
+    const auto separator = endpoint.rfind(':');
+    if (separator == std::string::npos) {
+        return invalidSocket();
+    }
+
+    const std::string address = endpoint.substr(0, separator);
+    const auto portValue = std::stoul(endpoint.substr(separator + 1));
+    if (portValue > UINT16_MAX) {
+        return invalidSocket();
+    }
+
+    return connectTcp(address, static_cast<uint16_t>(portValue));
 }
 
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog) {
