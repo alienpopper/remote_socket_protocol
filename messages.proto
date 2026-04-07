@@ -57,8 +57,9 @@ message Identity {
 }
 
 //Reply should be an Identity
+//if nonce is not present, any node can reply with an Identity from their cache
 message ChallengeRequest {
-    Uuid nonce = 1;
+    optional Uuid nonce = 1;
 }
 
 message RouteEntry {

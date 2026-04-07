@@ -90,6 +90,12 @@ std::string randomChallengeNonce() {
     return nonce;
 }
 
+rsp::proto::Identity sanitizedIdentityForCache(const rsp::proto::Identity& identity) {
+    rsp::proto::Identity cachedIdentity;
+    *cachedIdentity.mutable_public_key() = identity.public_key();
+    return cachedIdentity;
+}
+
 }  // namespace
 
 IdentityCache::IdentityCache(NodeID localNodeId, SendMessageCallback sendMessageCallback, size_t maximumEntries)
@@ -165,6 +171,8 @@ bool IdentityCache::cacheIdentity(const rsp::proto::Identity& identity,
         return false;
     }
 
+    const rsp::proto::Identity cachedIdentity = sanitizedIdentityForCache(identity);
+
     if (sourceNodeId.has_value() && *sourceNodeId != *derivedNodeId) {
         return false;
     }
@@ -174,13 +182,13 @@ bool IdentityCache::cacheIdentity(const rsp::proto::Identity& identity,
     if (existing != entries_.end()) {
         usageOrder_.erase(existing->second.usage);
         usageOrder_.push_front(*derivedNodeId);
-        existing->second.identity = identity;
+        existing->second.identity = cachedIdentity;
         existing->second.usage = usageOrder_.begin();
         return true;
     }
 
     usageOrder_.push_front(*derivedNodeId);
-    entries_[*derivedNodeId] = CacheEntry{identity, usageOrder_.begin()};
+    entries_[*derivedNodeId] = CacheEntry{cachedIdentity, usageOrder_.begin()};
     trimToLimitLocked();
     return true;
 }

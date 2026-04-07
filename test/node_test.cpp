@@ -77,6 +77,7 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
 rsp::proto::RSPMessage makeIdentityMessage(const rsp::KeyPair& keyPair) {
     rsp::proto::RSPMessage message;
     *message.mutable_source() = toProtoNodeId(keyPair.nodeID());
+    message.mutable_identity()->mutable_nonce()->set_value("identity-nonce");
     *message.mutable_identity()->mutable_public_key() = keyPair.publicKey();
     return message;
 }
@@ -145,6 +146,8 @@ void testIdentityMessagesAreCachedByNodeId() {
     require(cachedIdentity.has_value(), "node should expose cached identities");
     require(cachedIdentity->public_key().public_key() == identityKey.publicKey().public_key(),
             "cached identity should preserve the public key payload");
+        require(!cachedIdentity->has_nonce(),
+            "node identity cache should not retain the identity nonce");
 }
 
 void testIdentityCacheEvictsLeastRecentlyUsedEntries() {
