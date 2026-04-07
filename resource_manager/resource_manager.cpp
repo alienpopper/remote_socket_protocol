@@ -88,6 +88,8 @@ protected:
             return;
         }
 
+        owner_.observeMessage(message);
+
         if (!owner_.routeAndSend(message)) {
             std::cerr << "ResourceManager failed to route incoming message" << std::endl;
         }

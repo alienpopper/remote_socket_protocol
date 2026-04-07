@@ -1,6 +1,7 @@
 #define RSPCLIENT_STATIC
 
 #include "client/cpp/rsp_client.hpp"
+#include "client/cpp_full/rsp_client.hpp"
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
 #include "endorsement_service/endorsement_service.hpp"
@@ -62,6 +63,17 @@ std::string bufferToString(const rsp::Buffer& value) {
     }
 
     return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
 }
 
 rsp::Endorsement parseEndorsement(const rsp::proto::Endorsement& message) {
@@ -241,6 +253,52 @@ void testClientRequestsNetworkAccessEndorsement() {
     serverTransport->stop();
 }
 
+void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
+    rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID esNodeId = esKeyPair.nodeID();
+    const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
+    const rsp::proto::PublicKey clientPublicKey = clientKeyPair.publicKey();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto client = rsp::client::full::RSPClient::create(std::move(clientKeyPair));
+
+    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both the client and endorsement service before forwarding identities");
+
+    rsp::proto::RSPMessage identityMessage;
+    *identityMessage.mutable_source() = toProtoNodeId(clientNodeId);
+    *identityMessage.mutable_destination() = toProtoNodeId(esNodeId);
+    *identityMessage.mutable_identity()->mutable_public_key() = clientPublicKey;
+
+    require(client->send(identityMessage),
+            "full client should be able to send an identity message through the resource manager");
+    require(waitForCondition([&resourceManager, &clientNodeId]() {
+                return resourceManager.identityCache().contains(clientNodeId);
+            }),
+            "resource manager should cache forwarded identity messages");
+    require(waitForCondition([&es, &clientNodeId]() {
+                return es->identityCache().contains(clientNodeId);
+            }),
+            "endorsement service should cache forwarded identity messages addressed to it");
+
+    require(es->removeConnection(esConnectionId),
+            "endorsement service should remove its resource manager connection after forwarded identity test");
+    require(client->removeConnection(clientConnectionId),
+            "full client should remove its resource manager connection after forwarded identity test");
+
+    serverTransport->stop();
+}
+
 }  // namespace
 
 int main() {
@@ -253,6 +311,9 @@ int main() {
 
         testClientRequestsNetworkAccessEndorsement();
         std::cout << "testClientRequestsNetworkAccessEndorsement: PASSED\n";
+
+        testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches();
+        std::cout << "testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches: PASSED\n";
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << '\n';
         return 1;

@@ -1,6 +1,7 @@
 #include "common/node.hpp"
 
 #include <chrono>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -17,7 +18,11 @@ public:
     }
 
 protected:
-    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage&) override {
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override {
+        if (message.has_identity()) {
+            return true;
+        }
+
         return false;
     }
 
@@ -28,6 +33,10 @@ public:
 
     void pauseOutputQueue() {
         outputQueue()->pause();
+    }
+
+    rsp::NodeID nodeId() const {
+        return keyPair().nodeID();
     }
 
     bool tryPopOutput(rsp::proto::RSPMessage& message) {
@@ -52,6 +61,24 @@ bool waitForCondition(const std::function<bool()>& condition) {
     }
 
     return condition();
+}
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
+}
+
+rsp::proto::RSPMessage makeIdentityMessage(const rsp::KeyPair& keyPair) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_source() = toProtoNodeId(keyPair.nodeID());
+    *message.mutable_identity()->mutable_public_key() = keyPair.publicKey();
+    return message;
 }
 
 rsp::proto::RSPMessage makePingRequest() {
@@ -105,12 +132,70 @@ void testUnsupportedMessageProducesError() {
     require(reply.destination().value() == "requester-node", "error reply should target the original sender");
 }
 
+void testIdentityMessagesAreCachedByNodeId() {
+    TestNode node;
+    rsp::KeyPair identityKey = rsp::KeyPair::generateP256();
+
+    require(node.enqueueInput(makeIdentityMessage(identityKey)),
+            "node should accept an identity message on its input queue");
+    require(node.identityCache().contains(identityKey.nodeID()),
+            "node should cache identity messages using the sender NodeID derived from the public key");
+
+    const auto cachedIdentity = node.identityCache().get(identityKey.nodeID());
+    require(cachedIdentity.has_value(), "node should expose cached identities");
+    require(cachedIdentity->public_key().public_key() == identityKey.publicKey().public_key(),
+            "cached identity should preserve the public key payload");
+}
+
+void testIdentityCacheEvictsLeastRecentlyUsedEntries() {
+    TestNode node;
+    node.identityCache().setMaximumEntries(1);
+
+    rsp::KeyPair firstIdentityKey = rsp::KeyPair::generateP256();
+    rsp::KeyPair secondIdentityKey = rsp::KeyPair::generateP256();
+
+    require(node.enqueueInput(makeIdentityMessage(firstIdentityKey)),
+            "node should cache the first identity message");
+    require(node.enqueueInput(makeIdentityMessage(secondIdentityKey)),
+            "node should cache the second identity message");
+    require(!node.identityCache().contains(firstIdentityKey.nodeID()),
+            "identity cache should evict the least recently used entry when over capacity");
+    require(node.identityCache().contains(secondIdentityKey.nodeID()),
+            "identity cache should keep the most recent identity after eviction");
+}
+
+void testIdentityCacheCanSendChallengeRequests() {
+    TestNode node;
+    node.pauseOutputQueue();
+
+    const rsp::NodeID targetNodeId = rsp::KeyPair::generateP256().nodeID();
+    require(node.identityCache().sendChallengeRequest(targetNodeId),
+            "identity cache should send challenge requests through the owning node output queue");
+    require(waitForCondition([&node]() { return node.pendingOutputCount() == 1; }),
+            "challenge requests should be enqueued on the node output queue");
+
+    rsp::proto::RSPMessage challengeRequest;
+    require(node.tryPopOutput(challengeRequest),
+            "node should allow inspection of the generated challenge request");
+    require(challengeRequest.has_challenge_request(),
+            "identity cache helper should emit a challenge request message");
+    require(challengeRequest.destination().value() == toProtoNodeId(targetNodeId).value(),
+            "challenge request should target the requested node");
+    require(challengeRequest.source().value() == toProtoNodeId(node.nodeId()).value(),
+            "challenge request should originate from the owning node");
+    require(challengeRequest.challenge_request().nonce().value().size() == 16,
+            "challenge request helper should generate a 16-byte nonce");
+}
+
 }  // namespace
 
 int main() {
     try {
         testPingProducesReply();
         testUnsupportedMessageProducesError();
+        testIdentityMessagesAreCachedByNodeId();
+        testIdentityCacheEvictsLeastRecentlyUsedEntries();
+        testIdentityCacheCanSendChallengeRequests();
         std::cout << "node_test passed\n";
         return 0;
     } catch (const std::exception& exception) {

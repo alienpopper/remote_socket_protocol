@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 #include <utility>
 
 namespace rsp {
@@ -62,7 +63,135 @@ rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
     return protoDateTime;
 }
 
+std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
+    if (nodeId.value().size() != 16) {
+        return std::nullopt;
+    }
+
+    uint64_t high = 0;
+    uint64_t low = 0;
+    std::memcpy(&high, nodeId.value().data(), sizeof(high));
+    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
+    return rsp::NodeID(high, low);
+}
+
+std::optional<rsp::NodeID> nodeIdFromIdentity(const rsp::proto::Identity& identity) {
+    try {
+        const rsp::KeyPair identityKey = rsp::KeyPair::fromPublicKey(identity.public_key());
+        return identityKey.nodeID();
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+std::string randomChallengeNonce() {
+    std::string nonce(16, '\0');
+    rsp::os::randomFill(reinterpret_cast<uint8_t*>(nonce.data()), static_cast<uint32_t>(nonce.size()));
+    return nonce;
+}
+
 }  // namespace
+
+IdentityCache::IdentityCache(NodeID localNodeId, SendMessageCallback sendMessageCallback, size_t maximumEntries)
+    : maximumEntries_(maximumEntries),
+      localNodeId_(localNodeId),
+      sendMessageCallback_(std::move(sendMessageCallback)) {
+}
+
+bool IdentityCache::observeMessage(const rsp::proto::RSPMessage& message) {
+    if (!message.has_identity()) {
+        return false;
+    }
+
+    const auto sourceNodeId = message.has_source() ? fromProtoNodeId(message.source()) : std::nullopt;
+    return cacheIdentity(message.identity(), sourceNodeId);
+}
+
+bool IdentityCache::sendChallengeRequest(const rsp::NodeID& nodeId) const {
+    SendMessageCallback sendMessageCallback;
+    std::optional<rsp::NodeID> localNodeId;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        sendMessageCallback = sendMessageCallback_;
+        localNodeId = localNodeId_;
+    }
+
+    if (!sendMessageCallback || !localNodeId.has_value()) {
+        return false;
+    }
+
+    rsp::proto::RSPMessage challengeRequest;
+    *challengeRequest.mutable_source() = toProtoNodeId(*localNodeId);
+    *challengeRequest.mutable_destination() = toProtoNodeId(nodeId);
+    challengeRequest.mutable_challenge_request()->mutable_nonce()->set_value(randomChallengeNonce());
+    return sendMessageCallback(std::move(challengeRequest));
+}
+
+std::optional<rsp::proto::Identity> IdentityCache::get(const rsp::NodeID& nodeId) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto iterator = entries_.find(nodeId);
+    if (iterator == entries_.end()) {
+        return std::nullopt;
+    }
+
+    return iterator->second.identity;
+}
+
+bool IdentityCache::contains(const rsp::NodeID& nodeId) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return entries_.find(nodeId) != entries_.end();
+}
+
+size_t IdentityCache::size() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return entries_.size();
+}
+
+size_t IdentityCache::maximumEntries() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return maximumEntries_;
+}
+
+void IdentityCache::setMaximumEntries(size_t maximumEntries) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    maximumEntries_ = maximumEntries;
+    trimToLimitLocked();
+}
+
+bool IdentityCache::cacheIdentity(const rsp::proto::Identity& identity,
+                                  const std::optional<rsp::NodeID>& sourceNodeId) {
+    const auto derivedNodeId = nodeIdFromIdentity(identity);
+    if (!derivedNodeId.has_value()) {
+        return false;
+    }
+
+    if (sourceNodeId.has_value() && *sourceNodeId != *derivedNodeId) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto existing = entries_.find(*derivedNodeId);
+    if (existing != entries_.end()) {
+        usageOrder_.erase(existing->second.usage);
+        usageOrder_.push_front(*derivedNodeId);
+        existing->second.identity = identity;
+        existing->second.usage = usageOrder_.begin();
+        return true;
+    }
+
+    usageOrder_.push_front(*derivedNodeId);
+    entries_[*derivedNodeId] = CacheEntry{identity, usageOrder_.begin()};
+    trimToLimitLocked();
+    return true;
+}
+
+void IdentityCache::trimToLimitLocked() {
+    while (entries_.size() > maximumEntries_) {
+        const rsp::NodeID leastRecent = usageOrder_.back();
+        usageOrder_.pop_back();
+        entries_.erase(leastRecent);
+    }
+}
 
 void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState&) {
     if (owner_.handleNodeSpecificMessage(message)) {
@@ -99,7 +228,10 @@ RSPNode::RSPNode() : RSPNode(KeyPair::generateP256()) {
 RSPNode::RSPNode(KeyPair keyPair)
     : keyPair_(std::move(keyPair)),
       inputQueue_(std::make_shared<NodeInputQueue>(*this)),
-    outputQueue_(std::make_shared<NodeOutputQueue>(*this)) {
+            outputQueue_(std::make_shared<NodeOutputQueue>(*this)),
+            identityCache_(keyPair_.nodeID(), [this](rsp::proto::RSPMessage message) {
+                    return outputQueue_ != nullptr && outputQueue_->push(std::move(message));
+            }) {
     rsp::os::randomFill(instanceSeed_.data(), static_cast<uint32_t>(instanceSeed_.size()));
     inputQueue_->setWorkerCount(1);
     inputQueue_->start();
@@ -118,7 +250,12 @@ RSPNode::~RSPNode() {
 }
 
 bool RSPNode::enqueueInput(rsp::proto::RSPMessage message) const {
+    observeMessage(message);
     return inputQueue_ != nullptr && inputQueue_->push(std::move(message));
+}
+
+void RSPNode::observeMessage(const rsp::proto::RSPMessage& message) const {
+    identityCache_.observeMessage(message);
 }
 
 size_t RSPNode::pendingInputCount() const {
@@ -143,6 +280,14 @@ rsp::MessageQueueHandle RSPNode::inputQueue() const {
 
 rsp::MessageQueueHandle RSPNode::outputQueue() const {
     return outputQueue_;
+}
+
+IdentityCache& RSPNode::identityCache() {
+    return identityCache_;
+}
+
+const IdentityCache& RSPNode::identityCache() const {
+    return identityCache_;
 }
 
 }  // namespace rsp
