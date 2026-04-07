@@ -232,7 +232,11 @@ SocketHandle connectTcp(const std::string& address, uint16_t port) {
 }
 
 int sendSocket(SocketHandle socketHandle, const uint8_t* data, uint32_t length) {
-    return static_cast<int>(send(toNative(socketHandle), data, length, 0));
+    int flags = 0;
+#ifdef MSG_NOSIGNAL
+    flags |= MSG_NOSIGNAL;
+#endif
+    return static_cast<int>(send(toNative(socketHandle), data, length, flags));
 }
 
 int recvSocket(SocketHandle socketHandle, uint8_t* buffer, uint32_t length) {
