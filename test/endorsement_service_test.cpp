@@ -1,6 +1,7 @@
 #define RSPCLIENT_STATIC
 
 #include "client/cpp/rsp_client.hpp"
+#include "client/cpp/rsp_client_message.hpp"
 #include "client/cpp_full/rsp_client.hpp"
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
@@ -47,6 +48,11 @@ bool waitForCondition(const std::function<bool()>& condition) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return condition();
+}
+
+bool parseEndorsementMessage(const rsp::Endorsement& endorsement, rsp::proto::Endorsement& message) {
+    const rsp::Buffer serialized = endorsement.serialize();
+    return message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()));
 }
 
 rsp::Buffer stringToBuffer(const std::string& value) {
@@ -253,6 +259,67 @@ void testClientRequestsNetworkAccessEndorsement() {
     serverTransport->stop();
 }
 
+    void testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID esNodeId = esKeyPair.nodeID();
+
+        rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
+        rsp::KeyPair clientSigningKey = clientKeyPair.duplicate();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+
+        auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+        auto client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
+
+        const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both participants before raw endorsement requests");
+
+        rsp::DateTime requestedValidUntil;
+        requestedValidUntil += DAYS(1);
+        const rsp::Endorsement requested = rsp::Endorsement::createSigned(
+            clientSigningKey,
+        clientNodeId,
+        ETYPE_ACCESS,
+        stringToBuffer(EVALUE_ACCESS_NETWORK.toString()),
+        requestedValidUntil);
+
+        rsp::proto::Endorsement requestedMessage;
+        require(parseEndorsementMessage(requested, requestedMessage),
+            "test endorsement request should parse into the protobuf endorsement message");
+
+        rsp::proto::RSPMessage request;
+        *request.mutable_source() = toProtoNodeId(clientNodeId);
+        *request.mutable_destination() = toProtoNodeId(esNodeId);
+        *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
+
+        require(client->send(request), "raw client should send the unsigned-identity endorsement request");
+        require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
+            "raw client should receive an endorsement response");
+
+        rsp::proto::RSPMessage reply;
+        require(client->tryDequeueMessage(reply), "raw client should expose the endorsement reply");
+        require(reply.has_endorsement_done(), "endorsement service should respond with an endorsement result");
+        require(reply.endorsement_done().status() == rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY,
+            "endorsement service should reject requests whose identity is not yet cached");
+        require(!es->identityCache().contains(clientNodeId),
+            "endorsement service should not populate the identity cache from a begin request alone");
+
+        require(es->removeConnection(esConnectionId),
+            "endorsement service should remove its resource manager connection after raw endorsement failure test");
+        require(client->removeConnection(clientConnectionId),
+            "raw client should remove its resource manager connection after raw endorsement failure test");
+
+        serverTransport->stop();
+    }
+
 void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches() {
     auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
     TestResourceManager resourceManager({serverTransport});
@@ -311,6 +378,9 @@ int main() {
 
         testClientRequestsNetworkAccessEndorsement();
         std::cout << "testClientRequestsNetworkAccessEndorsement: PASSED\n";
+
+        testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity();
+        std::cout << "testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity: PASSED\n";
 
         testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches();
         std::cout << "testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches: PASSED\n";

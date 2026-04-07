@@ -169,6 +169,10 @@ private:
     void handleEndorsementDone(const rsp::proto::RSPMessage& message);
     void handleSocketReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
+    bool sendIdentity(rsp::NodeID nodeId);
+    bool sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
+                                            const rsp::proto::Endorsement& requestedMessage);
+    std::optional<rsp::proto::EndorsementDone> waitForPendingEndorsement(const std::string& pendingKey);
     std::shared_ptr<NativeSocketBridgeState> attachNativeSocketBridge(const rsp::GUID& socketId,
                                                                       rsp::os::SocketHandle bridgeSocket);
     void startNativeSocketBridgeWorker(const rsp::GUID& socketId,

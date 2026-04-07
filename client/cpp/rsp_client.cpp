@@ -292,26 +292,56 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
         return std::nullopt;
     }
 
-    rsp::proto::PublicKey requesterPublicKey = keyPair().publicKey();
-    std::string serializedPublicKey;
-    if (!requesterPublicKey.SerializeToString(&serializedPublicKey)) {
+    bool repairedUnknownIdentity = false;
+    while (true) {
+        if (!sendBeginEndorsementRequestMessage(nodeId, requestedMessage)) {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            pendingEndorsements_.erase(pendingKey);
+            return std::nullopt;
+        }
+
+        auto reply = waitForPendingEndorsement(pendingKey);
+        if (!reply.has_value()) {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            pendingEndorsements_.erase(pendingKey);
+            return std::nullopt;
+        }
+
+        if (!repairedUnknownIdentity && reply->status() == rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY) {
+            if (!sendIdentity(nodeId)) {
+                std::lock_guard<std::mutex> lock(stateMutex_);
+                pendingEndorsements_.erase(pendingKey);
+                return std::nullopt;
+            }
+
+            repairedUnknownIdentity = true;
+            continue;
+        }
+
         std::lock_guard<std::mutex> lock(stateMutex_);
         pendingEndorsements_.erase(pendingKey);
-        return std::nullopt;
+        return reply;
     }
+}
 
+bool RSPClient::sendIdentity(rsp::NodeID nodeId) {
+    rsp::proto::RSPMessage identityMessage;
+    *identityMessage.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *identityMessage.mutable_destination() = toProtoNodeId(nodeId);
+    *identityMessage.mutable_identity()->mutable_public_key() = keyPair().publicKey();
+    return messageClient_ != nullptr && messageClient_->send(identityMessage);
+}
+
+bool RSPClient::sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
+                                                   const rsp::proto::Endorsement& requestedMessage) {
     rsp::proto::RSPMessage request;
     *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(nodeId);
     *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
-    request.mutable_begin_endorsement_request()->set_auth_data(serializedPublicKey);
+    return messageClient_ != nullptr && messageClient_->send(request);
+}
 
-    if (!messageClient_->send(request)) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        pendingEndorsements_.erase(pendingKey);
-        return std::nullopt;
-    }
-
+std::optional<rsp::proto::EndorsementDone> RSPClient::waitForPendingEndorsement(const std::string& pendingKey) {
     std::unique_lock<std::mutex> lock(stateMutex_);
     const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this, &pendingKey]() {
         const auto iterator = pendingEndorsements_.find(pendingKey);
@@ -319,12 +349,12 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
     });
     const auto iterator = pendingEndorsements_.find(pendingKey);
     if (!replied || stopping_ || iterator == pendingEndorsements_.end()) {
-        pendingEndorsements_.erase(pendingKey);
         return std::nullopt;
     }
 
     auto reply = iterator->second.reply;
-    pendingEndorsements_.erase(iterator);
+    iterator->second.completed = false;
+    iterator->second.reply.reset();
     return reply;
 }
 
