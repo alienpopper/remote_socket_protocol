@@ -90,6 +90,16 @@ bool sendAllToSocket(rsp::os::SocketHandle socketHandle, const uint8_t* data, st
     return true;
 }
 
+void removeBufferedReply(std::deque<rsp::proto::SocketReply>& pendingReplies,
+                         const rsp::proto::SocketReply& reply) {
+    for (auto iterator = pendingReplies.begin(); iterator != pendingReplies.end(); ++iterator) {
+        if (socketRepliesMatch(*iterator, reply)) {
+            pendingReplies.erase(iterator);
+            return;
+        }
+    }
+}
+
 }  // namespace
 
 RSPClient::Ptr RSPClient::create() {
@@ -526,9 +536,38 @@ std::optional<rsp::os::SocketHandle> RSPClient::acceptTCPSocket(const rsp::GUID&
 
     auto bridgeState = std::make_shared<NativeSocketBridgeState>();
     bridgeState->bridgeSocket = bridgeSocket;
+
+    std::deque<rsp::proto::SocketReply> bufferedReplies;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         nativeSocketBridges_[*socketId] = bridgeState;
+        const auto queuedReplies = socketReplyQueues_.find(*socketId);
+        if (queuedReplies != socketReplyQueues_.end()) {
+            bufferedReplies = std::move(queuedReplies->second);
+            socketReplyQueues_.erase(queuedReplies);
+            for (const auto& reply : bufferedReplies) {
+                removeBufferedReply(pendingSocketReplies_, reply);
+            }
+        }
+    }
+
+    for (const auto& reply : bufferedReplies) {
+        if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
+            if (!sendAllToSocket(bridgeState->bridgeSocket,
+                                 reinterpret_cast<const uint8_t*>(reply.data().data()),
+                                 reply.data().size())) {
+                bridgeState->stopping.store(true);
+                rsp::os::closeSocket(bridgeState->bridgeSocket);
+                break;
+            }
+
+            continue;
+        }
+
+        bridgeState->remoteClosed.store(true);
+        bridgeState->stopping.store(true);
+        rsp::os::closeSocket(bridgeState->bridgeSocket);
+        break;
     }
 
     bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId = *socketId, bridgeState]() {
@@ -569,9 +608,38 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nod
 
     auto bridgeState = std::make_shared<NativeSocketBridgeState>();
     bridgeState->bridgeSocket = bridgeSocket;
+
+    std::deque<rsp::proto::SocketReply> bufferedReplies;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         nativeSocketBridges_[*socketId] = bridgeState;
+        const auto queuedReplies = socketReplyQueues_.find(*socketId);
+        if (queuedReplies != socketReplyQueues_.end()) {
+            bufferedReplies = std::move(queuedReplies->second);
+            socketReplyQueues_.erase(queuedReplies);
+            for (const auto& reply : bufferedReplies) {
+                removeBufferedReply(pendingSocketReplies_, reply);
+            }
+        }
+    }
+
+    for (const auto& reply : bufferedReplies) {
+        if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
+            if (!sendAllToSocket(bridgeState->bridgeSocket,
+                                 reinterpret_cast<const uint8_t*>(reply.data().data()),
+                                 reply.data().size())) {
+                bridgeState->stopping.store(true);
+                rsp::os::closeSocket(bridgeState->bridgeSocket);
+                break;
+            }
+
+            continue;
+        }
+
+        bridgeState->remoteClosed.store(true);
+        bridgeState->stopping.store(true);
+        rsp::os::closeSocket(bridgeState->bridgeSocket);
+        break;
     }
 
     bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId = *socketId, bridgeState]() {
