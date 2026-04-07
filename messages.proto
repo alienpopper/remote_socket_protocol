@@ -44,8 +44,8 @@ message PublicKey {
 
 message Endorsement {
   NodeId subject = 1;
-  NodeId endorsement_service = 2;
-  Uuid endorsement_type = 3;
+    NodeId endorsement_service = 2;
+    Uuid endorsement_type = 3;
   bytes endorsement_value = 4;
   DateTime valid_until = 5;
   bytes signature = 99;
@@ -245,6 +245,51 @@ message EndorsementChallengeReply {
 message EndorsementDone {
     ENSDORSMENT_STATUS status = 1;
     Endorsement new_endorsement = 2;
+}
+
+message ERDASTEquals {
+    ERDAbstractSyntaxTree lhs = 1;
+    ERDAbstractSyntaxTree rhs = 2;
+}
+
+message ERDASTAnd {
+    ERDAbstractSyntaxTree lhs = 1;
+    ERDAbstractSyntaxTree rhs = 2;
+}
+
+message ERDASTOr {
+    ERDAbstractSyntaxTree lhs = 1;
+    ERDAbstractSyntaxTree rhs = 2;
+}
+
+message ERDASTTypeEquals {
+    EndorsementType type = 1;
+}
+
+message ERDASTValueEquals {
+    bytes value = 1;
+}
+
+message ERDASTSignerEquals {
+    NodeId signer = 1;
+}
+
+message ERDAbstractSyntaxTree {
+    oneof node_type{
+        ERDASTEquals equals = 1;
+        ERDASTAnd and = 2;
+        ERDASTOr or = 3;
+        ERDASTTypeEquals type_equals = 4;
+        ERDASTValueEquals value_equals = 5;
+        ERDASTSignerEquals signer_equals = 6;
+    }
+}
+
+/*sent when a device needs an endorsment to process the message*/
+/*throttled to 1 per second*/
+message EndorsementNeeded {
+    /*we need some reference to the message sent*/
+    ERDAbstractSyntaxTree tree = 1;
 }
 
 

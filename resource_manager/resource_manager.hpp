@@ -43,7 +43,7 @@ public:
     void processPendingEncoding(rsp::encoding::EncodingHandle encoding);
 
 private:
-    /*messages send to this RM, not routed to other nodes*/
+    /*messages sent to this RM, not routed to other nodes*/
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
     /*messages produced by this RM, not routed through*/
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
