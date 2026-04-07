@@ -120,6 +120,15 @@ bool TcpTransport::listen(const std::string& parameters) {
     return true;
 }
 
+uint16_t TcpTransport::listenedPort() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!rsp::os::isValidSocket(listener_)) {
+        return 0;
+    }
+
+    return rsp::os::getSocketPort(listener_);
+}
+
 ConnectionHandle TcpTransport::connect(const std::string& parameters) {
     std::string address;
     uint16_t port = 0;

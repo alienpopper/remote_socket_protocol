@@ -37,6 +37,7 @@ public:
     TcpTransport& operator=(const TcpTransport&) = delete;
 
     bool listen(const std::string& parameters) override;
+    uint16_t listenedPort() const;
     ConnectionHandle connect(const std::string& parameters) override;
     ConnectionHandle reconnect() override;
     void stop() override;

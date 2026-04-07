@@ -201,14 +201,11 @@ rsp::proto::RSPMessage makePingRequestMessage(const rsp::NodeID& sourceNodeId,
 }
 
 std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
-    for (uint16_t port = 35000; port < 35100; ++port) {
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (serverTransport->listen(endpoint)) {
-            return endpoint;
-        }
+    if (!serverTransport->listen("127.0.0.1:0")) {
+        throw std::runtime_error("failed to listen on a random port for handshake test");
     }
 
-    throw std::runtime_error("failed to find an available TCP port for handshake test");
+    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 }
 
 void testTcpAsciiHandshake() {

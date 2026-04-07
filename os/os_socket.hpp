@@ -43,6 +43,7 @@ bool createLocalListenerSocket(SocketHandle& listenerSocket, std::string& endpoi
 SocketHandle connectLocalListenerSocket(const std::string& endpoint);
 
 SocketHandle createTcpListener(const std::string& bindAddress, uint16_t port, int backlog);
+uint16_t getSocketPort(SocketHandle socketHandle);
 SocketHandle acceptSocket(SocketHandle listener);
 SocketHandle connectTcp(const std::string& address, uint16_t port);
 

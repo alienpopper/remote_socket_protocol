@@ -220,6 +220,24 @@ SocketHandle acceptSocket(SocketHandle listener) {
     return fromNative(accept(toNative(listener), nullptr, nullptr));
 }
 
+uint16_t getSocketPort(SocketHandle socketHandle) {
+    sockaddr_storage address = {};
+    int addressLength = sizeof(address);
+    if (getsockname(toNative(socketHandle), reinterpret_cast<sockaddr*>(&address), &addressLength) != 0) {
+        return 0;
+    }
+
+    if (address.ss_family == AF_INET) {
+        return ntohs(reinterpret_cast<const sockaddr_in*>(&address)->sin_port);
+    }
+
+    if (address.ss_family == AF_INET6) {
+        return ntohs(reinterpret_cast<const sockaddr_in6*>(&address)->sin6_port);
+    }
+
+    return 0;
+}
+
 SocketHandle connectTcp(const std::string& address, uint16_t port) {
     addrinfo hints = {};
     hints.ai_family = AF_UNSPEC;

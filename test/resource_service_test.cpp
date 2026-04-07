@@ -131,38 +131,33 @@ std::optional<std::string> recvExactSocket(const rsp::os::SocketHandle socketHan
 }
 
 std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
-    for (uint16_t port = 35100; port < 35200; ++port) {
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (serverTransport->listen(endpoint)) {
-            return endpoint;
-        }
+    if (!serverTransport->listen("127.0.0.1:0")) {
+        throw std::runtime_error("failed to listen on a random port for resource service test");
     }
 
-    throw std::runtime_error("failed to find an available TCP port for resource service test");
+    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 }
 
 std::string findSocketServerEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
-    for (uint16_t port = 35200; port < 35300; ++port) {
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (serverTransport->listen(endpoint)) {
-            return endpoint;
-        }
+    if (!serverTransport->listen("127.0.0.1:0")) {
+        throw std::runtime_error("failed to listen on a random port for socket server test");
     }
 
-    throw std::runtime_error("failed to find an available TCP port for socket server test");
+    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 }
 
-std::string findAvailableEndpoint(uint16_t firstPort, uint16_t lastPort) {
-    for (uint16_t port = firstPort; port < lastPort; ++port) {
-        auto probeTransport = std::make_shared<rsp::transport::TcpTransport>();
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (probeTransport->listen(endpoint)) {
-            probeTransport->stop();
-            return endpoint;
-        }
+std::string findAvailableEndpoint(uint16_t /*firstPort*/, uint16_t /*lastPort*/) {
+    // Bind a raw listener socket to port 0 to let the OS assign a free port,
+    // then immediately close it. This avoids starting an accept thread (which
+    // can block on stop() on Windows when closesocket doesn't interrupt accept).
+    const rsp::os::SocketHandle probe = rsp::os::createTcpListener("127.0.0.1", 0, 1);
+    if (!rsp::os::isValidSocket(probe)) {
+        throw std::runtime_error("failed to find an available TCP port");
     }
 
-    throw std::runtime_error("failed to find an available TCP port");
+    const uint16_t port = rsp::os::getSocketPort(probe);
+    rsp::os::closeSocket(probe);
+    return std::string("127.0.0.1:") + std::to_string(port);
 }
 
 std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId) {

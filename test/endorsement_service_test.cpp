@@ -5,6 +5,7 @@
 
 #include "common/ascii_handshake.hpp"
 #include "common/transport/transport_tcp.hpp"
+#include "os/os_socket.hpp"
 #include "resource_manager/resource_manager.hpp"
 
 #include <chrono>
@@ -44,27 +45,23 @@ bool waitForCondition(const std::function<bool()>& condition) {
     return condition();
 }
 
-std::string findAvailableEndpoint(uint16_t firstPort, uint16_t lastPort) {
-    for (uint16_t port = firstPort; port < lastPort; ++port) {
-        auto probeTransport = std::make_shared<rsp::transport::TcpTransport>();
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (probeTransport->listen(endpoint)) {
-            probeTransport->stop();
-            return endpoint;
-        }
+std::string findAvailableEndpoint() {
+    const rsp::os::SocketHandle probe = rsp::os::createTcpListener("127.0.0.1", 0, 1);
+    if (!rsp::os::isValidSocket(probe)) {
+        throw std::runtime_error("failed to find an available TCP port for endorsement service test");
     }
-    throw std::runtime_error("failed to find an available TCP port for endorsement service test");
+
+    const uint16_t port = rsp::os::getSocketPort(probe);
+    rsp::os::closeSocket(probe);
+    return std::string("127.0.0.1:") + std::to_string(port);
 }
 
-std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport,
-                                  uint16_t firstPort, uint16_t lastPort) {
-    for (uint16_t port = firstPort; port < lastPort; ++port) {
-        const std::string endpoint = std::string("127.0.0.1:") + std::to_string(port);
-        if (serverTransport->listen(endpoint)) {
-            return endpoint;
-        }
+std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
+    if (!serverTransport->listen("127.0.0.1:0")) {
+        throw std::runtime_error("failed to listen on a random port for endorsement service test");
     }
-    throw std::runtime_error("failed to find an available TCP port for endorsement service test");
+
+    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 }
 
 void testEndorsementServiceConnectsToResourceManager() {
@@ -84,7 +81,7 @@ void testEndorsementServiceConnectsToResourceManager() {
         }
     });
 
-    const std::string endpoint = findListeningEndpoint(serverTransport, 36100, 36200);
+    const std::string endpoint = findListeningEndpoint(serverTransport);
     const std::string transportSpec = std::string("tcp:") + endpoint;
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
@@ -132,7 +129,7 @@ void testClientPingsEndorsementService() {
     rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID esNodeId = esKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport, 36200, 36300);
+    const std::string endpoint = findListeningEndpoint(serverTransport);
     const std::string transportSpec = std::string("tcp:") + endpoint;
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
