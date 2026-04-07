@@ -18,6 +18,8 @@ MESSAGE_QUEUE_TEST_TARGET := $(BIN_DIR)/message_queue_test
 NODE_TEST_TARGET := $(BIN_DIR)/node_test
 RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
+ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
+ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -71,6 +73,11 @@ RESOURCE_SERVICE_SOURCES := \
 	resource_service/resource_service.cpp \
 	resource_service/resource_service_main.cpp
 
+ENDORSEMENT_SERVICE_SOURCES := \
+	$(FULL_CLIENT_LIBRARY_SOURCES) \
+	endorsement_service/endorsement_service.cpp \
+	endorsement_service/endorsement_service_main.cpp
+
 ifeq ($(OS),Windows_NT)
 	TARGET := $(TARGET).exe
 endif
@@ -91,6 +98,12 @@ FULL_CLIENT_LIBRARY_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT)
 RESOURCE_SERVICE_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(RESOURCE_SERVICE_SOURCES)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(PROTOBUF_GENERATED_OBJECT)
+ENDORSEMENT_SERVICE_OBJECTS := \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(ENDORSEMENT_SERVICE_SOURCES)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -168,6 +181,27 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/test/resource_service_test.o
 
+ENDORSEMENT_SERVICE_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/ascii_handshake.o \
+	$(OBJ_DIR)/common/encoding/encoding.o \
+	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)/common/transport/transport.o \
+	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/resource_manager/resource_manager.o \
+	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
+	$(OBJ_DIR)/client/cpp/rsp_client.o \
+	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
+	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
+	$(OBJ_DIR)/test/endorsement_service_test.o
+
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 CPPFLAGS ?= -I$(PROJECT_ROOT)
@@ -176,9 +210,9 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-node test-resource-service
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-node test-resource-service test-endorsement-service
 
-all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET)
+all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 
 include third_party/Makefile
 
@@ -202,6 +236,9 @@ $(RSPCLIENT_SHARED_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_
 $(RESOURCE_SERVICE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RESOURCE_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(ENDORSEMENT_SERVICE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(KEYPAIR_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(KEYPAIR_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(KEYPAIR_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -223,6 +260,9 @@ $(CLIENT_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) 
 $(RESOURCE_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RESOURCE_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(ENDORSEMENT_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
 
@@ -238,13 +278,16 @@ test-client: $(CLIENT_TEST_TARGET)
 test-resource-service: $(RESOURCE_SERVICE_TEST_TARGET)
 	$(RESOURCE_SERVICE_TEST_TARGET)
 
+test-endorsement-service: $(ENDORSEMENT_SERVICE_TEST_TARGET)
+	$(ENDORSEMENT_SERVICE_TEST_TARGET)
+
 test-keypair: $(KEYPAIR_TEST_TARGET)
 	$(KEYPAIR_TEST_TARGET)
 
 test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 	$(ENDORSEMENT_TEST_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service
+test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
@@ -287,6 +330,10 @@ $(OBJ_DIR)/test/resource_service_test.o: common/message_queue.hpp $(PROTOBUF_GEN
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/endorsement_service_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/endorsement_service/endorsement_service.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
