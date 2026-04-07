@@ -120,6 +120,17 @@ public:
         return true;
     }
 
+    bool blockingPop(Message& message, std::chrono::milliseconds timeout) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!condition_.wait_for(lock, timeout, [this]() { return !messages_.empty(); })) {
+            return false;
+        }
+
+        message = std::move(messages_.front());
+        messages_.pop_front();
+        return true;
+    }
+
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return messages_.size();

@@ -44,6 +44,7 @@ public:
     RSPCLIENT_API bool removeConnection(ClientConnectionID connectionId);
 
     RSPCLIENT_API bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
+    RSPCLIENT_API bool waitAndDequeueMessage(rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API std::size_t pendingMessageCount() const;
     RSPCLIENT_API std::optional<rsp::NodeID> peerNodeID(ClientConnectionID connectionId) const;
     RSPCLIENT_API rsp::NodeID nodeId() const;

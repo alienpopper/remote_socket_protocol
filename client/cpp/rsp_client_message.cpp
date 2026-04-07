@@ -4,6 +4,7 @@
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 #include "common/transport/transport_tcp.hpp"
 
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -138,6 +139,13 @@ bool RSPClientMessage::sendOnConnection(ClientConnectionID connectionId, const r
 
 bool RSPClientMessage::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
     return incomingMessages_ != nullptr && incomingMessages_->tryPop(message);
+}
+
+bool RSPClientMessage::waitAndDequeueMessage(rsp::proto::RSPMessage& message) const {
+    if (incomingMessages_ == nullptr) {
+        return false;
+    }
+    return incomingMessages_->blockingPop(message, std::chrono::milliseconds(50));
 }
 
 std::size_t RSPClientMessage::pendingMessageCount() const {

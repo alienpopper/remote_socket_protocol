@@ -851,13 +851,10 @@ void RSPClient::receiveLoop() {
         }
 
         rsp::proto::RSPMessage message;
-        if (messageClient_ != nullptr && messageClient_->tryDequeueMessage(message)) {
+        if (messageClient_ != nullptr && messageClient_->waitAndDequeueMessage(message)) {
             recordClientDequeueEvent(message, keyPair().nodeID());
             dispatchIncomingMessage(std::move(message));
-            continue;
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
