@@ -20,6 +20,7 @@ RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
 ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
 ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
+TRANSPORT_MEMORY_TEST_TARGET := $(BIN_DIR)/transport_memory_test
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -39,6 +40,7 @@ COMMON_SOURCES := \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
+	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
 	resource_manager/resource_manager.cpp \
 	resource_manager/resource_manager_main.cpp
 
@@ -53,6 +55,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
+	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
 	$(CLIENT_CPP_RSP_CLIENT_MESSAGE_SOURCE) \
 	$(CLIENT_CPP_RSP_CLIENT_SOURCE)
 
@@ -66,6 +69,7 @@ FULL_CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
+	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
 	$(CLIENT_CPP_FULL_RSP_CLIENT_SOURCE)
 
 RESOURCE_SERVICE_SOURCES := \
@@ -152,6 +156,7 @@ CLIENT_TEST_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -171,6 +176,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -192,6 +198,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -202,6 +209,28 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/endorsement_service_test.o
 
+TRANSPORT_MEMORY_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/ascii_handshake.o \
+	$(OBJ_DIR)/common/encoding/encoding.o \
+	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)/common/transport/transport.o \
+	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/resource_manager/resource_manager.o \
+	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
+	$(OBJ_DIR)/client/cpp/rsp_client.o \
+	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
+	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/test/transport_memory_test.o
+
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 CPPFLAGS ?= -I$(PROJECT_ROOT)
@@ -210,7 +239,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-node test-resource-service test-endorsement-service
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-node test-resource-service test-endorsement-service test-transport-memory
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 
@@ -263,6 +292,9 @@ $(RESOURCE_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_
 $(ENDORSEMENT_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(TRANSPORT_MEMORY_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
 
@@ -287,7 +319,10 @@ test-keypair: $(KEYPAIR_TEST_TARGET)
 test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 	$(ENDORSEMENT_TEST_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service
+test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
+	$(TRANSPORT_MEMORY_TEST_TARGET)
+
+test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
@@ -332,6 +367,8 @@ $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/endorsement_service_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/transport_memory_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/endorsement_service/endorsement_service.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 

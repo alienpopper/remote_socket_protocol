@@ -2,6 +2,7 @@
 
 #include "common/ascii_handshake.hpp"
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
+#include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 
 #include <chrono>
@@ -220,6 +221,10 @@ bool RSPClientMessage::removeConnection(ClientConnectionID connectionId) {
 rsp::transport::TransportHandle RSPClientMessage::createTransport(const std::string& transportName) const {
     if (transportName == "tcp") {
         return std::make_shared<rsp::transport::TcpTransport>();
+    }
+
+    if (transportName == "memory") {
+        return std::make_shared<rsp::transport::MemoryTransport>();
     }
 
     return nullptr;

@@ -15,6 +15,7 @@ RESOURCE_SERVICE_TEST_TARGET = $(BIN_DIR)\resource_service_test.exe
 RESOURCE_SERVICE_TARGET = $(BIN_DIR)\resource_service.exe
 ENDORSEMENT_SERVICE_TEST_TARGET = $(BIN_DIR)\endorsement_service_test.exe
 ENDORSEMENT_SERVICE_TARGET = $(BIN_DIR)\endorsement_service.exe
+TRANSPORT_MEMORY_TEST_TARGET = $(BIN_DIR)\transport_memory_test.exe
 RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
 RSPFULLCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_full_static.lib
 RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
@@ -42,6 +43,7 @@ SOURCES = \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
+	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
 	$(OS_COMMON_SOURCE) \
 	$(OS_SOCKET_SOURCE) \
     resource_manager\resource_manager.cpp \
@@ -60,6 +62,7 @@ OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
     $(OBJ_DIR)\resource_manager.obj \
@@ -98,6 +101,7 @@ CLIENT_LIBRARY_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\os_fileops.obj \
@@ -115,6 +119,7 @@ FULL_CLIENT_LIBRARY_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -131,6 +136,7 @@ RESOURCE_SERVICE_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\resource_service_main.obj \
@@ -149,6 +155,7 @@ ENDORSEMENT_SERVICE_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\endorsement_service.obj \
 	$(OBJ_DIR)\endorsement_service_main.obj \
@@ -167,6 +174,7 @@ RESOURCE_SERVICE_TEST_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\resource_manager.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
@@ -188,12 +196,35 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\resource_manager.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\endorsement_service.obj \
 	$(OBJ_DIR)\endorsement_service_test.obj \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_socket.obj \
+	$(OBJ_DIR)\os_random.obj
+
+TRANSPORT_MEMORY_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\node.obj \
+	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\ascii_handshake.obj \
+	$(OBJ_DIR)\encoding.obj \
+	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)\transport.obj \
+	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
+	$(OBJ_DIR)\resource_manager.obj \
+	$(OBJ_DIR)\rsp_client_message.obj \
+	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\rsp_full_client.obj \
+	$(OBJ_DIR)\resource_service.obj \
+	$(OBJ_DIR)\transport_memory_test.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -227,6 +258,7 @@ CLIENT_TEST_OBJECTS = \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\resource_manager.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
@@ -237,7 +269,7 @@ CLIENT_TEST_OBJECTS = \
 
 all: dirs $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service
+test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
 !include third_party\Makefile.windows
 
@@ -263,7 +295,7 @@ $(RSPFULLCLIENT_STATIC_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB
 $(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message_dll.obj
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
-	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
+	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\transport_memory.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(RESOURCE_SERVICE_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(RESOURCE_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RESOURCE_SERVICE_TARGET)
@@ -301,6 +333,9 @@ $(RESOURCE_SERVICE_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LI
 $(ENDORSEMENT_SERVICE_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(ENDORSEMENT_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(ENDORSEMENT_SERVICE_TEST_TARGET)
 
+$(TRANSPORT_MEMORY_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(TRANSPORT_MEMORY_TEST_TARGET)
+
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
 
@@ -324,6 +359,9 @@ test-keypair: $(KEYPAIR_TEST_TARGET)
 
 test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 	$(ENDORSEMENT_TEST_TARGET)
+
+test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
+	$(TRANSPORT_MEMORY_TEST_TARGET)
 
 $(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj
@@ -357,6 +395,9 @@ $(OBJ_DIR)\transport.obj: common\transport\transport.cpp common\transport\transp
 
 $(OBJ_DIR)\transport_tcp.obj: common\transport\transport_tcp.cpp common\transport\transport_tcp.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_tcp.cpp /Fo$(OBJ_DIR)\transport_tcp.obj
+
+$(OBJ_DIR)\transport_memory.obj: common\transport\transport_memory.cpp common\transport\transport_memory.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_memory.cpp /Fo$(OBJ_DIR)\transport_memory.obj
 
 $(OBJ_DIR)\rsp_client_message.obj: client\cpp\rsp_client_message.cpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message.obj
@@ -419,6 +460,9 @@ $(OBJ_DIR)\endorsement_service_main.obj: endorsement_service\endorsement_service
 
 $(OBJ_DIR)\endorsement_service_test.obj: test\endorsement_service_test.cpp client\cpp\rsp_client.hpp endorsement_service\endorsement_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\endorsement_service_test.cpp /Fo$(OBJ_DIR)\endorsement_service_test.obj
+
+$(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\transport_memory_test.cpp /Fo$(OBJ_DIR)\transport_memory_test.obj
 
 clean:
 	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)

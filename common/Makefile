@@ -18,3 +18,5 @@ COMMON_TRANSPORT_SOURCE = common/transport/transport.cpp
 COMMON_TRANSPORT_HEADER = common/transport/transport.hpp
 COMMON_TRANSPORT_TCP_SOURCE = common/transport/transport_tcp.cpp
 COMMON_TRANSPORT_TCP_HEADER = common/transport/transport_tcp.hpp
+COMMON_TRANSPORT_MEMORY_SOURCE = common/transport/transport_memory.cpp
+COMMON_TRANSPORT_MEMORY_HEADER = common/transport/transport_memory.hpp

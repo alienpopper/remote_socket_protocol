@@ -1,6 +1,7 @@
 #include "client/cpp_full/rsp_client.hpp"
 
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
+#include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 
 #include <cstring>
@@ -281,6 +282,10 @@ void RSPClient::handleOutputMessage(rsp::proto::RSPMessage message) {
 rsp::transport::TransportHandle RSPClient::createTransport(const std::string& transportName) const {
     if (transportName == "tcp") {
         return std::make_shared<rsp::transport::TcpTransport>();
+    }
+
+    if (transportName == "memory") {
+        return std::make_shared<rsp::transport::MemoryTransport>();
     }
 
     return nullptr;
