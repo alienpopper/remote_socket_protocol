@@ -503,6 +503,45 @@ std::optional<rsp::GUID> RSPClient::acceptTCP(const rsp::GUID& listenSocketId,
     return fromProtoSocketId(reply->new_socket_id());
 }
 
+std::optional<rsp::os::SocketHandle> RSPClient::acceptTCPSocket(const rsp::GUID& listenSocketId,
+                                                                const std::optional<rsp::GUID>& newSocketId,
+                                                                uint32_t timeoutMilliseconds) {
+    rsp::os::SocketHandle applicationSocket = rsp::os::invalidSocket();
+    rsp::os::SocketHandle bridgeSocket = rsp::os::invalidSocket();
+    if (!rsp::os::createSocketPair(applicationSocket, bridgeSocket)) {
+        return std::nullopt;
+    }
+
+    const auto socketId = acceptTCP(listenSocketId,
+                                    newSocketId,
+                                    timeoutMilliseconds,
+                                    false,
+                                    false,
+                                    true);
+    if (!socketId.has_value()) {
+        rsp::os::closeSocket(applicationSocket);
+        rsp::os::closeSocket(bridgeSocket);
+        return std::nullopt;
+    }
+
+    auto bridgeState = std::make_shared<NativeSocketBridgeState>();
+    bridgeState->bridgeSocket = bridgeSocket;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        nativeSocketBridges_[*socketId] = bridgeState;
+    }
+
+    bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId = *socketId, bridgeState]() {
+        if (const auto self = weakSelf.lock()) {
+            self->runNativeSocketBridge(socketId, bridgeState);
+        } else {
+            rsp::os::closeSocket(bridgeState->bridgeSocket);
+        }
+    });
+
+    return applicationSocket;
+}
+
 std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nodeId,
                                                                  const std::string& hostPort,
                                                                  uint32_t timeoutMilliseconds,

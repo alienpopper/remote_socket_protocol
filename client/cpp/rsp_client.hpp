@@ -95,6 +95,9 @@ public:
                                                      bool shareChildSocket = false,
                                                      bool childUseSocket = false,
                                                      bool childAsyncData = false);
+    RSPCLIENT_API std::optional<rsp::os::SocketHandle> acceptTCPSocket(const rsp::GUID& listenSocketId,
+                                                                       const std::optional<rsp::GUID>& newSocketId = std::nullopt,
+                                                                       uint32_t timeoutMilliseconds = 0);
     RSPCLIENT_API std::optional<rsp::os::SocketHandle> connectTCPSocket(rsp::NodeID nodeId,
                                                                         const std::string& hostPort,
                                                                         uint32_t timeoutMilliseconds = 0,

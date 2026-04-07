@@ -1049,6 +1049,64 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         serverTransport->stop();
     }
 
+        void testClientAcceptsTcpConnectionThroughNativeSocketBridge() {
+        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+        const std::string endpoint = findListeningEndpoint(serverTransport);
+        const std::string transportSpec = std::string("tcp:") + endpoint;
+        const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
+
+        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto client = rsp::client::RSPClient::create();
+
+        const auto resourceServiceConnectionId =
+            resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endpoints for native accept bridge test");
+        require(client->ping(resourceServiceNodeId),
+            "client should ping the resource service before native accept bridge test");
+
+        const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint);
+        require(listenSocketId.has_value(), "client should receive a listening socket id for native accept bridge test");
+
+        TestSocketClientPeer peer;
+        const std::string greeting = "native-accept-greeting";
+        const std::string clientPayload = "native-accept-payload";
+        const std::string response = "native-accept-response";
+        peer.start(listenerEndpoint, greeting, clientPayload, response);
+
+        const auto localSocket = client->acceptTCPSocket(*listenSocketId, std::nullopt, 5000);
+        require(localSocket.has_value(), "client should receive a local native socket for accepted TCP connections");
+
+        const auto receivedGreeting = recvExactSocket(*localSocket, greeting.size());
+        require(receivedGreeting.has_value(), "accepted native socket should receive greeting bytes from the peer");
+        require(*receivedGreeting == greeting, "accepted native socket should receive the expected greeting bytes");
+
+        require(sendAllSocket(*localSocket, clientPayload),
+            "accepted native socket should send payload bytes to the peer");
+
+        const auto receivedResponse = recvExactSocket(*localSocket, response.size());
+        require(receivedResponse.has_value(), "accepted native socket should receive response bytes from the peer");
+        require(*receivedResponse == response, "accepted native socket should receive the expected response bytes");
+
+        rsp::os::closeSocket(*localSocket);
+        require(client->socketClose(*listenSocketId), "client should close the listening socket after native accept bridge test");
+        peer.wait();
+
+        require(resourceService->removeConnection(resourceServiceConnectionId),
+            "resource service should remove its native accept bridge test connection");
+        require(client->removeConnection(clientConnectionId),
+            "client should remove its native accept bridge test connection");
+
+        serverTransport->stop();
+        }
+
     void testSocketOwnershipByNodeIdThroughResourceService() {
         auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
         TestResourceManager resourceManager({serverTransport});
@@ -1241,6 +1299,7 @@ int main() {
         testClientExchangesTcpDataThroughNativeSocketBridge();
         testClientAcceptsTcpConnectionThroughResourceService();
         testClientReceivesAsyncAcceptedTcpConnectionThroughResourceService();
+        testClientAcceptsTcpConnectionThroughNativeSocketBridge();
         testSocketOwnershipByNodeIdThroughResourceService();
         testSharedSocketRejectsUnsupportedOptions();
         testListeningSocketRejectsUnsupportedOptions();
