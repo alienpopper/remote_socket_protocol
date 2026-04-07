@@ -152,6 +152,7 @@ ENDORSEMENT_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
@@ -193,6 +194,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \

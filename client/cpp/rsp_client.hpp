@@ -48,6 +48,10 @@ public:
     RSPCLIENT_API std::optional<rsp::NodeID> peerNodeID(ClientConnectionID connectionId) const;
 
     RSPCLIENT_API bool ping(rsp::NodeID nodeId);
+    RSPCLIENT_API std::optional<rsp::proto::EndorsementDone> beginEndorsementRequest(
+        rsp::NodeID nodeId,
+        const rsp::GUID& endorsementType,
+        const rsp::Buffer& endorsementValue = rsp::Buffer());
     RSPCLIENT_API bool queryResources(rsp::NodeID nodeId,
                                       const std::string& query = std::string(),
                                       uint32_t maxRecords = 0);
@@ -133,6 +137,12 @@ private:
         std::optional<rsp::proto::SocketReply> reply;
     };
 
+    struct PendingEndorsementState {
+        rsp::NodeID destination;
+        bool completed = false;
+        std::optional<rsp::proto::EndorsementDone> reply;
+    };
+
     struct NativeSocketBridgeState {
         rsp::os::SocketHandle bridgeSocket = 0;
         std::atomic<bool> stopping = false;
@@ -156,6 +166,7 @@ private:
     void dispatchIncomingMessage(rsp::proto::RSPMessage message);
     bool shouldHandleLocally(const rsp::proto::RSPMessage& message) const;
     void handlePingReply(const rsp::proto::RSPMessage& message);
+    void handleEndorsementDone(const rsp::proto::RSPMessage& message);
     void handleSocketReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
     std::shared_ptr<NativeSocketBridgeState> attachNativeSocketBridge(const rsp::GUID& socketId,
@@ -179,6 +190,7 @@ private:
     mutable std::mutex stateMutex_;
     std::condition_variable stateChanged_;
     std::map<std::string, PendingPingState> pendingPings_;
+    std::map<std::string, PendingEndorsementState> pendingEndorsements_;
     std::map<rsp::GUID, PendingConnectState> pendingConnects_;
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::SocketReply> pendingSocketReplies_;

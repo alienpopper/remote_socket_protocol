@@ -78,6 +78,7 @@ RESOURCE_SERVICE_SOURCES := \
 	resource_service/resource_service_main.cpp
 
 ENDORSEMENT_SERVICE_SOURCES := \
+	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(FULL_CLIENT_LIBRARY_SOURCES) \
 	endorsement_service/endorsement_service.cpp \
 	endorsement_service/endorsement_service_main.cpp
@@ -195,6 +196,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \

@@ -16,6 +16,10 @@ message SocketID {
     bytes value = 1; //uuid
 }
 
+message EndorsementType {
+    bytes value = 1; //uuid
+}
+
 message DateTime {
   uint64 milliseconds_since_epoch = 1;
 }
@@ -210,6 +214,38 @@ message SocketClose {
 }
 
 
+/****Endorsement Server Messages ****/
+enum ENSDORSMENT_STATUS {
+    ENDORSEMENT_SUCCESS = 0;
+    ENDORSEMENT_FAILED = 1;
+    ENDORSEMENT_CHALLENGE = 2;
+    ENDORSEMENT_INVALID_SIGNATURE = 3;
+}
+
+
+message BeginEndorsementRequest {
+    Endorsement requested_values = 1; // requestor fills out values wanted
+                                      // ES is allowed to change any field
+                                      // Must be signed by the requestor
+    optional bytes auth_data = 2;
+}
+
+message EndorsementChallenge {
+    optional uint32 stage = 1;
+    optional bytes challenge = 2;
+}
+
+message EndorsementChallengeReply {
+    optional uint32 stage = 1;
+    optional bytes challenge_reply = 2;
+}
+
+message EndorsementDone {
+    ENSDORSMENT_STATUS status = 1;
+    Endorsement new_endorsement = 2;
+}
+
+
 message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
@@ -230,6 +266,10 @@ message RSPMessage {
         AcceptTCP accept_tcp = 15;
         ResourceAdvertisement resource_advertisement = 16;
         ResourceQuery resource_query = 17;
+          BeginEndorsementRequest begin_endorsement_request = 18;
+          EndorsementChallenge endorsement_challenge = 19;
+          EndorsementChallengeReply endorsement_challenge_reply = 20;
+          EndorsementDone endorsement_done = 21;
   }
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong

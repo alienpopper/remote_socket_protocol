@@ -25,6 +25,7 @@ private:
     explicit EndorsementService(KeyPair keyPair);
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+    bool handleBeginEndorsementRequest(const rsp::proto::RSPMessage& message);
 };
 
 }  // namespace rsp::endorsement_service

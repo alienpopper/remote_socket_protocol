@@ -1,6 +1,8 @@
 #define RSPCLIENT_STATIC
 
 #include "client/cpp/rsp_client.hpp"
+#include "common/endorsement/endorsement.hpp"
+#include "common/endorsement/well_known_endorsements.h"
 #include "endorsement_service/endorsement_service.hpp"
 
 #include "common/ascii_handshake.hpp"
@@ -9,6 +11,7 @@
 #include "resource_manager/resource_manager.hpp"
 
 #include <chrono>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -43,6 +46,31 @@ bool waitForCondition(const std::function<bool()>& condition) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return condition();
+}
+
+rsp::Buffer stringToBuffer(const std::string& value) {
+    if (value.empty()) {
+        return rsp::Buffer();
+    }
+
+    return rsp::Buffer(reinterpret_cast<const uint8_t*>(value.data()), static_cast<uint32_t>(value.size()));
+}
+
+std::string bufferToString(const rsp::Buffer& value) {
+    if (value.empty()) {
+        return std::string();
+    }
+
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+rsp::Endorsement parseEndorsement(const rsp::proto::Endorsement& message) {
+    std::string serialized;
+    if (!message.SerializeToString(&serialized)) {
+        throw std::runtime_error("failed to serialize endorsement message in test");
+    }
+
+    return rsp::Endorsement::deserialize(stringToBuffer(serialized));
 }
 
 std::string findAvailableEndpoint() {
@@ -156,6 +184,63 @@ void testClientPingsEndorsementService() {
     serverTransport->stop();
 }
 
+void testClientRequestsNetworkAccessEndorsement() {
+    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    TestResourceManager resourceManager({serverTransport});
+
+    rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
+    rsp::KeyPair esVerifyKey = esKeyPair.duplicate();
+    const rsp::NodeID esNodeId = esKeyPair.nodeID();
+
+    rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+    const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
+
+    const std::string endpoint = findListeningEndpoint(serverTransport);
+    const std::string transportSpec = std::string("tcp:") + endpoint;
+
+    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
+
+    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both the client and endorsement service before endorsement requests");
+
+    const rsp::DateTime requestStart;
+    const auto reply = client->beginEndorsementRequest(
+        esNodeId,
+        ETYPE_ACCESS,
+        stringToBuffer(EVALUE_ACCESS_NETWORK.toString()));
+    require(reply.has_value(), "client should receive an endorsement response from the endorsement service");
+    require(reply->status() == rsp::proto::ENDORSEMENT_SUCCESS,
+            "endorsement service should accept a valid network access endorsement request");
+    require(reply->has_new_endorsement(), "successful endorsement responses should include a signed endorsement");
+
+    const rsp::Endorsement issuedEndorsement = parseEndorsement(reply->new_endorsement());
+    require(issuedEndorsement.subject() == clientNodeId,
+            "issued endorsement should target the requesting client");
+    require(issuedEndorsement.endorsementService() == esNodeId,
+            "issued endorsement should identify the endorsement service as signer");
+    require(issuedEndorsement.endorsementType() == ETYPE_ACCESS,
+            "issued endorsement should preserve the requested endorsement type");
+    require(bufferToString(issuedEndorsement.endorsementValue()) == EVALUE_ACCESS_NETWORK.toString(),
+            "issued endorsement should preserve the requested network access value");
+    require(issuedEndorsement.verifySignature(esVerifyKey),
+            "issued endorsement should verify against the endorsement service key");
+
+    const double lifetimeSeconds = issuedEndorsement.validUntil().secondsSinceEpoch() - requestStart.secondsSinceEpoch();
+    require(lifetimeSeconds >= DAYS(1) - 5.0 && lifetimeSeconds <= DAYS(1) + 5.0,
+            "issued endorsement should be valid for approximately one day from issuance");
+
+    require(es->removeConnection(esConnectionId),
+            "endorsement service should remove its resource manager connection after the endorsement test");
+    require(client->removeConnection(clientConnectionId),
+            "client should remove its resource manager connection after the endorsement test");
+
+    serverTransport->stop();
+}
+
 }  // namespace
 
 int main() {
@@ -165,6 +250,9 @@ int main() {
 
         testClientPingsEndorsementService();
         std::cout << "testClientPingsEndorsementService: PASSED\n";
+
+        testClientRequestsNetworkAccessEndorsement();
+        std::cout << "testClientRequestsNetworkAccessEndorsement: PASSED\n";
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << '\n';
         return 1;

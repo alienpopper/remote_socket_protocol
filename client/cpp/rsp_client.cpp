@@ -1,6 +1,7 @@
 #include "client/cpp/rsp_client.hpp"
 
 #include "common/base_types.hpp"
+#include "common/endorsement/endorsement.hpp"
 #include "common/ping_trace.hpp"
 
 #include <chrono>
@@ -42,6 +43,19 @@ rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
     rsp::proto::DateTime protoDateTime;
     protoDateTime.set_milliseconds_since_epoch(dateTime.millisecondsSinceEpoch());
     return protoDateTime;
+}
+
+rsp::Buffer stringToBuffer(const std::string& value) {
+    if (value.empty()) {
+        return rsp::Buffer();
+    }
+
+    return rsp::Buffer(reinterpret_cast<const uint8_t*>(value.data()), static_cast<uint32_t>(value.size()));
+}
+
+bool parseEndorsementMessage(const rsp::Endorsement& endorsement, rsp::proto::Endorsement& message) {
+    const rsp::Buffer serialized = endorsement.serialize();
+    return message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()));
 }
 
 void recordClientDequeueEvent(const rsp::proto::RSPMessage& message, const rsp::NodeID& localNodeId) {
@@ -137,6 +151,11 @@ int RSPClient::run() const {
 bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_ping_reply()) {
         handlePingReply(message);
+        return true;
+    }
+
+    if (message.has_endorsement_done()) {
+        handleEndorsementDone(message);
         return true;
     }
 
@@ -241,6 +260,72 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     rsp::ping_trace::record(nonce, "source_ping_wait_completed");
     pendingPings_.erase(nonce);
     return true;
+}
+
+std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
+    rsp::NodeID nodeId,
+    const rsp::GUID& endorsementType,
+    const rsp::Buffer& endorsementValue) {
+    const std::string pendingKey = toProtoNodeId(nodeId).value();
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (pendingEndorsements_.find(pendingKey) != pendingEndorsements_.end()) {
+            return std::nullopt;
+        }
+
+        pendingEndorsements_.emplace(pendingKey, PendingEndorsementState{nodeId, false, std::nullopt});
+    }
+
+    rsp::DateTime requestedValidUntil;
+    requestedValidUntil += DAYS(1);
+    const rsp::Endorsement requested = rsp::Endorsement::createSigned(
+        keyPair(),
+        keyPair().nodeID(),
+        endorsementType,
+        endorsementValue,
+        requestedValidUntil);
+
+    rsp::proto::Endorsement requestedMessage;
+    if (!parseEndorsementMessage(requested, requestedMessage)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingEndorsements_.erase(pendingKey);
+        return std::nullopt;
+    }
+
+    rsp::proto::PublicKey requesterPublicKey = keyPair().publicKey();
+    std::string serializedPublicKey;
+    if (!requesterPublicKey.SerializeToString(&serializedPublicKey)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingEndorsements_.erase(pendingKey);
+        return std::nullopt;
+    }
+
+    rsp::proto::RSPMessage request;
+    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
+    request.mutable_begin_endorsement_request()->set_auth_data(serializedPublicKey);
+
+    if (!messageClient_->send(request)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingEndorsements_.erase(pendingKey);
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this, &pendingKey]() {
+        const auto iterator = pendingEndorsements_.find(pendingKey);
+        return stopping_ || (iterator != pendingEndorsements_.end() && iterator->second.completed);
+    });
+    const auto iterator = pendingEndorsements_.find(pendingKey);
+    if (!replied || stopping_ || iterator == pendingEndorsements_.end()) {
+        pendingEndorsements_.erase(pendingKey);
+        return std::nullopt;
+    }
+
+    auto reply = iterator->second.reply;
+    pendingEndorsements_.erase(iterator);
+    return reply;
 }
 
 bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uint32_t maxRecords) {
@@ -910,6 +995,22 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
     if (rsp::ping_trace::isEnabled()) {
         rsp::ping_trace::recordForMessage(message, "source_ping_reply_completed");
     }
+    stateChanged_.notify_all();
+}
+
+void RSPClient::handleEndorsementDone(const rsp::proto::RSPMessage& message) {
+    if (!message.has_source()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    const auto iterator = pendingEndorsements_.find(message.source().value());
+    if (iterator == pendingEndorsements_.end() || iterator->second.completed) {
+        return;
+    }
+
+    iterator->second.completed = true;
+    iterator->second.reply = message.endorsement_done();
     stateChanged_.notify_all();
 }
 
