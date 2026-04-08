@@ -4,6 +4,7 @@
 #include "client/cpp/rsp_client_message.hpp"
 #include "resource_service/resource_service.hpp"
 
+#include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
 #include "os/os_socket.hpp"
@@ -128,14 +129,6 @@ std::optional<std::string> recvExactSocket(const rsp::os::SocketHandle socketHan
     }
 
     return data;
-}
-
-std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
-    if (!serverTransport->listen("127.0.0.1:0")) {
-        throw std::runtime_error("failed to listen on a random port for resource service test");
-    }
-
-    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 }
 
 std::string findSocketServerEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
@@ -369,7 +362,7 @@ private:
 };
 
 void testResourceServiceConnectsToResourceManager() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
@@ -385,8 +378,8 @@ void testResourceServiceConnectsToResourceManager() {
         }
     });
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     const auto connectionId =
@@ -473,14 +466,14 @@ void testResourceServiceConnectsToResourceManager() {
 }
 
 void testClientExchangesTcpDataThroughResourceService() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
@@ -531,14 +524,14 @@ void testClientExchangesTcpDataThroughResourceService() {
 }
 
 void testClientDiscoversResourceServiceThroughResourceQuery() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClientMessage::create();
@@ -627,11 +620,11 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 }
 
     void testClientDiscoversTcpConnectResourceAndExchangesData() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
         auto resourceService = rsp::resource_service::ResourceService::create();
         auto client = rsp::client::RSPClient::create();
@@ -698,14 +691,14 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     }
 
     void testEmptyResourceAdvertisementClearsStoredResourceServiceRecords() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
         const auto connectionId =
@@ -736,13 +729,13 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     }
 
     void testFailedRouteClearsStoredResourceServiceRecords() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         const rsp::NodeID unroutableNodeId{rsp::GUID()};
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
         auto client = rsp::client::RSPClientMessage::create();
         const auto connectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
@@ -777,14 +770,14 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     }
 
 void testClientReceivesAsyncSocketDataThroughResourceService() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
@@ -851,14 +844,14 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
 }
 
 void testClientExchangesTcpDataThroughNativeSocketBridge() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
@@ -903,14 +896,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 }
 
     void testClientAcceptsTcpConnectionThroughResourceService() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
         const std::string listenerEndpoint = findAvailableEndpoint(35300, 35400);
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
@@ -961,14 +954,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     }
 
     void testClientReceivesAsyncAcceptedTcpConnectionThroughResourceService() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
         const std::string listenerEndpoint = findAvailableEndpoint(35400, 35500);
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
@@ -1045,14 +1038,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     }
 
         void testClientAcceptsTcpConnectionThroughNativeSocketBridge() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
         const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
@@ -1103,14 +1096,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         }
 
     void testSocketOwnershipByNodeIdThroughResourceService() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
         auto ownerClient = rsp::client::RSPClient::create();
@@ -1194,14 +1187,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     }
 
         void testClientListensWithNativeSocketBridgeAndAcceptsBidirectionalTraffic() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
         const std::string listenerEndpoint = findAvailableEndpoint(35600, 35700);
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
@@ -1257,14 +1250,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         }
 
         void testSharedSocketRejectsUnsupportedOptions() {
-            auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+            auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
             TestResourceManager resourceManager({serverTransport});
 
             rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
             const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-            const std::string endpoint = findListeningEndpoint(serverTransport);
-            const std::string transportSpec = std::string("tcp:") + endpoint;
+            serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
             auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
             auto client = rsp::client::RSPClient::create();
@@ -1299,14 +1292,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         }
 
             void testListeningSocketRejectsUnsupportedOptions() {
-            auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+            auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
             TestResourceManager resourceManager({serverTransport});
 
             rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
             const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
 
-            const std::string endpoint = findListeningEndpoint(serverTransport);
-            const std::string transportSpec = std::string("tcp:") + endpoint;
+            serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
             const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
 
             auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));

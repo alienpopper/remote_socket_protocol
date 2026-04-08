@@ -8,8 +8,7 @@
 #include "endorsement_service/endorsement_service.hpp"
 
 #include "common/ascii_handshake.hpp"
-#include "common/transport/transport_tcp.hpp"
-#include "os/os_socket.hpp"
+#include "common/transport/transport_memory.hpp"
 #include "resource_manager/resource_manager.hpp"
 
 #include <chrono>
@@ -91,27 +90,8 @@ rsp::Endorsement parseEndorsement(const rsp::proto::Endorsement& message) {
     return rsp::Endorsement::deserialize(stringToBuffer(serialized));
 }
 
-std::string findAvailableEndpoint() {
-    const rsp::os::SocketHandle probe = rsp::os::createTcpListener("127.0.0.1", 0, 1);
-    if (!rsp::os::isValidSocket(probe)) {
-        throw std::runtime_error("failed to find an available TCP port for endorsement service test");
-    }
-
-    const uint16_t port = rsp::os::getSocketPort(probe);
-    rsp::os::closeSocket(probe);
-    return std::string("127.0.0.1:") + std::to_string(port);
-}
-
-std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
-    if (!serverTransport->listen("127.0.0.1:0")) {
-        throw std::runtime_error("failed to listen on a random port for endorsement service test");
-    }
-
-    return std::string("127.0.0.1:") + std::to_string(serverTransport->listenedPort());
-}
-
 void testEndorsementServiceConnectsToResourceManager() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
@@ -127,8 +107,8 @@ void testEndorsementServiceConnectsToResourceManager() {
         }
     });
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     const auto connectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
@@ -169,14 +149,14 @@ void testEndorsementServiceConnectsToResourceManager() {
 }
 
 void testClientPingsEndorsementService() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID esNodeId = esKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create();
@@ -203,7 +183,7 @@ void testClientPingsEndorsementService() {
 }
 
 void testClientRequestsNetworkAccessEndorsement() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
@@ -213,8 +193,8 @@ void testClientRequestsNetworkAccessEndorsement() {
     rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
@@ -260,7 +240,7 @@ void testClientRequestsNetworkAccessEndorsement() {
 }
 
     void testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity() {
-        auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
         TestResourceManager resourceManager({serverTransport});
 
         rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
@@ -270,8 +250,8 @@ void testClientRequestsNetworkAccessEndorsement() {
         const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
         rsp::KeyPair clientSigningKey = clientKeyPair.duplicate();
 
-        const std::string endpoint = findListeningEndpoint(serverTransport);
-        const std::string transportSpec = std::string("tcp:") + endpoint;
+        serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
         auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
         auto client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
@@ -321,7 +301,7 @@ void testClientRequestsNetworkAccessEndorsement() {
     }
 
 void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair esKeyPair = rsp::KeyPair::generateP256();
@@ -330,8 +310,8 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
     const rsp::proto::PublicKey clientPublicKey = clientKeyPair.publicKey();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::full::RSPClient::create(std::move(clientKeyPair));

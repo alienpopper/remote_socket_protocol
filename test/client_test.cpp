@@ -3,6 +3,7 @@
 
 #include "common/ping_trace.hpp"
 #include "messages.pb.h"
+#include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
 
@@ -301,15 +302,15 @@ void testTcpAsciiHandshake() {
 }
 
 ClientToClientPingResults testClientToClientRouting() {
-    auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
     rsp::KeyPair firstClientKeyPair = rsp::KeyPair::generateP256();
     rsp::KeyPair secondClientKeyPair = rsp::KeyPair::generateP256();
     const rsp::NodeID secondClientNodeId = secondClientKeyPair.nodeID();
 
-    const std::string endpoint = findListeningEndpoint(serverTransport);
-    const std::string transportSpec = std::string("tcp:") + endpoint;
+    serverTransport->listen("rm-test");
+    const std::string transportSpec = "memory:rm-test";
 
     rsp::client::RSPClient::Ptr firstClient = rsp::client::RSPClient::create(std::move(firstClientKeyPair));
     rsp::client::RSPClient::Ptr secondClient = rsp::client::RSPClient::create(std::move(secondClientKeyPair));
