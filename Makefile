@@ -154,8 +154,8 @@ MQ_ASCII_HANDSHAKE_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/mq_ascii_handshake_test.o
+
 MQ_SIGNING_TEST_OBJECTS := \
-MQ_AUTHN_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
@@ -166,6 +166,8 @@ MQ_AUTHN_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/mq_signing_test.o
 
+
+MQ_AUTHN_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
