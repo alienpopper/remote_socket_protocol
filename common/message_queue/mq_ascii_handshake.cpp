@@ -1,5 +1,6 @@
 #include "common/message_queue/mq_ascii_handshake.hpp"
 
+#include "common/encoding/json/json_encoding.hpp"
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 #include "common/version.h"
 
@@ -93,7 +94,7 @@ std::string headerValue(const std::string& message, const std::string& key) {
 
 std::string serverAdvertisement() {
     return std::string("RSP version ") + RSP_VERSION + "\r\n"
-           "encodings:protobuf\r\n"
+           "encodings:protobuf,json\r\n"
            "asymmetric: P256\r\n"
            "\r\n";
 }
@@ -121,7 +122,7 @@ std::optional<std::string> performServerHandshake(const ConnectionHandle& connec
     }
 
     const std::string selectedEncoding = headerValue(clientMessage, "encoding:");
-    if (selectedEncoding != kAsciiHandshakeEncoding) {
+    if (selectedEncoding != kAsciiHandshakeEncoding && selectedEncoding != kJsonHandshakeEncoding) {
         sendAll(connection, errorResponse("unsupported encoding"));
         connection->close();
         return std::nullopt;
@@ -179,6 +180,12 @@ rsp::encoding::EncodingHandle createEncodingForConnection(const ConnectionHandle
         return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection,
                                                                            receivedMessages,
                                                                            localKeyPair.duplicate());
+    }
+
+    if (*selectedEncoding == kJsonHandshakeEncoding) {
+        return std::make_shared<rsp::encoding::json::JsonEncoding>(connection,
+                                                                   receivedMessages,
+                                                                   localKeyPair.duplicate());
     }
 
     return nullptr;

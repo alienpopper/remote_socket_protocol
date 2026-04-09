@@ -75,20 +75,27 @@ bool waitForCondition(const std::function<bool()>& condition) {
 
 std::string expectedServerAdvertisement() {
     return std::string("RSP version ") + RSP_VERSION + "\r\n"
-           "encodings:protobuf\r\n"
+           "encodings:protobuf,json\r\n"
            "asymmetric: P256\r\n"
            "\r\n";
 }
 
 void testServerQueueSuccess() {
     auto receivedMessages = std::make_shared<rsp::BufferedMessageQueue>();
-    std::optional<rsp::encoding::EncodingHandle> createdEncoding;
+    std::promise<rsp::encoding::EncodingHandle> createdEncodingPromise;
+    auto createdEncodingFuture = createdEncodingPromise.get_future();
     std::atomic<bool> failureCalled = false;
 
     rsp::message_queue::MessageQueueAsciiHandshakeServer queue(
         receivedMessages,
         rsp::KeyPair::generateP256(),
-        [&createdEncoding](const rsp::encoding::EncodingHandle& newEncoding) { createdEncoding = newEncoding; },
+        [&createdEncodingPromise](const rsp::encoding::EncodingHandle& newEncoding) {
+            try {
+                createdEncodingPromise.set_value(newEncoding);
+            } catch (...) {
+                createdEncodingPromise.set_exception(std::current_exception());
+            }
+        },
         [&failureCalled](const rsp::transport::ConnectionHandle&) { failureCalled = true; });
     queue.setWorkerCount(1);
     queue.start();
@@ -111,10 +118,58 @@ void testServerQueueSuccess() {
     std::string response;
     require(receiveMessage(clientConnection, response), "client should receive handshake success response");
     require(response == "1success: encoding:protobuf\r\n\r\n", "server should confirm protobuf encoding");
-    require(waitForCondition([&createdEncoding]() { return createdEncoding.has_value(); }),
+    require(createdEncodingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "server queue should create an encoding after handshake success");
-    require(createdEncoding.value() != nullptr, "server queue should report a non-null encoding");
+    require(createdEncodingFuture.get() != nullptr, "server queue should report a non-null encoding");
     require(!failureCalled.load(), "server queue should not report failure on successful handshake");
+
+    queue.stop();
+    listener->stop();
+    clientTransport->stop();
+}
+
+void testServerQueueJsonSuccess() {
+    auto receivedMessages = std::make_shared<rsp::BufferedMessageQueue>();
+    std::promise<rsp::encoding::EncodingHandle> createdEncodingPromise;
+    auto createdEncodingFuture = createdEncodingPromise.get_future();
+    std::atomic<bool> failureCalled = false;
+
+    rsp::message_queue::MessageQueueAsciiHandshakeServer queue(
+        receivedMessages,
+        rsp::KeyPair::generateP256(),
+        [&createdEncodingPromise](const rsp::encoding::EncodingHandle& newEncoding) {
+            try {
+                createdEncodingPromise.set_value(newEncoding);
+            } catch (...) {
+                createdEncodingPromise.set_exception(std::current_exception());
+            }
+        },
+        [&failureCalled](const rsp::transport::ConnectionHandle&) { failureCalled = true; });
+    queue.setWorkerCount(1);
+    queue.start();
+
+    auto listener = std::make_shared<rsp::transport::MemoryTransport>();
+    listener->setNewConnectionCallback([&queue](const rsp::transport::ConnectionHandle& connection) {
+        queue.push(connection);
+    });
+    require(listener->listen("mq-ascii-server-json-success"), "listener should accept server JSON test connections");
+
+    auto clientTransport = std::make_shared<rsp::transport::MemoryTransport>();
+    const auto clientConnection = clientTransport->connect("mq-ascii-server-json-success");
+    require(clientConnection != nullptr, "client should connect to server JSON queue listener");
+
+    std::string serverAdvertisement;
+    require(receiveMessage(clientConnection, serverAdvertisement), "client should receive server advertisement");
+    require(serverAdvertisement == expectedServerAdvertisement(), "server advertisement should match the protocol");
+    require(sendAll(clientConnection, "encoding:json\r\n\r\n"), "client should send supported JSON encoding");
+
+    std::string response;
+    require(receiveMessage(clientConnection, response), "client should receive handshake success response");
+    require(response == "1success: encoding:json\r\n\r\n", "server should confirm json encoding");
+    require(createdEncodingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+            "server queue should create a JSON encoding after handshake success");
+    require(createdEncodingFuture.get() != nullptr, "server queue should report a non-null JSON encoding");
+    require(!failureCalled.load(), "server queue should not report failure on successful JSON handshake");
 
     queue.stop();
     listener->stop();
@@ -146,7 +201,7 @@ void testServerQueueUnsupportedEncoding() {
 
     std::string serverAdvertisement;
     require(receiveMessage(clientConnection, serverAdvertisement), "client should receive server advertisement before failure");
-    require(sendAll(clientConnection, "encoding:json\r\n\r\n"), "client should send unsupported encoding");
+    require(sendAll(clientConnection, "encoding:cbor\r\n\r\n"), "client should send unsupported encoding");
 
     std::string response;
     require(receiveMessage(clientConnection, response), "client should receive handshake error response");
@@ -162,14 +217,21 @@ void testServerQueueUnsupportedEncoding() {
 
 void testClientQueueSuccess() {
     auto receivedMessages = std::make_shared<rsp::BufferedMessageQueue>();
-    std::optional<rsp::encoding::EncodingHandle> createdEncoding;
+    std::promise<rsp::encoding::EncodingHandle> createdEncodingPromise;
+    auto createdEncodingFuture = createdEncodingPromise.get_future();
     std::atomic<bool> failureCalled = false;
 
     rsp::message_queue::MessageQueueAsciiHandshakeClient queue(
         receivedMessages,
         rsp::KeyPair::generateP256(),
         rsp::message_queue::kAsciiHandshakeEncoding,
-        [&createdEncoding](const rsp::encoding::EncodingHandle& newEncoding) { createdEncoding = newEncoding; },
+        [&createdEncodingPromise](const rsp::encoding::EncodingHandle& newEncoding) {
+            try {
+                createdEncodingPromise.set_value(newEncoding);
+            } catch (...) {
+                createdEncodingPromise.set_exception(std::current_exception());
+            }
+        },
         [&failureCalled](const rsp::transport::TransportHandle&) { failureCalled = true; });
     queue.setWorkerCount(1);
     queue.start();
@@ -202,10 +264,69 @@ void testClientQueueSuccess() {
     require(serverDoneFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "manual server should complete the handshake exchange");
     serverDoneFuture.get();
-    require(waitForCondition([&createdEncoding]() { return createdEncoding.has_value(); }),
+        require(createdEncodingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
             "client queue should create an encoding after handshake success");
-    require(createdEncoding.value() != nullptr, "client queue should report a non-null encoding");
+        require(createdEncodingFuture.get() != nullptr, "client queue should report a non-null encoding");
     require(!failureCalled.load(), "client queue should not report failure on successful handshake");
+
+    queue.stop();
+    listener->stop();
+    clientTransport->stop();
+}
+
+void testClientQueueJsonSuccess() {
+    auto receivedMessages = std::make_shared<rsp::BufferedMessageQueue>();
+    std::promise<rsp::encoding::EncodingHandle> createdEncodingPromise;
+    auto createdEncodingFuture = createdEncodingPromise.get_future();
+    std::atomic<bool> failureCalled = false;
+
+    rsp::message_queue::MessageQueueAsciiHandshakeClient queue(
+        receivedMessages,
+        rsp::KeyPair::generateP256(),
+        rsp::message_queue::kJsonHandshakeEncoding,
+        [&createdEncodingPromise](const rsp::encoding::EncodingHandle& newEncoding) {
+            try {
+                createdEncodingPromise.set_value(newEncoding);
+            } catch (...) {
+                createdEncodingPromise.set_exception(std::current_exception());
+            }
+        },
+        [&failureCalled](const rsp::transport::TransportHandle&) { failureCalled = true; });
+    queue.setWorkerCount(1);
+    queue.start();
+
+    auto listener = std::make_shared<rsp::transport::MemoryTransport>();
+    std::promise<void> serverDone;
+    auto serverDoneFuture = serverDone.get_future();
+    listener->setNewConnectionCallback([&serverDone](const rsp::transport::ConnectionHandle& connection) {
+        std::thread([connection, &serverDone]() mutable {
+            try {
+                require(sendAll(connection, expectedServerAdvertisement()), "manual server should send advertisement");
+                std::string selection;
+                require(receiveMessage(connection, selection), "manual server should receive client selection");
+                require(selection == "encoding:json\r\n\r\n", "client queue should request json encoding");
+                require(sendAll(connection, "1success: encoding:json\r\n\r\n"),
+                        "manual server should send json success response");
+                serverDone.set_value();
+            } catch (...) {
+                serverDone.set_exception(std::current_exception());
+            }
+        }).detach();
+    });
+    require(listener->listen("mq-ascii-client-json-success"), "listener should accept JSON client queue test connections");
+
+    auto clientTransport = std::make_shared<rsp::transport::MemoryTransport>();
+    require(clientTransport->connect("mq-ascii-client-json-success") != nullptr,
+            "client transport should connect before JSON queue processing");
+    require(queue.push(clientTransport), "client queue should accept the transport for JSON");
+
+    require(serverDoneFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+            "manual server should complete the JSON handshake exchange");
+    serverDoneFuture.get();
+        require(createdEncodingFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+            "client queue should create an encoding after JSON handshake success");
+        require(createdEncodingFuture.get() != nullptr, "client queue should report a non-null JSON encoding");
+    require(!failureCalled.load(), "client queue should not report failure on successful JSON handshake");
 
     queue.stop();
     listener->stop();
@@ -267,8 +388,10 @@ void testClientQueueFailure() {
 int main() {
     try {
         testServerQueueSuccess();
+            testServerQueueJsonSuccess();
         testServerQueueUnsupportedEncoding();
         testClientQueueSuccess();
+        testClientQueueJsonSuccess();
         testClientQueueFailure();
 
         std::cout << "mq_ascii_handshake_test passed\n";

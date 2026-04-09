@@ -11,6 +11,7 @@
 namespace rsp::message_queue {
 
 constexpr const char* kAsciiHandshakeEncoding = "protobuf";
+constexpr const char* kJsonHandshakeEncoding = "json";
 constexpr const char* kAsciiHandshakeAsymmetricAlgorithm = "P256";
 
 class MessageQueueAsciiHandshakeServer : public rsp::MessageQueue<rsp::transport::ConnectionHandle> {

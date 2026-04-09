@@ -22,6 +22,7 @@ MQ_AUTHZ_TEST_TARGET := $(BIN_DIR)/mq_authz_test
 RSP_ENDORSEMENT_TOOL_TARGET := $(BIN_DIR)/rsp_endorsement
 NODE_TEST_TARGET := $(BIN_DIR)/node_test
 RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
+RESOURCE_SERVICE_JSON_TEST_TARGET := $(BIN_DIR)/resource_service_json_test
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
 ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
 ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
@@ -45,6 +46,7 @@ COMMON_SOURCES := \
 	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
+	$(COMMON_JSON_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
@@ -62,6 +64,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
+	$(COMMON_JSON_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
@@ -79,6 +82,7 @@ FULL_CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
+	$(COMMON_JSON_ENCODING_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
@@ -154,8 +158,10 @@ MQ_ASCII_HANDSHAKE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_memory.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
@@ -184,6 +190,7 @@ MQ_AUTHN_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq_authn.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_memory.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
@@ -223,6 +230,7 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
@@ -248,6 +256,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
@@ -263,6 +272,31 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/test/resource_service_test.o
 
+RESOURCE_SERVICE_JSON_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
+	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
+	$(OBJ_DIR)/common/encoding/encoding.o \
+	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)/common/transport/transport.o \
+	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/resource_manager/resource_manager.o \
+	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
+	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/test/resource_service_json_test.o
+
 ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
@@ -274,6 +308,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
@@ -296,6 +331,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
@@ -390,6 +426,9 @@ $(CLIENT_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) 
 $(RESOURCE_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RESOURCE_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(RESOURCE_SERVICE_JSON_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_JSON_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(RESOURCE_SERVICE_JSON_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(ENDORSEMENT_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -425,6 +464,9 @@ test-client: $(CLIENT_TEST_TARGET)
 
 test-resource-service: $(RESOURCE_SERVICE_TEST_TARGET)
 	$(RESOURCE_SERVICE_TEST_TARGET)
+
+test-resource-service-json: $(RESOURCE_SERVICE_JSON_TEST_TARGET)
+	$(RESOURCE_SERVICE_JSON_TEST_TARGET)
 
 test-endorsement-service: $(ENDORSEMENT_SERVICE_TEST_TARGET)
 	$(ENDORSEMENT_SERVICE_TEST_TARGET)
@@ -474,6 +516,8 @@ $(OBJ_DIR)/common/encoding/encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GE
 
 $(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
+$(OBJ_DIR)/common/encoding/json/json_encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER) $(NLOHMANN_JSON_INCLUDE_HEADER)
+
 $(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
@@ -483,6 +527,8 @@ $(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCL
 $(OBJ_DIR)/test/client_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/resource_service_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/resource_service_json_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 
