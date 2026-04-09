@@ -126,6 +126,26 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
             return tree.or_().has_lhs() && tree.or_().has_rhs() &&
                    (evaluateRequirementTree(tree.or_().lhs(), endorsement) ||
                     evaluateRequirementTree(tree.or_().rhs(), endorsement));
+        case rsp::proto::ERDAbstractSyntaxTree::kAllOf:
+            if (tree.all_of().terms_size() == 0) {
+                return false;
+            }
+
+            for (const auto& term : tree.all_of().terms()) {
+                if (!evaluateRequirementTree(term, endorsement)) {
+                    return false;
+                }
+            }
+
+            return true;
+        case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
+            for (const auto& term : tree.any_of().terms()) {
+                if (evaluateRequirementTree(term, endorsement)) {
+                    return true;
+                }
+            }
+
+            return false;
         case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
             return tree.type_equals().has_type() &&
                    endorsement.endorsementType() ==
@@ -158,6 +178,24 @@ bool isFalseTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
 rsp::proto::ERDAbstractSyntaxTree makeFalseTree() {
     rsp::proto::ERDAbstractSyntaxTree tree;
     tree.mutable_false_value();
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeAllOfTree(
+    const std::vector<rsp::proto::ERDAbstractSyntaxTree>& terms) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    for (const auto& term : terms) {
+        *tree.mutable_all_of()->add_terms() = term;
+    }
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeAnyOfTree(
+    const std::vector<rsp::proto::ERDAbstractSyntaxTree>& terms) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    for (const auto& term : terms) {
+        *tree.mutable_any_of()->add_terms() = term;
+    }
     return tree;
 }
 
@@ -219,6 +257,44 @@ ConstantTreeValue getConstantTreeValue(const rsp::proto::ERDAbstractSyntaxTree& 
             }
 
             return ConstantTreeValue::kUnknown;
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAllOf: {
+            if (tree.all_of().terms_size() == 0) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            bool allTrue = true;
+            for (const auto& term : tree.all_of().terms()) {
+                const auto termValue = getConstantTreeValue(term);
+                if (termValue == ConstantTreeValue::kFalse) {
+                    return ConstantTreeValue::kFalse;
+                }
+
+                if (termValue != ConstantTreeValue::kTrue) {
+                    allTrue = false;
+                }
+            }
+
+            return allTrue ? ConstantTreeValue::kTrue : ConstantTreeValue::kUnknown;
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAnyOf: {
+            if (tree.any_of().terms_size() == 0) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            bool allFalse = true;
+            for (const auto& term : tree.any_of().terms()) {
+                const auto termValue = getConstantTreeValue(term);
+                if (termValue == ConstantTreeValue::kTrue) {
+                    return ConstantTreeValue::kTrue;
+                }
+
+                if (termValue != ConstantTreeValue::kFalse) {
+                    allFalse = false;
+                }
+            }
+
+            return allFalse ? ConstantTreeValue::kFalse : ConstantTreeValue::kUnknown;
         }
         case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
@@ -347,6 +423,66 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
             }
 
             return makeOrTree(reducedLeft, reducedRight);
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAllOf: {
+            if (tree.all_of().terms_size() == 0) {
+                return tree;
+            }
+
+            std::vector<rsp::proto::ERDAbstractSyntaxTree> remainingTerms;
+            remainingTerms.reserve(static_cast<std::size_t>(tree.all_of().terms_size()));
+            for (const auto& term : tree.all_of().terms()) {
+                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements);
+                if (isEmptyTree(reducedTerm)) {
+                    continue;
+                }
+
+                if (isFalseTree(reducedTerm)) {
+                    return makeFalseTree();
+                }
+
+                remainingTerms.push_back(std::move(reducedTerm));
+            }
+
+            if (remainingTerms.empty()) {
+                return rsp::proto::ERDAbstractSyntaxTree();
+            }
+
+            if (remainingTerms.size() == 1) {
+                return remainingTerms.front();
+            }
+
+            return makeAllOfTree(remainingTerms);
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAnyOf: {
+            if (tree.any_of().terms_size() == 0) {
+                return tree;
+            }
+
+            std::vector<rsp::proto::ERDAbstractSyntaxTree> remainingTerms;
+            remainingTerms.reserve(static_cast<std::size_t>(tree.any_of().terms_size()));
+            for (const auto& term : tree.any_of().terms()) {
+                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements);
+                if (isEmptyTree(reducedTerm)) {
+                    return rsp::proto::ERDAbstractSyntaxTree();
+                }
+
+                if (isFalseTree(reducedTerm)) {
+                    continue;
+                }
+
+                remainingTerms.push_back(std::move(reducedTerm));
+            }
+
+            if (remainingTerms.empty()) {
+                return makeFalseTree();
+            }
+
+            if (remainingTerms.size() == 1) {
+                return remainingTerms.front();
+            }
+
+            return makeAnyOfTree(remainingTerms);
         }
         case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:

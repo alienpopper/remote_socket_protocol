@@ -85,6 +85,24 @@ rsp::proto::ERDAbstractSyntaxTree makeEq(rsp::proto::ERDAbstractSyntaxTree lhs,
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeAllOf(
+    std::initializer_list<rsp::proto::ERDAbstractSyntaxTree> terms) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    for (const auto& term : terms) {
+        *tree.mutable_all_of()->add_terms() = term;
+    }
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeAnyOf(
+    std::initializer_list<rsp::proto::ERDAbstractSyntaxTree> terms) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    for (const auto& term : terms) {
+        *tree.mutable_any_of()->add_terms() = term;
+    }
+    return tree;
+}
+
 void testRoundTripTypeEquals() {
     const std::string uuid = "00112233-4455-6677-8899-aabbccddeeff";
     const auto tree = makeTypeEquals(uuid);
@@ -146,6 +164,41 @@ void testRoundTripFalse() {
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_false_value(), "parsed should have false_value");
+}
+
+void testRoundTripAllOf() {
+    const auto tree = makeAllOf({
+        makeTypeEquals("11111111-1111-1111-1111-111111111111"),
+        makeTrue(),
+        makeSignerEquals("22222222-2222-2222-2222-222222222222"),
+    });
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text ==
+                "ALLOF(TYPE(11111111-1111-1111-1111-111111111111), TRUE, "
+                "SIGNER(22222222-2222-2222-2222-222222222222))",
+            "ALLOF text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_all_of(), "parsed should have all_of");
+    require(parsed.all_of().terms_size() == 3, "ALLOF should preserve term count");
+    require(parsed.all_of().terms(1).has_true_value(), "ALLOF second term should be TRUE");
+}
+
+void testRoundTripAnyOf() {
+    const auto tree = makeAnyOf({
+        makeFalse(),
+        makeValueEquals(std::string("\xca\xfe\xba\xbe", 4)),
+        makeTypeEquals("33333333-3333-3333-3333-333333333333"),
+    });
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text ==
+                "ANYOF(FALSE, VALUE(cafebabe), TYPE(33333333-3333-3333-3333-333333333333))",
+            "ANYOF text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_any_of(), "parsed should have any_of");
+    require(parsed.any_of().terms_size() == 3, "ANYOF should preserve term count");
+    require(parsed.any_of().terms(0).has_false_value(), "ANYOF first term should be FALSE");
 }
 
 void testRoundTripAND() {
@@ -228,9 +281,9 @@ void testEmptyTree() {
                 rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET,
             "whitespace should parse to unset tree");
 
-        require(rsp::erd_text::fromString(" TRUE ").has_true_value(),
+    require(rsp::erd_text::fromString(" TRUE ").has_true_value(),
             "TRUE with surrounding whitespace should parse");
-        require(rsp::erd_text::fromString(" FALSE \n").has_false_value(),
+    require(rsp::erd_text::fromString(" FALSE \n").has_false_value(),
             "FALSE with surrounding whitespace should parse");
 }
 
@@ -295,6 +348,8 @@ int main() {
         testRoundTripSignerEquals();
         testRoundTripTrue();
         testRoundTripFalse();
+        testRoundTripAllOf();
+        testRoundTripAnyOf();
         testRoundTripAND();
         testRoundTripOR();
         testRoundTripEQ();

@@ -15,6 +15,9 @@ namespace rsp::erd_text {
 //     AND(<tree>, <tree>)
 //     OR(<tree>, <tree>)
 //     EQ(<tree>, <tree>)
+//   N-ary operators:
+//     ALLOF(<tree>, <tree>, ...)
+//     ANYOF(<tree>, <tree>, ...)
 //   Constant nodes:
 //     TRUE
 //     FALSE

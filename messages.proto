@@ -264,6 +264,14 @@ message ERDASTOr {
     ERDAbstractSyntaxTree rhs = 2;
 }
 
+message ERDASTAllOf {
+    repeated ERDAbstractSyntaxTree terms = 1;
+}
+
+message ERDASTAnyOf {
+    repeated ERDAbstractSyntaxTree terms = 1;
+}
+
 message ERDASTTypeEquals {
     EndorsementType type = 1;
 }
@@ -292,6 +300,8 @@ message ERDAbstractSyntaxTree {
         ERDASTSignerEquals signer_equals = 6;
         ERDASTTrue true_value = 7;
         ERDASTFalse false_value = 8;
+        ERDASTAllOf all_of = 9;
+        ERDASTAnyOf any_of = 10;
     }
 }
 

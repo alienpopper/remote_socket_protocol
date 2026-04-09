@@ -88,6 +88,20 @@ void appendBinary(const char* op,
     out += ')';
 }
 
+void appendNary(const char* op,
+                const google::protobuf::RepeatedPtrField<rsp::proto::ERDAbstractSyntaxTree>& terms,
+                std::string& out) {
+    out += op;
+    out += '(';
+    for (int index = 0; index < terms.size(); ++index) {
+        if (index != 0) {
+            out += ", ";
+        }
+        appendTree(terms.Get(index), out);
+    }
+    out += ')';
+}
+
 void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out) {
     switch (tree.node_type_case()) {
         case rsp::proto::ERDAbstractSyntaxTree::kAnd:
@@ -98,6 +112,12 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
             break;
         case rsp::proto::ERDAbstractSyntaxTree::kEquals:
             appendBinary("EQ", tree.equals().lhs(), tree.equals().rhs(), out);
+            break;
+        case rsp::proto::ERDAbstractSyntaxTree::kAllOf:
+            appendNary("ALLOF", tree.all_of().terms(), out);
+            break;
+        case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
+            appendNary("ANYOF", tree.any_of().terms(), out);
             break;
         case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
             out += "TYPE(";
@@ -214,6 +234,27 @@ struct Parser {
         expect(')');
     }
 
+    void parseNaryArgs(google::protobuf::RepeatedPtrField<rsp::proto::ERDAbstractSyntaxTree>* terms) {
+        expect('(');
+        skipWhitespace();
+        if (peek() == ')') {
+            ++pos;
+            return;
+        }
+
+        while (true) {
+            *terms->Add() = parseTree();
+            skipWhitespace();
+            if (peek() == ',') {
+                ++pos;
+                continue;
+            }
+
+            expect(')');
+            return;
+        }
+    }
+
     rsp::proto::ERDAbstractSyntaxTree parseTree() {
         skipWhitespace();
         rsp::proto::ERDAbstractSyntaxTree tree;
@@ -234,6 +275,16 @@ struct Parser {
             pos += 2;
             parseBinaryArgs(tree.mutable_equals()->mutable_lhs(),
                             tree.mutable_equals()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("ALLOF(", 6)) {
+            pos += 5;
+            parseNaryArgs(tree.mutable_all_of()->mutable_terms());
+            return tree;
+        }
+        if (startsWith("ANYOF(", 6)) {
+            pos += 5;
+            parseNaryArgs(tree.mutable_any_of()->mutable_terms());
             return tree;
         }
         if (startsWith("TYPE(", 5)) {
