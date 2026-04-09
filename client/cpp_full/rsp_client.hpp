@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common/ascii_handshake.hpp"
 #include "common/encoding/encoding.hpp"
 #include "common/message_queue/mq.hpp"
 #include "common/node.hpp"
@@ -54,14 +53,13 @@ protected:
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
     virtual rsp::transport::TransportHandle createTransport(const std::string& transportName) const;
-    virtual rsp::encoding::EncodingHandle createEncoding(const rsp::transport::ConnectionHandle& connection,
-                                                         const std::string& encoding) const;
-    virtual bool performHandshake(const rsp::transport::ConnectionHandle& connection, const std::string& encoding) const;
+    rsp::proto::RSPMessage prepareOutboundMessage(const rsp::proto::RSPMessage& message) const;
 
 private:
     struct ClientConnectionState {
         rsp::transport::TransportHandle transport;
         rsp::encoding::EncodingHandle encoding;
+        rsp::MessageQueueHandle signingQueue;
     };
 
     bool isForThisNode(const rsp::proto::RSPMessage& message) const;

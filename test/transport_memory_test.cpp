@@ -1,7 +1,5 @@
-#define RSPCLIENT_STATIC
-
 #include "client/cpp/rsp_client_message.hpp"
-#include "common/ascii_handshake.hpp"
+#include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
 #include "messages.pb.h"
 #include "resource_manager/resource_manager.hpp"
@@ -87,7 +85,7 @@ void testMemoryTransportHandshake() {
 
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create();
     const auto connectionId =
-        client->connectToResourceManager("memory:mem-handshake-channel", rsp::ascii_handshake::kEncoding);
+        client->connectToResourceManager("memory:mem-handshake-channel", rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(client->hasConnections(), "client should track the memory transport connection");
     require(client->hasConnection(connectionId), "client should expose the new connection id");
@@ -138,7 +136,7 @@ void testMemoryTransportResourceServicePing() {
     // Connect RS to RM via memory transport.
     auto resourceService = rsp::resource_service::ResourceService::create();
     const auto rsConnectionId =
-        resourceService->connectToResourceManager("memory:mem-rs-rm-channel", rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager("memory:mem-rs-rm-channel", rsp::message_queue::kAsciiHandshakeEncoding);
     require(resourceService->hasConnections(), "RS should connect to RM via memory transport");
     require(resourceService->hasConnection(rsConnectionId), "RS should track its connection to RM");
 
@@ -151,7 +149,7 @@ void testMemoryTransportResourceServicePing() {
     // Connect a simple client to RM via memory transport.
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create();
     const auto clientConnectionId =
-        client->connectToResourceManager("memory:mem-rs-rm-channel", rsp::ascii_handshake::kEncoding);
+        client->connectToResourceManager("memory:mem-rs-rm-channel", rsp::message_queue::kAsciiHandshakeEncoding);
     require(client->hasConnections(), "client should connect to RM via memory transport");
 
     // Wait for RM to authenticate both connections.

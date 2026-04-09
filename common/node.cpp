@@ -211,6 +211,9 @@ void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState
     if (!message.source().value().empty()) {
         *reply.mutable_destination() = message.source();
     }
+    if (message.has_nonce()) {
+        *reply.mutable_nonce() = message.nonce();
+    }
 
     if (message.has_ping_request()) {
         auto* pingReply = reply.mutable_ping_reply();

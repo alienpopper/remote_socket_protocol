@@ -59,6 +59,12 @@ rsp::proto::ERDAbstractSyntaxTree makeAndTree(const rsp::proto::ERDAbstractSynta
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeTrueTree() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_true_value();
+    return tree;
+}
+
 template <typename T>
 T waitFor(std::future<T>& future) {
     if (future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
@@ -214,6 +220,26 @@ void testAuthZIgnoresWrongSubjectEndorsement() {
     waitFor(failureFuture);
 }
 
+void testAuthZAllowsTrueRequirementWithoutEndorsements() {
+    const rsp::KeyPair sourceKey = rsp::KeyPair::generateP256();
+
+    std::promise<rsp::proto::RSPMessage> successPromise;
+    auto successFuture = successPromise.get_future();
+
+    rsp::message_queue::MessageQueueAuthZ queue(
+        [&successPromise](rsp::proto::RSPMessage message) { successPromise.set_value(std::move(message)); },
+        [](rsp::proto::RSPMessage) { throw std::runtime_error("unexpected authz failure"); },
+        [](const rsp::NodeID&) { return std::vector<rsp::Endorsement>(); },
+        makeTrueTree());
+
+    queue.setWorkerCount(1);
+    queue.start();
+    queue.push(makeMessageWithSource(sourceKey.nodeID()));
+
+    const auto authorized = waitFor(successFuture);
+    require(authorized.has_source(), "true authz should preserve the source message");
+}
+
 }  // namespace
 
 int main() {
@@ -223,6 +249,7 @@ int main() {
         testAuthZFailsWhenNoEndorsementMatches();
         testAuthZFailsForExpiredEndorsement();
         testAuthZIgnoresWrongSubjectEndorsement();
+        testAuthZAllowsTrueRequirementWithoutEndorsements();
         std::cout << "mq_authz_test passed" << std::endl;
         return 0;
     } catch (const std::exception& exception) {

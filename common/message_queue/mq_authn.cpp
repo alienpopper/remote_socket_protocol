@@ -133,7 +133,7 @@ bool MessageQueueAuthN::performInitialIdentityExchange(rsp::encoding::Encoding& 
 
             encoding.setPeerNodeID(peerNodeId);
             if (storeIdentity_) {
-                storeIdentity_(incomingMessage.identity());
+                storeIdentity_(peerNodeId, incomingMessage.identity());
             }
             peerIdentityReceived = true;
             continue;

@@ -132,7 +132,7 @@ void testAuthNSuccess() {
         localKeyPair.duplicate(),
         [&successCalled](const rsp::encoding::EncodingHandle&) { successCalled = true; },
         [&failureCalled](const rsp::encoding::EncodingHandle&) { failureCalled = true; },
-        [&storedIdentity](const rsp::proto::Identity& identity) { storedIdentity = identity; });
+        [&storedIdentity](const rsp::NodeID&, const rsp::proto::Identity& identity) { storedIdentity = identity; });
     queue.setWorkerCount(1);
     queue.start();
 
@@ -205,7 +205,7 @@ void testAuthNFailureOnInvalidIdentity() {
         localKeyPair.duplicate(),
         [&successCalled](const rsp::encoding::EncodingHandle&) { successCalled = true; },
         [&failureCalled](const rsp::encoding::EncodingHandle&) { failureCalled = true; },
-        [&storeIdentityCalled](const rsp::proto::Identity&) { storeIdentityCalled = true; });
+        [&storeIdentityCalled](const rsp::NodeID&, const rsp::proto::Identity&) { storeIdentityCalled = true; });
     queue.setWorkerCount(1);
     queue.start();
 

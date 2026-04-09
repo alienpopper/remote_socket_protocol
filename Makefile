@@ -39,7 +39,10 @@ COMMON_SOURCES := \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
 	$(COMMON_MESSAGE_QUEUE_SOURCE) \
-	$(COMMON_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_AUTHN_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_AUTHZ_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
@@ -54,7 +57,9 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
 	$(COMMON_MESSAGE_QUEUE_SOURCE) \
-	$(COMMON_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_AUTHN_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
@@ -69,7 +74,9 @@ FULL_CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_NODE_SOURCE) \
 	$(COMMON_KEYPAIR_SOURCE) \
 	$(COMMON_MESSAGE_QUEUE_SOURCE) \
-	$(COMMON_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_ASCII_HANDSHAKE_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_AUTHN_SOURCE) \
+	$(COMMON_MESSAGE_QUEUE_SIGNING_SOURCE) \
 	$(COMMON_ENCODING_SOURCE) \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
@@ -209,7 +216,10 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
-	$(OBJ_DIR)/common/ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
@@ -230,7 +240,10 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
-	$(OBJ_DIR)/common/ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
@@ -253,7 +266,10 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
-	$(OBJ_DIR)/common/ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
@@ -276,7 +292,6 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
-	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
@@ -436,8 +451,6 @@ $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/common/node.o: $(PROTOBUF_GENERATED_HEADER)
-
-$(OBJ_DIR)/common/ascii_handshake.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/common/message_queue/mq.o: $(PROTOBUF_GENERATED_HEADER)
 

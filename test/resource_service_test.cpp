@@ -4,6 +4,7 @@
 #include "client/cpp/rsp_client_message.hpp"
 #include "resource_service/resource_service.hpp"
 
+#include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
@@ -383,7 +384,7 @@ void testResourceServiceConnectsToResourceManager() {
 
     auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
     const auto connectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(resourceService->hasConnections(), "resource service should track created connections");
     require(resourceService->hasConnection(connectionId), "resource service should expose the new connection id");
@@ -479,8 +480,8 @@ void testClientExchangesTcpDataThroughResourceService() {
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(resourceService->hasConnection(resourceServiceConnectionId),
             "resource service should stay connected to the resource manager");
@@ -537,8 +538,8 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     auto client = rsp::client::RSPClientMessage::create();
 
     const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate the resource service and client for discovery test");
@@ -630,8 +631,8 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate the resource service and client for discovery-driven connect test");
@@ -702,7 +703,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 
         auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
         const auto connectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
             "resource manager should authenticate the resource service before clearing advertisements");
@@ -735,20 +736,13 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         const rsp::NodeID unroutableNodeId{rsp::GUID()};
 
         serverTransport->listen("rm-test");
-    const std::string transportSpec = "memory:rm-test";
-
-        auto client = rsp::client::RSPClientMessage::create();
-        const auto connectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-
-        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
-            "resource manager should authenticate the client before route-failure cleanup");
 
         rsp::proto::RSPMessage advertisementMessage;
         *advertisementMessage.mutable_source() = toProtoNodeId(unroutableNodeId);
         *advertisementMessage.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
         advertisementMessage.mutable_resource_advertisement()->add_records()->mutable_tcp_connect();
-        require(client->send(advertisementMessage),
-            "client should send a resource advertisement for an unroutable node id");
+        require(resourceManager.enqueueInput(advertisementMessage),
+            "resource manager should accept a directly injected resource advertisement for route cleanup testing");
         require(waitForCondition([&resourceManager, &unroutableNodeId]() {
             return resourceManager.hasResourceAdvertisement(unroutableNodeId);
             }),
@@ -763,9 +757,6 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
             "routeAndSend should fail when no active route exists for the destination node id");
         require(!resourceManager.hasResourceAdvertisement(unroutableNodeId),
             "routeAndSend failure should erase stored advertisements for the destination node");
-
-        require(client->removeConnection(connectionId),
-            "client should remove its route-failure cleanup test connection");
         serverTransport->stop();
     }
 
@@ -783,8 +774,8 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async socket test");
@@ -857,8 +848,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native socket bridge test");
@@ -910,8 +901,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for listen/accept test");
@@ -968,8 +959,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async accept test");
@@ -1052,8 +1043,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-            resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+            resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native accept bridge test");
@@ -1110,9 +1101,9 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         auto otherClient = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-        resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto ownerConnectionId = ownerClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto otherConnectionId = otherClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto ownerConnectionId = ownerClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto otherConnectionId = otherClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
             "resource manager should authenticate the resource service and both clients");
@@ -1201,8 +1192,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
-            resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+            resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native listen bridge test");
@@ -1263,8 +1254,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             auto client = rsp::client::RSPClient::create();
 
             const auto resourceServiceConnectionId =
-            resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+            resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for shared socket option validation");
@@ -1306,8 +1297,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             auto client = rsp::client::RSPClient::create();
 
             const auto resourceServiceConnectionId =
-                resourceService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+                resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for listening option validation");

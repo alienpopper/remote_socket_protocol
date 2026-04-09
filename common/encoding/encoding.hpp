@@ -24,7 +24,6 @@ public:
     Encoding(const Encoding&) = delete;
     Encoding& operator=(const Encoding&) = delete;
 
-    bool performInitialIdentityExchange();
     bool start();
     void stop();
     bool send(const rsp::proto::RSPMessage& message);

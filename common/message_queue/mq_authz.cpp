@@ -70,14 +70,15 @@ void MessageQueueAuthZ::handleMessage(Message message, rsp::MessageQueueSharedSt
         return;
     }
 
-    for (const auto& endorsement : endorsements) {
-        try {
-            if (endorsementAuthorizes(endorsement, *sourceNodeId, authorizationTree_)) {
-                success_(std::move(message));
-                return;
-            }
-        } catch (const std::exception&) {
+    try {
+        const auto reducedRequirement = rsp::reduceRequirementTree(authorizationTree_, endorsements);
+        if (reducedRequirement.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET) {
+            success_(std::move(message));
+            return;
         }
+    } catch (const std::exception&) {
+        failure_(std::move(message));
+        return;
     }
 
     failure_(std::move(message));

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/ascii_handshake.hpp"
+#include "common/endorsement/endorsement.hpp"
 #include "common/encoding/encoding.hpp"
 #include "common/message_queue/mq.hpp"
 #include "common/node.hpp"
@@ -39,9 +39,6 @@ public:
     bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     size_t pendingMessageCount() const;
 
-    void processAcceptedConnection(rsp::transport::ConnectionHandle connection);
-    void processPendingEncoding(rsp::encoding::EncodingHandle encoding);
-
 private:
     /*messages sent to this RM, not routed to other nodes*/
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
@@ -52,7 +49,19 @@ private:
     void registerTransportCallbacks();
     void registerTransportCallback(const rsp::transport::ListeningTransportHandle& transport);
     void enqueueAcceptedConnection(const rsp::transport::ConnectionHandle& connection);
-    rsp::encoding::EncodingHandle createEncodingForConnection(const rsp::transport::ConnectionHandle& connection) const;
+    void handleHandshakeSuccess(const rsp::encoding::EncodingHandle& encoding);
+    void handleAuthNSuccess(const rsp::encoding::EncodingHandle& encoding);
+    void handleAuthNFailure(const rsp::encoding::EncodingHandle& encoding);
+    void handleVerifiedMessage(rsp::proto::RSPMessage message);
+    void handleSignatureFailure(rsp::proto::RSPMessage message, const std::string& reason);
+    void handleAuthorizedMessage(rsp::proto::RSPMessage message);
+    void handleAuthorizationFailure(rsp::proto::RSPMessage message);
+    void cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity);
+    std::shared_ptr<const rsp::KeyPair> verificationKeyForNodeId(const rsp::NodeID& nodeId) const;
+    std::vector<rsp::Endorsement> getAuthorizationEndorsements(const rsp::NodeID& nodeId) const;
+    rsp::proto::ERDAbstractSyntaxTree authorizationTree() const;
+    void sendSignatureFailure(const rsp::proto::RSPMessage& rejectedMessage, const std::string& reason) const;
+    void sendEndorsementNeeded(const rsp::proto::RSPMessage& rejectedMessage) const;
 
     mutable std::mutex encodingsMutex_;
     std::vector<rsp::encoding::EncodingHandle> activeEncodings_;
@@ -61,8 +70,10 @@ private:
     mutable std::mutex newEncodingCallbackMutex_;
     NewEncodingCallback newEncodingCallback_;
     rsp::MessageQueueHandle incomingMessages_;
-    ConnectionQueueHandle pendingConnections_;
-    EncodingQueueHandle pendingEncodings_;
+    rsp::MessageQueueHandle authzQueue_;
+    rsp::MessageQueueHandle signatureCheckQueue_;
+    ConnectionQueueHandle handshakeQueue_;
+    EncodingQueueHandle authnQueue_;
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
 };
 

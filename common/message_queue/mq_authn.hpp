@@ -13,7 +13,8 @@ class MessageQueueAuthN : public rsp::MessageQueue<rsp::encoding::EncodingHandle
 public:
     using SuccessCallback = std::function<void(const rsp::encoding::EncodingHandle& encoding)>;
     using FailureCallback = std::function<void(const rsp::encoding::EncodingHandle& encoding)>;
-    using StoreIdentityCallback = std::function<void(const rsp::proto::Identity& identity)>;
+    using StoreIdentityCallback = std::function<void(const rsp::NodeID& peerNodeId,
+                                                     const rsp::proto::Identity& identity)>;
 
     MessageQueueAuthN(rsp::KeyPair keyPair,
                       SuccessCallback success,

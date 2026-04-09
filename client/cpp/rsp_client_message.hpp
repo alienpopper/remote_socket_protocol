@@ -53,14 +53,13 @@ private:
     struct ClientConnectionState {
         rsp::transport::TransportHandle transport;
         rsp::encoding::EncodingHandle encoding;
+        rsp::MessageQueueHandle signingQueue;
     };
 
     explicit RSPClientMessage(KeyPair keyPair);
 
-    bool performAsciiHandshake(const rsp::transport::ConnectionHandle& connection, const std::string& encoding) const;
     rsp::transport::TransportHandle createTransport(const std::string& transportName) const;
-    rsp::encoding::EncodingHandle createEncoding(const rsp::transport::ConnectionHandle& connection,
-                                                 const std::string& encoding) const;
+    rsp::proto::RSPMessage prepareOutboundMessage(const rsp::proto::RSPMessage& message) const;
     std::optional<ClientConnectionState> connectionState(ClientConnectionID connectionId) const;
 
     KeyPair keyPair_;

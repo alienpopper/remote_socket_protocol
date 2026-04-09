@@ -1,11 +1,15 @@
 #include "client/cpp/rsp_client_message.hpp"
 
-#include "common/ascii_handshake.hpp"
-#include "common/encoding/protobuf/protobuf_encoding.hpp"
+#include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/message_queue/mq_authn.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
+#include "os/os_random.hpp"
 
 #include <chrono>
+#include <cstring>
+#include <condition_variable>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -30,6 +34,12 @@ bool splitTransportSpec(const std::string& transportSpec,
     transportName = transportSpec.substr(0, separator);
     transportParameters = transportSpec.substr(separator + 1);
     return true;
+}
+
+std::string randomMessageNonce() {
+    std::string nonce(16, '\0');
+    rsp::os::randomFill(reinterpret_cast<uint8_t*>(nonce.data()), static_cast<uint32_t>(nonce.size()));
+    return nonce;
 }
 
 }  // namespace
@@ -68,28 +78,101 @@ RSPClientMessage::ClientConnectionID RSPClientMessage::connectToResourceManager(
         throw std::runtime_error("failed to establish transport connection");
     }
 
-    if (!performAsciiHandshake(connection, encoding)) {
+    struct ConnectResult {
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool complete = false;
+        std::string error;
+        rsp::encoding::EncodingHandle encoding;
+    } result;
+
+    auto finish = [&](rsp::encoding::EncodingHandle establishedEncoding, std::string error) {
+        std::lock_guard<std::mutex> lock(result.mutex);
+        result.encoding = std::move(establishedEncoding);
+        result.error = std::move(error);
+        result.complete = true;
+        result.condition.notify_all();
+    };
+
+    const auto authnQueue = std::make_shared<rsp::message_queue::MessageQueueAuthN>(
+        keyPair_.duplicate(),
+        [&](const rsp::encoding::EncodingHandle& establishedEncoding) { finish(establishedEncoding, std::string()); },
+        [&](const rsp::encoding::EncodingHandle& establishedEncoding) {
+            if (establishedEncoding != nullptr) {
+                establishedEncoding->stop();
+            }
+            finish(nullptr, "identity handshake failed");
+        },
+        [](const rsp::NodeID&, const rsp::proto::Identity&) {});
+    authnQueue->setWorkerCount(1);
+    authnQueue->start();
+
+    const auto handshakeQueue = std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeClient>(
+        incomingMessages_,
+        keyPair_.duplicate(),
+        encoding,
+        [authnQueue, &finish](const rsp::encoding::EncodingHandle& establishedEncoding) {
+            if (authnQueue == nullptr || !authnQueue->push(establishedEncoding)) {
+                if (establishedEncoding != nullptr) {
+                    establishedEncoding->stop();
+                }
+                finish(nullptr, "failed to enqueue encoding for identity handshake");
+            }
+        },
+        [selectedTransport, &finish](const rsp::transport::TransportHandle&) {
+            if (selectedTransport != nullptr) {
+                selectedTransport->stop();
+            }
+            finish(nullptr, "ASCII handshake failed");
+        });
+    handshakeQueue->setWorkerCount(1);
+    handshakeQueue->start();
+
+    if (!handshakeQueue->push(selectedTransport)) {
+        handshakeQueue->stop();
+        authnQueue->stop();
         selectedTransport->stop();
-        throw std::runtime_error("ASCII handshake failed");
+        throw std::runtime_error("failed to enqueue transport for client handshake");
     }
 
-    const auto newEncoding = createEncoding(connection, encoding);
-    if (newEncoding == nullptr) {
-        selectedTransport->stop();
-        throw std::invalid_argument("unsupported encoding");
+    {
+        std::unique_lock<std::mutex> lock(result.mutex);
+        result.condition.wait(lock, [&result]() { return result.complete; });
     }
 
-    if (!newEncoding->performInitialIdentityExchange() || !newEncoding->start()) {
-        newEncoding->stop();
+    handshakeQueue->stop();
+    authnQueue->stop();
+
+    if (result.encoding == nullptr) {
         selectedTransport->stop();
-        throw std::runtime_error("identity handshake failed");
+        throw std::runtime_error(result.error.empty() ? "connection setup failed" : result.error);
     }
+
+    if (!result.encoding->start()) {
+        result.encoding->stop();
+        selectedTransport->stop();
+        throw std::runtime_error("failed to start encoding");
+    }
+
+    const auto signingQueue = std::make_shared<rsp::MessageQueueSign>(
+        [encodingHandle = result.encoding](rsp::proto::RSPMessage message) {
+            const auto outgoingMessages = encodingHandle == nullptr ? nullptr : encodingHandle->outgoingMessages();
+            if (outgoingMessages == nullptr || !outgoingMessages->push(std::move(message))) {
+                std::cerr << "RSP client failed to enqueue signed message for transport" << std::endl;
+            }
+        },
+        [](rsp::proto::RSPMessage, std::string reason) {
+            std::cerr << "RSP client failed to sign outbound message: " << reason << std::endl;
+        },
+        keyPair_.duplicate());
+    signingQueue->setWorkerCount(1);
+    signingQueue->start();
 
     const ClientConnectionID connectionId;
 
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.emplace(connectionId, ClientConnectionState{selectedTransport, newEncoding});
+        connections_.emplace(connectionId, ClientConnectionState{selectedTransport, result.encoding, signingQueue});
     }
 
     return connectionId;
@@ -103,39 +186,33 @@ bool RSPClientMessage::send(const rsp::proto::RSPMessage& message) const {
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         for (const auto& [_, connectionState] : connections_) {
-            if (connectionState.encoding == nullptr) {
+            if (connectionState.signingQueue == nullptr) {
                 continue;
             }
 
-            const auto outgoingQueue = connectionState.encoding->outgoingMessages();
-            if (outgoingQueue == nullptr) {
-                continue;
-            }
-
-            const size_t queueSize = outgoingQueue->size();
+            const size_t queueSize = connectionState.signingQueue->size();
             if (queueSize == 0) {
-                return outgoingQueue->push(message);
+                return connectionState.signingQueue->push(prepareOutboundMessage(message));
             }
 
             if (!selectionMade || queueSize < selectedQueueSize) {
-                selectedQueue = outgoingQueue;
+                selectedQueue = connectionState.signingQueue;
                 selectedQueueSize = queueSize;
                 selectionMade = true;
             }
         }
     }
 
-    return selectedQueue != nullptr && selectedQueue->push(message);
+    return selectedQueue != nullptr && selectedQueue->push(prepareOutboundMessage(message));
 }
 
 bool RSPClientMessage::sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const {
     const auto selectedConnection = connectionState(connectionId);
-    if (!selectedConnection.has_value() || selectedConnection->encoding == nullptr) {
+    if (!selectedConnection.has_value() || selectedConnection->signingQueue == nullptr) {
         return false;
     }
 
-    const auto outgoingMessages = selectedConnection->encoding->outgoingMessages();
-    return outgoingMessages != nullptr && outgoingMessages->push(message);
+    return selectedConnection->signingQueue->push(prepareOutboundMessage(message));
 }
 
 bool RSPClientMessage::tryDequeueMessage(rsp::proto::RSPMessage& message) const {
@@ -211,6 +288,10 @@ bool RSPClientMessage::removeConnection(ClientConnectionID connectionId) {
         removedConnection.encoding->stop();
     }
 
+    if (removedConnection.signingQueue != nullptr) {
+        removedConnection.signingQueue->stop();
+    }
+
     if (removedConnection.transport != nullptr) {
         removedConnection.transport->stop();
     }
@@ -230,35 +311,20 @@ rsp::transport::TransportHandle RSPClientMessage::createTransport(const std::str
     return nullptr;
 }
 
-rsp::encoding::EncodingHandle RSPClientMessage::createEncoding(const rsp::transport::ConnectionHandle& connection,
-                                                               const std::string& encoding) const {
-    if (connection == nullptr) {
-        return nullptr;
+rsp::proto::RSPMessage RSPClientMessage::prepareOutboundMessage(const rsp::proto::RSPMessage& message) const {
+    rsp::proto::RSPMessage prepared = message;
+    std::string nodeIdBytes(16, '\0');
+    const uint64_t high = keyPair_.nodeID().high();
+    const uint64_t low = keyPair_.nodeID().low();
+    std::memcpy(nodeIdBytes.data(), &high, sizeof(high));
+    std::memcpy(nodeIdBytes.data() + sizeof(high), &low, sizeof(low));
+    prepared.mutable_source()->set_value(nodeIdBytes);
+
+    if (!prepared.has_nonce()) {
+        prepared.mutable_nonce()->set_value(randomMessageNonce());
     }
 
-    if (encoding == rsp::ascii_handshake::kEncoding) {
-        return std::make_shared<rsp::encoding::protobuf::ProtobufEncoding>(connection, incomingMessages_, keyPair_.duplicate());
-    }
-
-    return nullptr;
-}
-
-bool RSPClientMessage::performAsciiHandshake(const rsp::transport::ConnectionHandle& connection, const std::string& encoding) const {
-    if (encoding != rsp::ascii_handshake::kEncoding) {
-        return false;
-    }
-
-    const auto selectedEncoding = rsp::ascii_handshake::performClientHandshake(connection);
-    if (!selectedEncoding.has_value()) {
-        return false;
-    }
-
-    if (*selectedEncoding != encoding) {
-        return false;
-    }
-
-    connection->setNegotiatedEncoding(*selectedEncoding);
-    return true;
+    return prepared;
 }
 
 std::optional<RSPClientMessage::ClientConnectionState> RSPClientMessage::connectionState(ClientConnectionID connectionId) const {

@@ -1,6 +1,6 @@
 #include "endorsement_service/endorsement_service.hpp"
 
-#include "common/ascii_handshake.hpp"
+#include "common/message_queue/mq_ascii_handshake.hpp"
 
 #include <exception>
 #include <iostream>
@@ -11,9 +11,9 @@ int main(int argc, char** argv) {
 
     try {
         auto endorsementService = rsp::endorsement_service::EndorsementService::create();
-        endorsementService->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        endorsementService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cout << "endorsement service connected to " << transportSpec
-                  << " using encoding " << rsp::ascii_handshake::kEncoding << '\n';
+              << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n';
         return endorsementService->run();
     } catch (const std::exception& exception) {
         std::cerr << "endorsement_service failed: " << exception.what() << '\n';

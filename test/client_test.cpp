@@ -1,6 +1,7 @@
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
 
+#include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/ping_trace.hpp"
 #include "messages.pb.h"
 #include "common/transport/transport_memory.hpp"
@@ -231,7 +232,7 @@ void testTcpAsciiHandshake() {
 
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
     const rsp::client::RSPClientMessage::ClientConnectionID connectionId =
-        client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
     require(client->hasConnections(), "client should track created connections");
     require(client->hasConnection(connectionId), "client should track the new connection id");
     require(client->connectionCount() == 1, "client should track one live connection");
@@ -316,9 +317,9 @@ ClientToClientPingResults testClientToClientRouting() {
     rsp::client::RSPClient::Ptr secondClient = rsp::client::RSPClient::create(std::move(secondClientKeyPair));
 
     const rsp::client::RSPClient::ClientConnectionID firstConnectionId =
-        firstClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        firstClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
     const rsp::client::RSPClient::ClientConnectionID secondConnectionId =
-        secondClient->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        secondClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(firstClient->hasConnections(), "high-level client should track created connections");
     require(firstClient->hasConnection(firstConnectionId), "high-level client should expose existing connection ids");

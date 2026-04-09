@@ -1,13 +1,11 @@
-#define RSPCLIENT_STATIC
-
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
 #include "client/cpp_full/rsp_client.hpp"
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
+#include "common/message_queue/mq_ascii_handshake.hpp"
 #include "endorsement_service/endorsement_service.hpp"
 
-#include "common/ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
 #include "resource_manager/resource_manager.hpp"
 
@@ -111,7 +109,7 @@ void testEndorsementServiceConnectsToResourceManager() {
     const std::string transportSpec = "memory:rm-test";
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
-    const auto connectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto connectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(es->hasConnections(), "endorsement service should track created connections");
     require(es->hasConnection(connectionId), "endorsement service should expose the new connection id");
@@ -161,8 +159,8 @@ void testClientPingsEndorsementService() {
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create();
 
-    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(es->hasConnection(esConnectionId),
             "endorsement service should stay connected to the resource manager");
@@ -199,8 +197,8 @@ void testClientRequestsNetworkAccessEndorsement() {
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
 
-    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both the client and endorsement service before endorsement requests");
@@ -256,8 +254,8 @@ void testClientRequestsNetworkAccessEndorsement() {
         auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
         auto client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
 
-        const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+        const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both participants before raw endorsement requests");
@@ -316,8 +314,8 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::full::RSPClient::create(std::move(clientKeyPair));
 
-    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::ascii_handshake::kEncoding);
+    const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both the client and endorsement service before forwarding identities");
