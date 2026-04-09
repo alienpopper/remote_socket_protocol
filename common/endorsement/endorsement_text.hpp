@@ -15,6 +15,9 @@ namespace rsp::erd_text {
 //     AND(<tree>, <tree>)
 //     OR(<tree>, <tree>)
 //     EQ(<tree>, <tree>)
+//   Constant nodes:
+//     TRUE
+//     FALSE
 //   Leaf predicates:
 //     TYPE(<uuid>)       -- matches endorsement type
 //     VALUE(<hex>)       -- matches endorsement value bytes

@@ -49,6 +49,18 @@ rsp::proto::ERDAbstractSyntaxTree makeSignerEquals(const std::string& uuidStr) {
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeTrue() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_true_value();
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeFalse() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_false_value();
+    return tree;
+}
+
 rsp::proto::ERDAbstractSyntaxTree makeAnd(rsp::proto::ERDAbstractSyntaxTree lhs,
                                           rsp::proto::ERDAbstractSyntaxTree rhs) {
     rsp::proto::ERDAbstractSyntaxTree tree;
@@ -116,6 +128,24 @@ void testRoundTripSignerEquals() {
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_signer_equals(), "parsed should have signer_equals");
     require(parsed.signer_equals().signer().value() == uuidBytes(uuid), "SIGNER uuid bytes mismatch");
+}
+
+void testRoundTripTrue() {
+    const auto tree = makeTrue();
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text == "TRUE", "TRUE text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_true_value(), "parsed should have true_value");
+}
+
+void testRoundTripFalse() {
+    const auto tree = makeFalse();
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text == "FALSE", "FALSE text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_false_value(), "parsed should have false_value");
 }
 
 void testRoundTripAND() {
@@ -197,6 +227,11 @@ void testEmptyTree() {
     require(parsedWhitespace.node_type_case() ==
                 rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET,
             "whitespace should parse to unset tree");
+
+        require(rsp::erd_text::fromString(" TRUE ").has_true_value(),
+            "TRUE with surrounding whitespace should parse");
+        require(rsp::erd_text::fromString(" FALSE \n").has_false_value(),
+            "FALSE with surrounding whitespace should parse");
 }
 
 void testParseWhitespaceTolerance() {
@@ -258,6 +293,8 @@ int main() {
         testRoundTripValueEquals();
         testRoundTripValueEqualsEmpty();
         testRoundTripSignerEquals();
+        testRoundTripTrue();
+        testRoundTripFalse();
         testRoundTripAND();
         testRoundTripOR();
         testRoundTripEQ();

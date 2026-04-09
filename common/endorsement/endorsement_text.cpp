@@ -114,6 +114,12 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
             out += bytesToUUID(tree.signer_equals().signer().value());
             out += ')';
             break;
+        case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
+            out += "TRUE";
+            break;
+        case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
+            out += "FALSE";
+            break;
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
             break;
     }
@@ -252,6 +258,16 @@ struct Parser {
             tree.mutable_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
+            return tree;
+        }
+        if (startsWith("TRUE", 4)) {
+            pos += 4;
+            tree.mutable_true_value();
+            return tree;
+        }
+        if (startsWith("FALSE", 5)) {
+            pos += 5;
+            tree.mutable_false_value();
             return tree;
         }
 
