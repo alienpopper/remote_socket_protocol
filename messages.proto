@@ -276,6 +276,12 @@ message ERDASTSignerEquals {
     NodeId signer = 1;
 }
 
+message ERDASTTrue {
+}
+
+message ERDASTFalse {
+}
+
 message ERDAbstractSyntaxTree {
     oneof node_type{
         ERDASTEquals equals = 1;
@@ -284,6 +290,8 @@ message ERDAbstractSyntaxTree {
         ERDASTTypeEquals type_equals = 4;
         ERDASTValueEquals value_equals = 5;
         ERDASTSignerEquals signer_equals = 6;
+        ERDASTTrue true_value = 7;
+        ERDASTFalse false_value = 8;
     }
 }
 

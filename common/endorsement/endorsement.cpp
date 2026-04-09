@@ -136,6 +136,10 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
             return tree.signer_equals().has_signer() &&
                    endorsement.endorsementService() ==
                        parseNodeId(tree.signer_equals().signer(), "invalid requirement signer length");
+        case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
+            return true;
+        case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
+            return false;
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
             return false;
     }
@@ -145,6 +149,85 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
 
 bool isEmptyTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
     return tree.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET;
+}
+
+bool isFalseTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
+    return tree.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kFalseValue;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeFalseTree() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_false_value();
+    return tree;
+}
+
+enum class ConstantTreeValue {
+    kUnknown,
+    kTrue,
+    kFalse,
+};
+
+ConstantTreeValue getConstantTreeValue(const rsp::proto::ERDAbstractSyntaxTree& tree) {
+    switch (tree.node_type_case()) {
+        case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
+            return ConstantTreeValue::kTrue;
+        case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
+            return ConstantTreeValue::kFalse;
+        case rsp::proto::ERDAbstractSyntaxTree::kEquals: {
+            if (!tree.equals().has_lhs() || !tree.equals().has_rhs()) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            const auto lhsValue = getConstantTreeValue(tree.equals().lhs());
+            const auto rhsValue = getConstantTreeValue(tree.equals().rhs());
+            if (lhsValue == ConstantTreeValue::kUnknown || rhsValue == ConstantTreeValue::kUnknown) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            return lhsValue == rhsValue ? ConstantTreeValue::kTrue : ConstantTreeValue::kFalse;
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAnd: {
+            if (!tree.and_().has_lhs() || !tree.and_().has_rhs()) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            const auto lhsValue = getConstantTreeValue(tree.and_().lhs());
+            const auto rhsValue = getConstantTreeValue(tree.and_().rhs());
+            if (lhsValue == ConstantTreeValue::kFalse || rhsValue == ConstantTreeValue::kFalse) {
+                return ConstantTreeValue::kFalse;
+            }
+
+            if (lhsValue == ConstantTreeValue::kTrue && rhsValue == ConstantTreeValue::kTrue) {
+                return ConstantTreeValue::kTrue;
+            }
+
+            return ConstantTreeValue::kUnknown;
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kOr: {
+            if (!tree.or_().has_lhs() || !tree.or_().has_rhs()) {
+                return ConstantTreeValue::kUnknown;
+            }
+
+            const auto lhsValue = getConstantTreeValue(tree.or_().lhs());
+            const auto rhsValue = getConstantTreeValue(tree.or_().rhs());
+            if (lhsValue == ConstantTreeValue::kTrue || rhsValue == ConstantTreeValue::kTrue) {
+                return ConstantTreeValue::kTrue;
+            }
+
+            if (lhsValue == ConstantTreeValue::kFalse && rhsValue == ConstantTreeValue::kFalse) {
+                return ConstantTreeValue::kFalse;
+            }
+
+            return ConstantTreeValue::kUnknown;
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
+            return ConstantTreeValue::kUnknown;
+    }
+
+    return ConstantTreeValue::kUnknown;
 }
 
 bool anyEndorsementMatchesTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
@@ -184,6 +267,15 @@ rsp::proto::ERDAbstractSyntaxTree makeEqualsTree(const rsp::proto::ERDAbstractSy
 
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ERDAbstractSyntaxTree& tree,
                                                             const std::vector<Endorsement>& endorsements) {
+    const auto constantValue = getConstantTreeValue(tree);
+    if (constantValue == ConstantTreeValue::kTrue) {
+        return rsp::proto::ERDAbstractSyntaxTree();
+    }
+
+    if (constantValue == ConstantTreeValue::kFalse) {
+        return makeFalseTree();
+    }
+
     if (anyEndorsementMatchesTree(tree, endorsements)) {
         return rsp::proto::ERDAbstractSyntaxTree();
     }
@@ -208,6 +300,10 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return reducedLeft;
             }
 
+            if (isFalseTree(reducedLeft) && isFalseTree(reducedRight)) {
+                return rsp::proto::ERDAbstractSyntaxTree();
+            }
+
             return makeEqualsTree(reducedLeft, reducedRight);
         }
         case rsp::proto::ERDAbstractSyntaxTree::kAnd: {
@@ -225,6 +321,10 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return reducedLeft;
             }
 
+            if (isFalseTree(reducedLeft) || isFalseTree(reducedRight)) {
+                return makeFalseTree();
+            }
+
             return makeAndTree(reducedLeft, reducedRight);
         }
         case rsp::proto::ERDAbstractSyntaxTree::kOr: {
@@ -238,11 +338,21 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return rsp::proto::ERDAbstractSyntaxTree();
             }
 
+            if (isFalseTree(reducedLeft)) {
+                return reducedRight;
+            }
+
+            if (isFalseTree(reducedRight)) {
+                return reducedLeft;
+            }
+
             return makeOrTree(reducedLeft, reducedRight);
         }
         case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
+        case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
             return tree;
     }

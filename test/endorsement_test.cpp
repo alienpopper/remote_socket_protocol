@@ -61,6 +61,18 @@ rsp::proto::ERDAbstractSyntaxTree makeSignerEqualsTree(const rsp::NodeID& signer
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeTrueTree() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_true_value();
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeFalseTree() {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_false_value();
+    return tree;
+}
+
 rsp::proto::ERDAbstractSyntaxTree makeAndTree(const rsp::proto::ERDAbstractSyntaxTree& lhs,
                                               const rsp::proto::ERDAbstractSyntaxTree& rhs) {
     rsp::proto::ERDAbstractSyntaxTree tree;
@@ -284,6 +296,20 @@ void testMalformedBufferRejection() {
             "requirements without a tree should not match");
     }
 
+    void testRequirementTrueFalseNodes() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID endorsementType("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, endorsementType, "network-access");
+
+        require(rsp::endorsementMatchesRequirement(makeRequirement(makeTrueTree()), endorsement),
+            "true nodes should always evaluate to true");
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeFalseTree()), endorsement),
+            "false nodes should always evaluate to false");
+        require(rsp::endorsementMatchesRequirement(makeRequirement(makeEqualsTree(makeFalseTree(), makeFalseTree())), endorsement),
+            "equals should treat false nodes as ordinary boolean operands");
+    }
+
     void testReduceRequirementTreeEliminatesMatchedAndBranch() {
         rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
         rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
@@ -346,6 +372,28 @@ void testMalformedBufferRejection() {
             "reduction should clear a fully satisfied tree");
     }
 
+    void testReduceRequirementTreeSimplifiesTrueAndFalseConstants() {
+        const auto reducedTrue = rsp::reduceRequirementTree(makeTrueTree(), std::vector<rsp::Endorsement>{});
+        require(isEmptyTree(reducedTrue),
+            "reduction should eliminate true because it is already satisfied");
+
+        const auto reducedFalse = rsp::reduceRequirementTree(makeFalseTree(), std::vector<rsp::Endorsement>{});
+        require(reducedFalse.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kFalseValue,
+            "reduction should preserve false because it can never be satisfied");
+
+        const auto reducedAnd = rsp::reduceRequirementTree(
+            makeAndTree(makeTrueTree(), makeValueEqualsTree("missing-value")),
+            std::vector<rsp::Endorsement>{});
+        require(reducedAnd.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+            "true and X should reduce to X");
+
+        const auto reducedOr = rsp::reduceRequirementTree(
+            makeOrTree(makeFalseTree(), makeValueEqualsTree("missing-value")),
+            std::vector<rsp::Endorsement>{});
+        require(reducedOr.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+            "false or X should reduce to X");
+    }
+
 }  // namespace
 
 int main() {
@@ -359,10 +407,12 @@ int main() {
         testRequirementSignerEquals();
         testRequirementAndOrEqualsNodes();
         testRequirementComplexAst();
+        testRequirementTrueFalseNodes();
         testReduceRequirementTreeEliminatesMatchedAndBranch();
         testReduceRequirementTreeEliminatesSatisfiedOrTree();
         testReduceRequirementTreePreservesUnmetAlternatives();
         testReduceRequirementTreeClearsFullySatisfiedTree();
+        testReduceRequirementTreeSimplifiesTrueAndFalseConstants();
 
         std::cout << "endorsement_test passed\n";
         return 0;
