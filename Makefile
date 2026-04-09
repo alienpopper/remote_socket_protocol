@@ -16,6 +16,7 @@ CLIENT_TEST_TARGET := $(BIN_DIR)/client_test
 ENDORSEMENT_TEST_TARGET := $(BIN_DIR)/endorsement_test
 MESSAGE_QUEUE_TEST_TARGET := $(BIN_DIR)/message_queue_test
 MQ_ASCII_HANDSHAKE_TEST_TARGET := $(BIN_DIR)/mq_ascii_handshake_test
+MQ_SIGNING_TEST_TARGET := $(BIN_DIR)/mq_signing_test
 NODE_TEST_TARGET := $(BIN_DIR)/node_test
 RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
@@ -152,6 +153,16 @@ MQ_ASCII_HANDSHAKE_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/mq_ascii_handshake_test.o
+MQ_SIGNING_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/mq_signing_test.o
 NODE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
@@ -259,7 +270,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-node test-resource-service test-endorsement-service test-transport-memory
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-resource-service test-endorsement-service test-transport-memory
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 
@@ -303,6 +314,9 @@ $(MESSAGE_QUEUE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LIT
 $(MQ_ASCII_HANDSHAKE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_ASCII_HANDSHAKE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(MQ_ASCII_HANDSHAKE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(MQ_SIGNING_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_SIGNING_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(MQ_SIGNING_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(NODE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(NODE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(NODE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -327,6 +341,9 @@ test-message-queue: $(MESSAGE_QUEUE_TEST_TARGET)
 test-mq-ascii-handshake: $(MQ_ASCII_HANDSHAKE_TEST_TARGET)
 	$(MQ_ASCII_HANDSHAKE_TEST_TARGET)
 
+test-mq-signing: $(MQ_SIGNING_TEST_TARGET)
+	$(MQ_SIGNING_TEST_TARGET)
+
 test-node: $(NODE_TEST_TARGET)
 	$(NODE_TEST_TARGET)
 
@@ -348,7 +365,7 @@ test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
+test: test-base-types test-keypair test-endorsement test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
@@ -369,6 +386,8 @@ $(OBJ_DIR)/common/ascii_handshake.o: $(PROTOBUF_GENERATED_HEADER)
 $(OBJ_DIR)/common/message_queue/mq.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/common/message_queue/mq_signing.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
@@ -393,6 +412,8 @@ $(OBJ_DIR)/test/resource_service_test.o: common/message_queue/mq.hpp $(PROTOBUF_
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/mq_ascii_handshake_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/mq_signing_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
