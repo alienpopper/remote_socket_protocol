@@ -10,6 +10,10 @@
 #include <optional>
 #include <thread>
 
+namespace rsp::message_queue {
+class MessageQueueAuthN;
+}
+
 namespace rsp::encoding {
 
 class Encoding {
@@ -36,6 +40,8 @@ protected:
     const rsp::KeyPair& localKeyPair() const;
 
 private:
+    friend class rsp::message_queue::MessageQueueAuthN;
+
     virtual bool readMessage(rsp::proto::RSPMessage& message) = 0;
     virtual bool writeMessage(const rsp::proto::RSPMessage& message) = 0;
     void readLoop();
