@@ -163,16 +163,16 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
             }
 
             return false;
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-            return tree.type_equals().has_type() &&
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+            return tree.endorsement_type_equals().has_type() &&
                    endorsement.endorsementType() ==
-                       parseEndorsementType(tree.type_equals().type(), "invalid requirement endorsement type length");
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-            return bufferToString(endorsement.endorsementValue()) == tree.value_equals().value();
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
-            return tree.signer_equals().has_signer() &&
+                       parseEndorsementType(tree.endorsement_type_equals().type(), "invalid requirement endorsement type length");
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+            return bufferToString(endorsement.endorsementValue()) == tree.endorsement_value_equals().value();
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
+            return tree.endorsement_signer_equals().has_signer() &&
                    endorsement.endorsementService() ==
-                       parseNodeId(tree.signer_equals().signer(), "invalid requirement signer length");
+                       parseNodeId(tree.endorsement_signer_equals().signer(), "invalid requirement signer length");
         case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
         case rsp::proto::ERDAbstractSyntaxTree::kMessageSource:
             return false;
@@ -235,9 +235,9 @@ bool evaluateMessageRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tre
             return true;
         case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
             return false;
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
             return false;
     }
@@ -374,9 +374,9 @@ ConstantTreeValue getConstantTreeValue(const rsp::proto::ERDAbstractSyntaxTree& 
 
             return allFalse ? ConstantTreeValue::kFalse : ConstantTreeValue::kUnknown;
         }
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
         case rsp::proto::ERDAbstractSyntaxTree::kMessageSource:
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
@@ -396,9 +396,9 @@ bool isMessagePredicateNode(const rsp::proto::ERDAbstractSyntaxTree& tree) {
         case rsp::proto::ERDAbstractSyntaxTree::kOr:
         case rsp::proto::ERDAbstractSyntaxTree::kAllOf:
         case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
         case rsp::proto::ERDAbstractSyntaxTree::kFalseValue:
         case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
@@ -592,9 +592,9 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
 
             return makeAnyOfTree(remainingTerms);
         }
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
         case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
         case rsp::proto::ERDAbstractSyntaxTree::kMessageSource:
         case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:

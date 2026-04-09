@@ -43,21 +43,21 @@ rsp::proto::EndorsementType toProtoEndorsementType(const rsp::GUID& endorsementT
     return protoEndorsementType;
 }
 
-rsp::proto::ERDAbstractSyntaxTree makeTypeEqualsTree(const rsp::GUID& endorsementType) {
+rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeEqualsTree(const rsp::GUID& endorsementType) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_type_equals()->mutable_type() = toProtoEndorsementType(endorsementType);
+    *tree.mutable_endorsement_type_equals()->mutable_type() = toProtoEndorsementType(endorsementType);
     return tree;
 }
 
-rsp::proto::ERDAbstractSyntaxTree makeValueEqualsTree(const std::string& value) {
+rsp::proto::ERDAbstractSyntaxTree makeEndorsementValueEqualsTree(const std::string& value) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_value_equals()->set_value(value);
+    tree.mutable_endorsement_value_equals()->set_value(value);
     return tree;
 }
 
-rsp::proto::ERDAbstractSyntaxTree makeSignerEqualsTree(const rsp::NodeID& signer) {
+rsp::proto::ERDAbstractSyntaxTree makeEndorsementSignerEqualsTree(const rsp::NodeID& signer) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_signer_equals()->mutable_signer() = toProtoNodeId(signer);
+    *tree.mutable_endorsement_signer_equals()->mutable_signer() = toProtoNodeId(signer);
     return tree;
 }
 
@@ -272,9 +272,9 @@ void testMalformedBufferRejection() {
         const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "alpha");
 
-        require(rsp::endorsementMatchesRequirement(makeRequirement(makeTypeEqualsTree(matchingType)), endorsement),
+        require(rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementTypeEqualsTree(matchingType)), endorsement),
             "type-equals should match endorsements with the same type");
-        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeTypeEqualsTree(otherType)), endorsement),
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementTypeEqualsTree(otherType)), endorsement),
             "type-equals should reject endorsements with a different type");
     }
 
@@ -284,23 +284,23 @@ void testMalformedBufferRejection() {
         const rsp::GUID endorsementType("00112233-4455-6677-8899-aabbccddeeff");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, endorsementType, "network-access");
 
-        require(rsp::endorsementMatchesRequirement(makeRequirement(makeValueEqualsTree("network-access")), endorsement),
+        require(rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementValueEqualsTree("network-access")), endorsement),
             "value-equals should match endorsements with the same value bytes");
-        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeValueEqualsTree("other-value")), endorsement),
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementValueEqualsTree("other-value")), endorsement),
             "value-equals should reject endorsements with a different value");
     }
 
-    void testRequirementSignerEquals() {
+    void testRequirementEndorsementSignerEquals() {
         rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
         rsp::KeyPair otherSignerKey = rsp::KeyPair::generateP256();
         rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
         const rsp::GUID endorsementType("00112233-4455-6677-8899-aabbccddeeff");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, endorsementType, "alpha");
 
-        require(rsp::endorsementMatchesRequirement(makeRequirement(makeSignerEqualsTree(endorsementServiceKey.nodeID())), endorsement),
-            "signer-equals should match the endorsement signer");
-        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeSignerEqualsTree(otherSignerKey.nodeID())), endorsement),
-            "signer-equals should reject a different signer");
+        require(rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementSignerEqualsTree(endorsementServiceKey.nodeID())), endorsement),
+            "endorsement-signer-equals should match the endorsement signer");
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeEndorsementSignerEqualsTree(otherSignerKey.nodeID())), endorsement),
+            "endorsement-signer-equals should reject a different signer");
         require(!rsp::endorsementMatchesRequirement(makeRequirement(makeMessageDestinationTree(subjectKey.nodeID())), endorsement),
             "message-destination should not match an endorsement without message context");
         require(!rsp::endorsementMatchesRequirement(makeRequirement(makeMessageSourceTree(subjectKey.nodeID())), endorsement),
@@ -315,11 +315,11 @@ void testMalformedBufferRejection() {
         const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto typeMatches = makeTypeEqualsTree(matchingType);
-        const auto typeMisses = makeTypeEqualsTree(otherType);
-        const auto valueMatches = makeValueEqualsTree("network-access");
-        const auto signerMatches = makeSignerEqualsTree(endorsementServiceKey.nodeID());
-        const auto signerMisses = makeSignerEqualsTree(otherSignerKey.nodeID());
+        const auto typeMatches = makeEndorsementTypeEqualsTree(matchingType);
+        const auto typeMisses = makeEndorsementTypeEqualsTree(otherType);
+        const auto valueMatches = makeEndorsementValueEqualsTree("network-access");
+        const auto signerMatches = makeEndorsementSignerEqualsTree(endorsementServiceKey.nodeID());
+        const auto signerMisses = makeEndorsementSignerEqualsTree(otherSignerKey.nodeID());
 
         require(rsp::endorsementMatchesRequirement(makeRequirement(makeAndTree(typeMatches, valueMatches)), endorsement),
             "and should match when both operands match");
@@ -343,8 +343,8 @@ void testMalformedBufferRejection() {
         const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto leftBranch = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("network-access"));
-        const auto rightBranch = makeAndTree(makeSignerEqualsTree(otherSignerKey.nodeID()), makeTypeEqualsTree(otherType));
+        const auto leftBranch = makeAndTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementValueEqualsTree("network-access"));
+        const auto rightBranch = makeAndTree(makeEndorsementSignerEqualsTree(otherSignerKey.nodeID()), makeEndorsementTypeEqualsTree(otherType));
         const auto complexTree = makeOrTree(leftBranch, rightBranch);
 
         require(rsp::endorsementMatchesRequirement(makeRequirement(complexTree), endorsement),
@@ -378,31 +378,31 @@ void testMalformedBufferRejection() {
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
         const auto allOfMatches = makeAllOfTree({
-            makeTypeEqualsTree(matchingType),
-            makeValueEqualsTree("network-access"),
+            makeEndorsementTypeEqualsTree(matchingType),
+            makeEndorsementValueEqualsTree("network-access"),
             makeTrueTree(),
         });
         require(rsp::endorsementMatchesRequirement(makeRequirement(allOfMatches), endorsement),
             "all-of should match when all terms match");
 
         const auto allOfMisses = makeAllOfTree({
-            makeTypeEqualsTree(matchingType),
-            makeSignerEqualsTree(otherSignerKey.nodeID()),
+            makeEndorsementTypeEqualsTree(matchingType),
+            makeEndorsementSignerEqualsTree(otherSignerKey.nodeID()),
         });
         require(!rsp::endorsementMatchesRequirement(makeRequirement(allOfMisses), endorsement),
             "all-of should fail when any term fails");
 
         const auto anyOfMatches = makeAnyOfTree({
-            makeTypeEqualsTree(otherType),
-            makeSignerEqualsTree(otherSignerKey.nodeID()),
-            makeValueEqualsTree("network-access"),
+            makeEndorsementTypeEqualsTree(otherType),
+            makeEndorsementSignerEqualsTree(otherSignerKey.nodeID()),
+            makeEndorsementValueEqualsTree("network-access"),
         });
         require(rsp::endorsementMatchesRequirement(makeRequirement(anyOfMatches), endorsement),
             "any-of should match when any term matches");
 
         const auto anyOfMisses = makeAnyOfTree({
-            makeTypeEqualsTree(otherType),
-            makeSignerEqualsTree(otherSignerKey.nodeID()),
+            makeEndorsementTypeEqualsTree(otherType),
+            makeEndorsementSignerEqualsTree(otherSignerKey.nodeID()),
             makeFalseTree(),
         });
         require(!rsp::endorsementMatchesRequirement(makeRequirement(anyOfMisses), endorsement),
@@ -415,12 +415,12 @@ void testMalformedBufferRejection() {
         const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto tree = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("other-value"));
+        const auto tree = makeAndTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementValueEqualsTree("other-value"));
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
 
-        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "reduction should keep only the unmatched value predicate from an and-tree");
-        require(reduced.value_equals().value() == "other-value",
+        require(reduced.endorsement_value_equals().value() == "other-value",
             "reduction should preserve the unmatched value predicate content");
     }
 
@@ -431,7 +431,7 @@ void testMalformedBufferRejection() {
         const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto tree = makeOrTree(makeTypeEqualsTree(matchingType), makeTypeEqualsTree(otherType));
+        const auto tree = makeOrTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementTypeEqualsTree(otherType));
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
 
         require(isEmptyTree(reduced),
@@ -445,16 +445,16 @@ void testMalformedBufferRejection() {
         const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto leftBranch = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("missing-value"));
-        const auto rightBranch = makeSignerEqualsTree(rsp::KeyPair::generateP256().nodeID());
+        const auto leftBranch = makeAndTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementValueEqualsTree("missing-value"));
+        const auto rightBranch = makeEndorsementSignerEqualsTree(rsp::KeyPair::generateP256().nodeID());
         const auto tree = makeOrTree(leftBranch, rightBranch);
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
 
         require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kOr,
             "reduction should keep unmet alternatives in an or-tree");
-        require(reduced.or_().lhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reduced.or_().lhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "reduction should drop the matched portion of the partially satisfied branch");
-        require(reduced.or_().rhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kSignerEquals,
+        require(reduced.or_().rhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals,
             "reduction should preserve the untouched alternative branch");
     }
 
@@ -464,7 +464,7 @@ void testMalformedBufferRejection() {
         const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
         const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
 
-        const auto tree = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("network-access"));
+        const auto tree = makeAndTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementValueEqualsTree("network-access"));
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
 
         require(isEmptyTree(reduced),
@@ -481,15 +481,15 @@ void testMalformedBufferRejection() {
             "reduction should preserve false because it can never be satisfied");
 
         const auto reducedAnd = rsp::reduceRequirementTree(
-            makeAndTree(makeTrueTree(), makeValueEqualsTree("missing-value")),
+            makeAndTree(makeTrueTree(), makeEndorsementValueEqualsTree("missing-value")),
             std::vector<rsp::Endorsement>{});
-        require(reducedAnd.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reducedAnd.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "true and X should reduce to X");
 
         const auto reducedOr = rsp::reduceRequirementTree(
-            makeOrTree(makeFalseTree(), makeValueEqualsTree("missing-value")),
+            makeOrTree(makeFalseTree(), makeEndorsementValueEqualsTree("missing-value")),
             std::vector<rsp::Endorsement>{});
-        require(reducedOr.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reducedOr.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "false or X should reduce to X");
     }
 
@@ -501,19 +501,19 @@ void testMalformedBufferRejection() {
 
         const auto reducedAllOf = rsp::reduceRequirementTree(
             makeAllOfTree({
-                makeTypeEqualsTree(matchingType),
+                makeEndorsementTypeEqualsTree(matchingType),
                 makeTrueTree(),
-                makeValueEqualsTree("missing-value"),
+                makeEndorsementValueEqualsTree("missing-value"),
             }),
             std::vector<rsp::Endorsement>{endorsement});
-        require(reducedAllOf.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reducedAllOf.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "all-of should reduce by dropping satisfied terms");
 
         const auto reducedAnyOf = rsp::reduceRequirementTree(
             makeAnyOfTree({
                 makeFalseTree(),
-                makeTypeEqualsTree(matchingType),
-                makeValueEqualsTree("missing-value"),
+                makeEndorsementTypeEqualsTree(matchingType),
+                makeEndorsementValueEqualsTree("missing-value"),
             }),
             std::vector<rsp::Endorsement>{endorsement});
         require(isEmptyTree(reducedAnyOf),
@@ -541,14 +541,14 @@ void testMalformedBufferRejection() {
     void testReduceRequirementTreeEliminatesMismatchedMessageBranches() {
         const rsp::NodeID expectedDestination = rsp::KeyPair::generateP256().nodeID();
         const rsp::NodeID actualDestination = rsp::KeyPair::generateP256().nodeID();
-        const auto tree = makeOrTree(makeMessageDestinationTree(expectedDestination), makeValueEqualsTree("network-access"));
+        const auto tree = makeOrTree(makeMessageDestinationTree(expectedDestination), makeEndorsementValueEqualsTree("network-access"));
         const auto message = makeMessageWithDestination(actualDestination);
 
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{}, &message);
 
-        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
             "reduction with a non-matching message should prune the mismatched message branch");
-        require(reduced.value_equals().value() == "network-access",
+        require(reduced.endorsement_value_equals().value() == "network-access",
             "reduction should preserve the remaining unmatched branch");
     }
 
@@ -573,7 +573,7 @@ int main() {
         testMalformedBufferRejection();
         testRequirementTypeEquals();
         testRequirementValueEquals();
-        testRequirementSignerEquals();
+        testRequirementEndorsementSignerEquals();
         testRequirementAndOrEqualsNodes();
         testRequirementComplexAst();
         testRequirementTrueFalseNodes();

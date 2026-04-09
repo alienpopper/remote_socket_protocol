@@ -119,19 +119,19 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
         case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
             appendNary("ANYOF", tree.any_of().terms(), out);
             break;
-        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
-            out += "TYPE(";
-            out += bytesToUUID(tree.type_equals().type().value());
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
+            out += "ENDORSEMENT_TYPE(";
+            out += bytesToUUID(tree.endorsement_type_equals().type().value());
             out += ')';
             break;
-        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
-            out += "VALUE(";
-            out += bytesToHex(tree.value_equals().value());
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
+            out += "ENDORSEMENT_VALUE(";
+            out += bytesToHex(tree.endorsement_value_equals().value());
             out += ')';
             break;
-        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
-            out += "SIGNER(";
-            out += bytesToUUID(tree.signer_equals().signer().value());
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
+            out += "ENDORSEMENT_SIGNER(";
+            out += bytesToUUID(tree.endorsement_signer_equals().signer().value());
             out += ')';
             break;
         case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
@@ -297,26 +297,26 @@ struct Parser {
             parseNaryArgs(tree.mutable_any_of()->mutable_terms());
             return tree;
         }
-        if (startsWith("TYPE(", 5)) {
-            pos += 5;
+        if (startsWith("ENDORSEMENT_TYPE(", 17)) {
+            pos += 17;
             skipWhitespace();
-            tree.mutable_type_equals()->mutable_type()->set_value(parseUUIDBytes());
-            skipWhitespace();
-            expect(')');
-            return tree;
-        }
-        if (startsWith("VALUE(", 6)) {
-            pos += 6;
-            skipWhitespace();
-            tree.mutable_value_equals()->set_value(parseHexBytes());
+            tree.mutable_endorsement_type_equals()->mutable_type()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;
         }
-        if (startsWith("SIGNER(", 7)) {
-            pos += 7;
+        if (startsWith("ENDORSEMENT_VALUE(", 18)) {
+            pos += 18;
             skipWhitespace();
-            tree.mutable_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
+            tree.mutable_endorsement_value_equals()->set_value(parseHexBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("ENDORSEMENT_SIGNER(", 19)) {
+            pos += 19;
+            skipWhitespace();
+            tree.mutable_endorsement_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;

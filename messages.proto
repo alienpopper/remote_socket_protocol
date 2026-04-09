@@ -273,15 +273,15 @@ message ERDASTAnyOf {
     repeated ERDAbstractSyntaxTree terms = 1;
 }
 
-message ERDASTTypeEquals {
+message ERDASTEndorsementTypeEquals {
     EndorsementType type = 1;
 }
 
-message ERDASTValueEquals {
+message ERDASTEndorsementValueEquals {
     bytes value = 1;
 }
 
-message ERDASTSignerEquals {
+message ERDASTEndorsementSignerEquals {
     NodeId signer = 1;
 }
 
@@ -299,14 +299,15 @@ message ERDASTTrue {
 message ERDASTFalse {
 }
 
+//TODO fix this so that we can't match the type from one and the value from another.  This scheme is only for development
 message ERDAbstractSyntaxTree {
     oneof node_type{
         ERDASTEquals equals = 1;
         ERDASTAnd and = 2;
         ERDASTOr or = 3;
-        ERDASTTypeEquals type_equals = 4;
-        ERDASTValueEquals value_equals = 5;
-        ERDASTSignerEquals signer_equals = 6;
+        ERDASTEndorsementTypeEquals endorsement_type_equals = 4;
+        ERDASTEndorsementValueEquals endorsement_value_equals = 5;
+        ERDASTEndorsementSignerEquals endorsement_signer_equals = 6;
         ERDASTMessageDestination message_destination = 7;
         ERDASTMessageSource message_source = 8;
         ERDASTTrue true_value = 9;

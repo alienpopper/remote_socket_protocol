@@ -59,7 +59,7 @@ rsp::proto::RSPMessage makeMessageWithSignatureSigner(const rsp::NodeID& signerN
     return message;
 }
 
-rsp::proto::ERDAbstractSyntaxTree makeTypeEqualsTree(const rsp::GUID& endorsementType) {
+rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeEqualsTree(const rsp::GUID& endorsementType) {
     rsp::proto::ERDAbstractSyntaxTree tree;
     std::string value;
     value.reserve(16);
@@ -69,13 +69,13 @@ rsp::proto::ERDAbstractSyntaxTree makeTypeEqualsTree(const rsp::GUID& endorsemen
     for (int shift = 56; shift >= 0; shift -= 8) {
         value.push_back(static_cast<char>((endorsementType.low() >> shift) & 0xFFULL));
     }
-    tree.mutable_type_equals()->mutable_type()->set_value(value);
+    tree.mutable_endorsement_type_equals()->mutable_type()->set_value(value);
     return tree;
 }
 
-rsp::proto::ERDAbstractSyntaxTree makeValueEqualsTree(const std::string& value) {
+rsp::proto::ERDAbstractSyntaxTree makeEndorsementValueEqualsTree(const std::string& value) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_value_equals()->set_value(value);
+    tree.mutable_endorsement_value_equals()->set_value(value);
     return tree;
 }
 
@@ -169,7 +169,7 @@ void testAuthZSuccessOnMatchingEndorsement() {
             return std::vector<rsp::Endorsement>{
                 makeEndorsement(issuer, sourceKey.nodeID(), requiredType, "network-access", HOURS(1))};
         },
-        makeAndTree(makeTypeEqualsTree(requiredType), makeValueEqualsTree("network-access")));
+        makeAndTree(makeEndorsementTypeEqualsTree(requiredType), makeEndorsementValueEqualsTree("network-access")));
 
     queue.setWorkerCount(1);
     queue.start();
@@ -217,7 +217,7 @@ void testAuthZFailsWhenNoEndorsementMatches() {
             return std::vector<rsp::Endorsement>{
                 makeEndorsement(issuer, sourceKey.nodeID(), otherType, "network-access", HOURS(1))};
         },
-        makeTypeEqualsTree(requiredType));
+        makeEndorsementTypeEqualsTree(requiredType));
 
     queue.setWorkerCount(1);
     queue.start();
@@ -242,7 +242,7 @@ void testAuthZFailsForExpiredEndorsement() {
             return std::vector<rsp::Endorsement>{
                 makeEndorsement(issuer, sourceKey.nodeID(), requiredType, "network-access", -SECONDS(1))};
         },
-        makeTypeEqualsTree(requiredType));
+        makeEndorsementTypeEqualsTree(requiredType));
 
     queue.setWorkerCount(1);
     queue.start();
@@ -267,7 +267,7 @@ void testAuthZIgnoresWrongSubjectEndorsement() {
             return std::vector<rsp::Endorsement>{
                 makeEndorsement(issuer, otherSubject.nodeID(), requiredType, "network-access", HOURS(1))};
         },
-        makeTypeEqualsTree(requiredType));
+        makeEndorsementTypeEqualsTree(requiredType));
 
     queue.setWorkerCount(1);
     queue.start();

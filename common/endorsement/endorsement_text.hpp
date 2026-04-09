@@ -22,9 +22,9 @@ namespace rsp::erd_text {
 //     TRUE
 //     FALSE
 //   Leaf predicates:
-//     TYPE(<uuid>)       -- matches endorsement type
-//     VALUE(<hex>)       -- matches endorsement value bytes
-//     SIGNER(<uuid>)     -- matches endorsement service node id
+//     ENDORSEMENT_TYPE(<uuid>)    -- matches endorsement type
+//     ENDORSEMENT_VALUE(<hex>)    -- matches endorsement value bytes
+//     ENDORSEMENT_SIGNER(<uuid>)  -- matches endorsement service node id
 //
 // UUIDs use standard 8-4-4-4-12 lowercase hex format.
 // Byte arrays use lowercase hex pairs with no separators.

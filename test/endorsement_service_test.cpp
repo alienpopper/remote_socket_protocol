@@ -72,7 +72,7 @@ protected:
         for (int shift = 56; shift >= 0; shift -= 8) {
             value.push_back(static_cast<char>((allowedSigner_.low() >> shift) & 0xFFULL));
         }
-        tree.mutable_signer_equals()->mutable_signer()->set_value(value);
+        tree.mutable_message_source()->mutable_source()->set_value(value);
         return tree;
     }
 
@@ -439,7 +439,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     serverTransport->stop();
 }
 
-    void testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly() {
+    void testMessageSourceAuthorizationAllowsFirstEndorsementServiceOnly() {
         auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
 
         rsp::KeyPair firstEsKeyPair = rsp::KeyPair::generateP256();
@@ -491,7 +491,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
         require(firstEs->tryDequeueHandledMessage(firstReply),
             "first endorsement service should expose its handled reply");
         require(firstReply.has_ping_reply(),
-            "signer_equals authorization should allow the first endorsement service to ping the RM");
+            "message_source authorization should allow the first endorsement service to ping the RM");
         require(firstReply.ping_reply().nonce().value() == firstPing.ping_request().nonce().value(),
             "authorized ping reply should preserve the request nonce");
 
@@ -499,11 +499,11 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
         require(secondEs->tryDequeueHandledMessage(secondReply),
             "second endorsement service should expose its handled reply");
         require(secondReply.has_endorsement_needed(),
-            "signer_equals authorization should reject the second endorsement service");
+            "message_source authorization should reject the second endorsement service");
         require(secondReply.endorsement_needed().has_tree(),
             "authorization failure should include the required endorsement tree");
-        require(secondReply.endorsement_needed().tree().has_signer_equals(),
-            "authorization failure tree should require signer_equals");
+        require(secondReply.endorsement_needed().tree().has_message_source(),
+            "authorization failure tree should require message_source");
         std::string expectedSignerValue;
         expectedSignerValue.reserve(16);
         for (int shift = 56; shift >= 0; shift -= 8) {
@@ -512,7 +512,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
         for (int shift = 56; shift >= 0; shift -= 8) {
             expectedSignerValue.push_back(static_cast<char>((firstEsNodeId.low() >> shift) & 0xFFULL));
         }
-        require(secondReply.endorsement_needed().tree().signer_equals().signer().value() ==
+        require(secondReply.endorsement_needed().tree().message_source().source().value() ==
             expectedSignerValue,
             "authorization failure tree should name the first endorsement service as the allowed signer");
         require(secondReply.endorsement_needed().has_message_nonce(),
@@ -547,8 +547,8 @@ int main() {
         testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches();
         std::cout << "testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches: PASSED\n";
 
-        testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly();
-        std::cout << "testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly: PASSED\n";
+        testMessageSourceAuthorizationAllowsFirstEndorsementServiceOnly();
+        std::cout << "testMessageSourceAuthorizationAllowsFirstEndorsementServiceOnly: PASSED\n";
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << '\n';
         return 1;
