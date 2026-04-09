@@ -20,6 +20,7 @@ RESOURCE_SERVICE_TARGET = $(BIN_DIR)\resource_service.exe
 ENDORSEMENT_SERVICE_TEST_TARGET = $(BIN_DIR)\endorsement_service_test.exe
 ENDORSEMENT_SERVICE_TARGET = $(BIN_DIR)\endorsement_service.exe
 TRANSPORT_MEMORY_TEST_TARGET = $(BIN_DIR)\transport_memory_test.exe
+ENDORSEMENT_TEXT_TEST_TARGET = $(BIN_DIR)\endorsement_text_test.exe
 RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
 RSPFULLCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_full_static.lib
 RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
@@ -306,6 +307,11 @@ ENDORSEMENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\endorsement_test.obj
 
+ENDORSEMENT_TEXT_TEST_OBJECTS = \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)\endorsement_text.obj \
+	$(OBJ_DIR)\endorsement_text_test.obj
+
 CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
@@ -329,7 +335,7 @@ CLIENT_TEST_OBJECTS = \
 
 all: dirs $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
+test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
 !include third_party\Makefile.windows
 
@@ -368,6 +374,9 @@ $(KEYPAIR_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(KEYP
 
 $(ENDORSEMENT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(ENDORSEMENT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(ENDORSEMENT_TEST_TARGET)
+
+$(ENDORSEMENT_TEXT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_TEXT_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(ENDORSEMENT_TEXT_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(ENDORSEMENT_TEXT_TEST_TARGET)
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
 	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
@@ -441,6 +450,9 @@ test-keypair: $(KEYPAIR_TEST_TARGET)
 test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 	$(ENDORSEMENT_TEST_TARGET)
 
+test-endorsement-text: $(ENDORSEMENT_TEXT_TEST_TARGET)
+	$(ENDORSEMENT_TEXT_TEST_TARGET)
+
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
 
@@ -476,6 +488,9 @@ $(OBJ_DIR)\protobuf_encoding.obj: common\encoding\protobuf\protobuf_encoding.cpp
 
 $(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\base_types.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\endorsement\endorsement.cpp /Fo$(OBJ_DIR)\endorsement.obj
+
+$(OBJ_DIR)\endorsement_text.obj: common\endorsement\endorsement_text.cpp common\endorsement\endorsement_text.hpp $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\endorsement\endorsement_text.cpp /Fo$(OBJ_DIR)\endorsement_text.obj
 
 $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c $(PROTOBUF_GENERATED_SOURCE) /Fo$(PROTOBUF_GENERATED_OBJECT)
@@ -526,6 +541,9 @@ $(OBJ_DIR)\keypair_test.obj: test\keypair_test.cpp common\keypair.hpp $(BORINGSS
 
 $(OBJ_DIR)\endorsement_test.obj: test\endorsement_test.cpp common\endorsement\endorsement.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\endorsement_test.cpp /Fo$(OBJ_DIR)\endorsement_test.obj
+
+$(OBJ_DIR)\endorsement_text_test.obj: test\endorsement_text_test.cpp common\endorsement\endorsement_text.hpp $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\endorsement_text_test.cpp /Fo$(OBJ_DIR)\endorsement_text_test.obj
 
 $(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\base_types_test.cpp /Fo$(OBJ_DIR)\base_types_test.obj
