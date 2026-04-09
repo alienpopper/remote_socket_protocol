@@ -382,7 +382,6 @@ rsp::transport::TransportHandle RSPClient::createTransport(const std::string& tr
 
 rsp::proto::RSPMessage RSPClient::prepareOutboundMessage(const rsp::proto::RSPMessage& message) const {
     rsp::proto::RSPMessage prepared = message;
-    *prepared.mutable_source() = toProtoNodeId(keyPair().nodeID());
 
     if (!prepared.has_nonce()) {
         prepared.mutable_nonce()->set_value(randomMessageNonce());

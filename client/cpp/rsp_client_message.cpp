@@ -313,12 +313,6 @@ rsp::transport::TransportHandle RSPClientMessage::createTransport(const std::str
 
 rsp::proto::RSPMessage RSPClientMessage::prepareOutboundMessage(const rsp::proto::RSPMessage& message) const {
     rsp::proto::RSPMessage prepared = message;
-    std::string nodeIdBytes(16, '\0');
-    const uint64_t high = keyPair_.nodeID().high();
-    const uint64_t low = keyPair_.nodeID().low();
-    std::memcpy(nodeIdBytes.data(), &high, sizeof(high));
-    std::memcpy(nodeIdBytes.data() + sizeof(high), &low, sizeof(low));
-    prepared.mutable_source()->set_value(nodeIdBytes);
 
     if (!prepared.has_nonce()) {
         prepared.mutable_nonce()->set_value(randomMessageNonce());

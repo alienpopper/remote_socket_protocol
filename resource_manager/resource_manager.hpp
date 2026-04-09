@@ -39,11 +39,22 @@ public:
     bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     size_t pendingMessageCount() const;
 
+protected:
+    virtual std::vector<rsp::Endorsement> getAuthorizationEndorsements(const rsp::NodeID& nodeId) const;
+    virtual rsp::proto::ERDAbstractSyntaxTree authorizationTree() const;
+    void rebuildAuthorizationQueue();
+
 private:
+    struct ActiveEncodingState {
+        rsp::encoding::EncodingHandle encoding;
+        rsp::MessageQueueHandle signingQueue;
+    };
+
     /*messages sent to this RM, not routed to other nodes*/
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
     /*messages produced by this RM, not routed through*/
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
+    bool sendLocalMessage(const rsp::proto::RSPMessage& message) const;
 
     void eraseResourceAdvertisement(const rsp::NodeID& nodeId) const;
     void registerTransportCallbacks();
@@ -58,13 +69,11 @@ private:
     void handleAuthorizationFailure(rsp::proto::RSPMessage message);
     void cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity);
     std::shared_ptr<const rsp::KeyPair> verificationKeyForNodeId(const rsp::NodeID& nodeId) const;
-    std::vector<rsp::Endorsement> getAuthorizationEndorsements(const rsp::NodeID& nodeId) const;
-    rsp::proto::ERDAbstractSyntaxTree authorizationTree() const;
     void sendSignatureFailure(const rsp::proto::RSPMessage& rejectedMessage, const std::string& reason) const;
     void sendEndorsementNeeded(const rsp::proto::RSPMessage& rejectedMessage) const;
 
     mutable std::mutex encodingsMutex_;
-    std::vector<rsp::encoding::EncodingHandle> activeEncodings_;
+    std::vector<ActiveEncodingState> activeEncodings_;
     mutable std::mutex resourceAdvertisementsMutex_;
     mutable std::map<rsp::NodeID, rsp::proto::ResourceAdvertisement> resourceAdvertisements_;
     mutable std::mutex newEncodingCallbackMutex_;

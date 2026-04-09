@@ -97,11 +97,7 @@ private:
 
 ResourceManager::ResourceManager()
     : incomingMessages_(std::make_shared<IncomingMessageQueue>(*this)),
-      authzQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthZ>(
-          [this](rsp::proto::RSPMessage message) { handleAuthorizedMessage(std::move(message)); },
-          [this](rsp::proto::RSPMessage message) { handleAuthorizationFailure(std::move(message)); },
-          [this](const rsp::NodeID& nodeId) { return getAuthorizationEndorsements(nodeId); },
-          authorizationTree())),
+      authzQueue_(nullptr),
       signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
           [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
           [this](rsp::proto::RSPMessage message, std::string reason) {
@@ -126,8 +122,7 @@ ResourceManager::ResourceManager()
           })) {
     incomingMessages_->setWorkerCount(1);
     incomingMessages_->start();
-    authzQueue_->setWorkerCount(1);
-    authzQueue_->start();
+        rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
     handshakeQueue_->setWorkerCount(1);
@@ -139,11 +134,7 @@ ResourceManager::ResourceManager()
 
 ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
     : incomingMessages_(std::make_shared<IncomingMessageQueue>(*this)),
-      authzQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthZ>(
-          [this](rsp::proto::RSPMessage message) { handleAuthorizedMessage(std::move(message)); },
-          [this](rsp::proto::RSPMessage message) { handleAuthorizationFailure(std::move(message)); },
-          [this](const rsp::NodeID& nodeId) { return getAuthorizationEndorsements(nodeId); },
-          authorizationTree())),
+      authzQueue_(nullptr),
       signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
           [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
           [this](rsp::proto::RSPMessage message, std::string reason) {
@@ -169,8 +160,7 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
       clientTransports_(std::move(clientTransports)) {
     incomingMessages_->setWorkerCount(1);
     incomingMessages_->start();
-    authzQueue_->setWorkerCount(1);
-    authzQueue_->start();
+        rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
     handshakeQueue_->setWorkerCount(1);
@@ -201,15 +191,18 @@ ResourceManager::~ResourceManager() {
         authnQueue_->stop();
     }
 
-    std::vector<rsp::encoding::EncodingHandle> encodings;
+    std::vector<ActiveEncodingState> encodings;
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);
         encodings.swap(activeEncodings_);
     }
 
-    for (const auto& encoding : encodings) {
-        if (encoding != nullptr) {
-            encoding->stop();
+    for (const auto& activeEncoding : encodings) {
+        if (activeEncoding.signingQueue != nullptr) {
+            activeEncoding.signingQueue->stop();
+        }
+        if (activeEncoding.encoding != nullptr) {
+            activeEncoding.encoding->stop();
         }
     }
 
@@ -224,13 +217,23 @@ int ResourceManager::run() const {
     return 0;
 }
 
+void ResourceManager::rebuildAuthorizationQueue() {
+    if (authzQueue_ != nullptr) {
+        authzQueue_->stop();
+    }
+
+    authzQueue_ = std::make_shared<rsp::message_queue::MessageQueueAuthZ>(
+        [this](rsp::proto::RSPMessage message) { handleAuthorizedMessage(std::move(message)); },
+        [this](rsp::proto::RSPMessage message) { handleAuthorizationFailure(std::move(message)); },
+        [this](const rsp::NodeID& nodeId) { return getAuthorizationEndorsements(nodeId); },
+        authorizationTree());
+    authzQueue_->setWorkerCount(1);
+    authzQueue_->start();
+}
+
 bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_resource_advertisement()) {
-        if (!message.has_source()) {
-            return false;
-        }
-
-        const auto nodeId = fromProtoNodeId(message.source());
+        const auto nodeId = rsp::senderNodeIdFromMessage(message);
         if (!nodeId.has_value()) {
             return false;
         }
@@ -246,13 +249,13 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
     }
 
     if (message.has_resource_query()) {
-        if (!message.has_source()) {
+        const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+        if (!requesterNodeId.has_value()) {
             return false;
         }
 
         rsp::proto::RSPMessage reply;
-        *reply.mutable_source() = toProtoNodeId(keyPair().nodeID());
-        *reply.mutable_destination() = message.source();
+        *reply.mutable_destination() = toProtoNodeId(*requesterNodeId);
 
         {
             std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
@@ -273,9 +276,42 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
 }
 
 void ResourceManager::handleOutputMessage(rsp::proto::RSPMessage message) {
-    if (!routeAndSend(message)) {
+    if (!sendLocalMessage(message)) {
         std::cerr << "ResourceManager failed to route outgoing message" << std::endl;
     }
+}
+
+bool ResourceManager::sendLocalMessage(const rsp::proto::RSPMessage& message) const {
+    if (!message.has_destination() || message.destination().value().empty()) {
+        return false;
+    }
+
+    ActiveEncodingState selectedEncoding;
+
+    {
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
+        for (const auto& activeEncoding : activeEncodings_) {
+            if (activeEncoding.encoding == nullptr) {
+                continue;
+            }
+
+            const auto peerNodeId = activeEncoding.encoding->peerNodeID();
+            if (!peerNodeId.has_value()) {
+                continue;
+            }
+
+            if (toProtoNodeId(*peerNodeId).value() == message.destination().value()) {
+                selectedEncoding = activeEncoding;
+                break;
+            }
+        }
+    }
+
+    if (selectedEncoding.encoding == nullptr || selectedEncoding.signingQueue == nullptr) {
+        return false;
+    }
+
+    return selectedEncoding.signingQueue->push(message);
 }
 
 void ResourceManager::eraseResourceAdvertisement(const rsp::NodeID& nodeId) const {
@@ -323,7 +359,7 @@ std::optional<rsp::proto::ResourceAdvertisement> ResourceManager::resourceAdvert
 }
 
 bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const {
-    rsp::encoding::EncodingHandle selectedEncoding;
+    ActiveEncodingState selectedEncoding;
 
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);
@@ -334,12 +370,11 @@ bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessag
         selectedEncoding = activeEncodings_[index];
     }
 
-    if (selectedEncoding == nullptr) {
+    if (selectedEncoding.encoding == nullptr || selectedEncoding.signingQueue == nullptr) {
         return false;
     }
 
-    const auto outgoingMessages = selectedEncoding->outgoingMessages();
-    const bool queued = outgoingMessages != nullptr && outgoingMessages->push(message);
+    const bool queued = selectedEncoding.signingQueue->push(message);
     if (queued && rsp::ping_trace::isEnabled() && message.has_ping_request()) {
         rsp::ping_trace::recordForMessage(message, "rm_forward_send_enqueued");
     }
@@ -358,18 +393,18 @@ bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const 
 
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);
-        for (const auto& encoding : activeEncodings_) {
-            if (encoding == nullptr) {
+        for (const auto& activeEncoding : activeEncodings_) {
+            if (activeEncoding.encoding == nullptr) {
                 continue;
             }
 
-            const auto peerNodeId = encoding->peerNodeID();
+            const auto peerNodeId = activeEncoding.encoding->peerNodeID();
             if (!peerNodeId.has_value()) {
                 continue;
             }
 
             if (toProtoNodeId(*peerNodeId).value() == message.destination().value()) {
-                selectedEncoding = encoding;
+                selectedEncoding = activeEncoding.encoding;
                 break;
             }
         }
@@ -453,9 +488,23 @@ void ResourceManager::handleAuthNSuccess(const rsp::encoding::EncodingHandle& en
         return;
     }
 
+    const auto signingQueue = std::make_shared<rsp::MessageQueueSign>(
+        [encoding](rsp::proto::RSPMessage message) {
+            const auto outgoingMessages = encoding == nullptr ? nullptr : encoding->outgoingMessages();
+            if (outgoingMessages == nullptr || !outgoingMessages->push(std::move(message))) {
+                std::cerr << "ResourceManager failed to enqueue signed outbound message" << std::endl;
+            }
+        },
+        [](rsp::proto::RSPMessage, std::string reason) {
+            std::cerr << "ResourceManager failed to sign outbound message: " << reason << std::endl;
+        },
+        keyPair().duplicate());
+    signingQueue->setWorkerCount(1);
+    signingQueue->start();
+
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);
-        activeEncodings_.push_back(encoding);
+        activeEncodings_.push_back(ActiveEncodingState{encoding, signingQueue});
     }
 
     NewEncodingCallback callback;
@@ -539,13 +588,13 @@ rsp::proto::ERDAbstractSyntaxTree ResourceManager::authorizationTree() const {
 }
 
 void ResourceManager::sendSignatureFailure(const rsp::proto::RSPMessage& rejectedMessage, const std::string& reason) const {
-    if (!rejectedMessage.has_source()) {
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(rejectedMessage);
+    if (!requesterNodeId.has_value()) {
         return;
     }
 
     rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(keyPair().nodeID());
-    *reply.mutable_destination() = rejectedMessage.source();
+    *reply.mutable_destination() = toProtoNodeId(*requesterNodeId);
     if (rejectedMessage.has_nonce()) {
         *reply.mutable_nonce() = rejectedMessage.nonce();
     } else {
@@ -554,27 +603,30 @@ void ResourceManager::sendSignatureFailure(const rsp::proto::RSPMessage& rejecte
     reply.mutable_error()->set_error_code(rsp::proto::SIGNATURE_FAILED);
     reply.mutable_error()->set_message(reason);
 
-    if (!routeAndSend(reply)) {
+    if (!sendLocalMessage(reply)) {
         std::cerr << "ResourceManager failed to send SIGNATURE_FAILED reply" << std::endl;
     }
 }
 
 void ResourceManager::sendEndorsementNeeded(const rsp::proto::RSPMessage& rejectedMessage) const {
-    if (!rejectedMessage.has_source()) {
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(rejectedMessage);
+    if (!requesterNodeId.has_value()) {
         return;
     }
 
     rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(keyPair().nodeID());
-    *reply.mutable_destination() = rejectedMessage.source();
+    *reply.mutable_destination() = toProtoNodeId(*requesterNodeId);
     if (rejectedMessage.has_nonce()) {
         *reply.mutable_nonce() = rejectedMessage.nonce();
     } else {
         reply.mutable_nonce()->set_value(randomMessageNonce());
     }
-    *reply.mutable_endorsement_needed()->mutable_tree() = authorizationTree();
 
-    if (!routeAndSend(reply)) {
+    auto* endorsementNeeded = reply.mutable_endorsement_needed();
+    *endorsementNeeded->mutable_message_nonce() = reply.nonce();
+    *endorsementNeeded->mutable_tree() = authorizationTree();
+
+    if (!sendLocalMessage(reply)) {
         std::cerr << "ResourceManager failed to send EndorsementNeeded reply" << std::endl;
     }
 }

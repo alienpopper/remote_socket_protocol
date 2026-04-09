@@ -1,5 +1,6 @@
 #include "resource_service/resource_service.hpp"
 
+#include "common/message_queue/mq_signing.hpp"
 #include "common/transport/transport_tcp.hpp"
 
 #include <algorithm>
@@ -128,14 +129,14 @@ bool ResourceService::sendResourceAdvertisement(ClientConnectionID connectionId)
     }
 
     rsp::proto::RSPMessage message;
-    *message.mutable_source() = toProtoNodeId(nodeId());
     *message.mutable_destination() = toProtoNodeId(*destinationNodeId);
     *message.mutable_resource_advertisement() = buildResourceAdvertisement();
     return sendOnConnection(connectionId, message);
 }
 
 bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& message) {
-    if (!message.has_source()) {
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
         return false;
     }
 
@@ -195,7 +196,7 @@ bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& mess
     auto socketState = std::make_shared<ManagedSocketState>();
     socketState->transport = transport;
     socketState->connection = connection;
-    socketState->requesterNodeId = message.source();
+    socketState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     socketState->socketId = *socketId;
     socketState->asyncData = request.has_async_data() && request.async_data();
     socketState->shareSocket = request.has_share_socket() && request.share_socket();
@@ -222,7 +223,8 @@ bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& mess
 }
 
 bool ResourceService::handleListenTCPRequest(const rsp::proto::RSPMessage& message) {
-    if (!message.has_source()) {
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
         return false;
     }
 
@@ -267,7 +269,7 @@ bool ResourceService::handleListenTCPRequest(const rsp::proto::RSPMessage& messa
     auto tcpTransport = std::make_shared<rsp::transport::TcpTransport>();
     auto listenerState = std::make_shared<ManagedListenerState>();
     listenerState->transport = tcpTransport;
-    listenerState->requesterNodeId = message.source();
+    listenerState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     listenerState->socketId = *socketId;
     listenerState->asyncAccept = asyncAccept;
     listenerState->shareListeningSocket = request.has_share_listening_socket() && request.share_listening_socket();
@@ -382,7 +384,7 @@ bool ResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& message) {
 
     auto socketState = std::make_shared<ManagedSocketState>();
     socketState->connection = acceptedConnection;
-    socketState->requesterNodeId = message.source();
+    socketState->requesterNodeId = toProtoNodeId(*rsp::senderNodeIdFromMessage(message));
     socketState->socketId = *childSocketId;
     socketState->asyncData = request.has_child_async_data() && request.child_async_data();
     socketState->shareSocket = request.has_share_child_socket() && request.share_child_socket();
@@ -647,11 +649,12 @@ bool ResourceService::validateSocketAccess(const rsp::proto::RSPMessage& message
         return true;
     }
 
-    if (!message.has_source()) {
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!senderNodeId.has_value()) {
         return false;
     }
 
-    return message.source().value() == socketState->requesterNodeId.value();
+    return toProtoNodeId(*senderNodeId).value() == socketState->requesterNodeId.value();
 }
 
 bool ResourceService::validateListeningSocketAccess(const rsp::proto::RSPMessage& message,
@@ -660,11 +663,12 @@ bool ResourceService::validateListeningSocketAccess(const rsp::proto::RSPMessage
         return true;
     }
 
-    if (!message.has_source()) {
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!senderNodeId.has_value()) {
         return false;
     }
 
-    return message.source().value() == listenerState->requesterNodeId.value();
+    return toProtoNodeId(*senderNodeId).value() == listenerState->requesterNodeId.value();
 }
 
 rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
@@ -693,7 +697,12 @@ rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto:
         }
     }
 
-    return makeSocketReplyMessage(request.source(), status, errorMessage, effectiveSocketId);
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(request);
+    if (!senderNodeId.has_value()) {
+        return rsp::proto::RSPMessage();
+    }
+
+    return makeSocketReplyMessage(toProtoNodeId(*senderNodeId), status, errorMessage, effectiveSocketId);
 }
 
 rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
@@ -701,7 +710,6 @@ rsp::proto::RSPMessage ResourceService::makeSocketReplyMessage(const rsp::proto:
                                                                const std::string& errorMessage,
                                                                const rsp::GUID* socketId) const {
     rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(nodeId());
     *reply.mutable_destination() = destinationNodeId;
     if (socketId != nullptr) {
         *reply.mutable_socket_reply()->mutable_socket_id() = toProtoSocketId(*socketId);

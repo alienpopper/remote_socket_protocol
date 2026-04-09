@@ -1,6 +1,7 @@
 #include "common/node.hpp"
 
 #include "common/base_types.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "os/os_random.hpp"
 
 #include <cstring>
@@ -109,7 +110,7 @@ bool IdentityCache::observeMessage(const rsp::proto::RSPMessage& message) {
         return false;
     }
 
-    const auto sourceNodeId = message.has_source() ? fromProtoNodeId(message.source()) : std::nullopt;
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
     return cacheIdentity(message.identity(), sourceNodeId);
 }
 
@@ -207,9 +208,9 @@ void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState
     }
 
     rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(owner_.keyPair().nodeID());
-    if (!message.source().value().empty()) {
-        *reply.mutable_destination() = message.source();
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+    if (senderNodeId.has_value()) {
+        *reply.mutable_destination() = toProtoNodeId(*senderNodeId);
     }
     if (message.has_nonce()) {
         *reply.mutable_nonce() = message.nonce();

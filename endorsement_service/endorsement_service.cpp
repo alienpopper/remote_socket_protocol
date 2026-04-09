@@ -2,6 +2,7 @@
 
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
+#include "common/message_queue/mq_signing.hpp"
 
 #include <cstring>
 
@@ -99,22 +100,16 @@ bool EndorsementService::handleNodeSpecificMessage(const rsp::proto::RSPMessage&
 
 bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMessage& message) {
     rsp::proto::RSPMessage reply;
-    *reply.mutable_source() = toProtoNodeId(keyPair().nodeID());
-    if (message.has_source()) {
-        *reply.mutable_destination() = message.source();
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
+    if (sourceNodeId.has_value()) {
+        *reply.mutable_destination() = toProtoNodeId(*sourceNodeId);
     }
 
     auto* done = reply.mutable_endorsement_done();
     done->set_status(rsp::proto::ENDORSEMENT_FAILED);
 
     try {
-        if (!message.has_source()) {
-            return send(reply);
-        }
-
-        const auto sourceNodeId = fromProtoNodeId(message.source());
         if (!sourceNodeId.has_value()) {
-            done->set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
             return send(reply);
         }
 

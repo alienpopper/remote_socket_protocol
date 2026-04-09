@@ -4,10 +4,8 @@
 #include <stdexcept>
 #include <string>
 
-namespace {
-
 // Serializes the message with the signature field cleared, for signing/verification.
-rsp::Buffer serializeForSigning(const rsp::proto::RSPMessage& message) {
+rsp::Buffer rsp::serializeMessageForSigning(const rsp::proto::RSPMessage& message) {
     rsp::proto::RSPMessage copy = message;
     copy.clear_signature();
 
@@ -26,7 +24,7 @@ rsp::Buffer serializeForSigning(const rsp::proto::RSPMessage& message) {
 
 // Extracts a NodeID from a source/destination NodeId proto field.
 // These fields use native-endian memcpy encoding (matching rsp_client.cpp).
-std::optional<rsp::NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& protoId) {
+std::optional<rsp::NodeID> rsp::nodeIdFromSourceField(const rsp::proto::NodeId& protoId) {
     if (protoId.value().size() != 16) {
         return std::nullopt;
     }
@@ -40,7 +38,7 @@ std::optional<rsp::NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& proto
 
 // Extracts a NodeID from a SignatureBlock signer NodeId proto field.
 // These fields use big-endian byte-shift encoding (matching keypair.cpp signBlock).
-std::optional<rsp::NodeID> nodeIdFromSignerField(const rsp::proto::NodeId& protoId) {
+std::optional<rsp::NodeID> rsp::nodeIdFromSignerField(const rsp::proto::NodeId& protoId) {
     const std::string& bytes = protoId.value();
     if (bytes.size() != 16) {
         return std::nullopt;
@@ -57,7 +55,20 @@ std::optional<rsp::NodeID> nodeIdFromSignerField(const rsp::proto::NodeId& proto
     return rsp::NodeID(high, low);
 }
 
-}  // namespace
+std::optional<rsp::NodeID> rsp::senderNodeIdFromMessage(const rsp::proto::RSPMessage& message) {
+    if (message.has_signature() && message.signature().has_signer()) {
+        const auto signerNodeId = nodeIdFromSignerField(message.signature().signer());
+        if (signerNodeId.has_value()) {
+            return signerNodeId;
+        }
+    }
+
+    if (message.has_source()) {
+        return nodeIdFromSourceField(message.source());
+    }
+
+    return std::nullopt;
+}
 
 namespace rsp {
 
@@ -79,39 +90,26 @@ MessageQueueSign::MessageQueueSign(std::function<void(rsp::proto::RSPMessage)> o
     : onSuccess_(std::move(onSuccess))
     , onFailure_(std::move(onFailure)) {
     auto sharedKey = std::make_shared<KeyPair>(std::move(keyPair));
-    getKey_ = [sharedKey](const NodeID& nodeId) -> std::shared_ptr<const KeyPair> {
-        if (nodeId == sharedKey->nodeID()) {
-            return sharedKey;
-        }
-        return nullptr;
+    getKey_ = [sharedKey](const NodeID&) -> std::shared_ptr<const KeyPair> {
+        return sharedKey;
     };
 }
 
 void MessageQueueSign::handleMessage(Message message, MessageQueueSharedState&) {
-    if (!message.has_source()) {
-        onFailure_(std::move(message), "message has no source node ID");
-        return;
-    }
-
-    const auto nodeId = nodeIdFromSourceField(message.source());
-    if (!nodeId.has_value()) {
-        onFailure_(std::move(message), "message source has invalid node ID encoding");
-        return;
-    }
-
-    const auto keyPair = getKey_(*nodeId);
+    const auto requestedNodeId = senderNodeIdFromMessage(message).value_or(NodeID());
+    const auto keyPair = getKey_(requestedNodeId);
     if (!keyPair) {
-        onFailure_(std::move(message), "no signing key found for source node ID");
+        onFailure_(std::move(message), "no signing key found for message sender");
         return;
     }
 
     if (!keyPair->hasPrivateKey()) {
-        onFailure_(std::move(message), "key for source node ID has no private key");
+        onFailure_(std::move(message), "key for message sender has no private key");
         return;
     }
 
     try {
-        const Buffer serialized = serializeForSigning(message);
+        const Buffer serialized = serializeMessageForSigning(message);
         *message.mutable_signature() = keyPair->signBlock(serialized);
         onSuccess_(std::move(message));
     } catch (const std::exception& e) {
@@ -172,7 +170,7 @@ void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueShar
     }
 
     try {
-        const Buffer serialized = serializeForSigning(message);
+        const Buffer serialized = serializeMessageForSigning(message);
         if (keyPair->verifyBlock(serialized, message.signature())) {
             onSuccess_(std::move(message));
         } else {

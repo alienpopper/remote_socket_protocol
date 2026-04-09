@@ -1,7 +1,9 @@
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
+#include "client/cpp_full/rsp_client.hpp"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/ping_trace.hpp"
 #include "messages.pb.h"
 #include "common/transport/transport_memory.hpp"
@@ -43,6 +45,49 @@ struct PingBreakdown {
 struct ClientToClientPingResults {
     PingStats stats;
     PingBreakdown breakdown;
+};
+
+class TestFullClient : public rsp::client::full::RSPClient {
+public:
+    using Ptr = std::shared_ptr<TestFullClient>;
+
+    static Ptr create(rsp::KeyPair keyPair) {
+        return Ptr(new TestFullClient(std::move(keyPair)));
+    }
+
+    bool tryDequeueHandledMessage(rsp::proto::RSPMessage& message) {
+        std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+        if (handledMessages_.empty()) {
+            return false;
+        }
+
+        message = std::move(handledMessages_.front());
+        handledMessages_.pop_front();
+        return true;
+    }
+
+    size_t pendingHandledMessageCount() const {
+        std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+        return handledMessages_.size();
+    }
+
+protected:
+    explicit TestFullClient(rsp::KeyPair keyPair) : rsp::client::full::RSPClient(std::move(keyPair)) {
+    }
+
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override {
+        if (message.has_ping_reply() || message.has_error()) {
+            std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+            handledMessages_.push_back(message);
+            return true;
+        }
+
+        return rsp::client::full::RSPClient::handleNodeSpecificMessage(message);
+    }
+
+private:
+    mutable std::mutex handledMessagesMutex_;
+    std::deque<rsp::proto::RSPMessage> handledMessages_;
 };
 
 class TestResourceManager : public rsp::resource_manager::ResourceManager {
@@ -202,6 +247,14 @@ rsp::proto::RSPMessage makePingRequestMessage(const rsp::NodeID& sourceNodeId,
     return message;
 }
 
+void requireMessageSender(const rsp::proto::RSPMessage& message,
+                          const rsp::NodeID& expectedSender,
+                          const std::string& context) {
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+    require(senderNodeId.has_value(), context + " should identify a sender");
+    require(senderNodeId.value() == expectedSender, context + " should identify the expected sender");
+}
+
 std::string findListeningEndpoint(const std::shared_ptr<rsp::transport::TcpTransport>& serverTransport) {
     if (!serverTransport->listen("127.0.0.1:0")) {
         throw std::runtime_error("failed to listen on a random port for handshake test");
@@ -268,8 +321,8 @@ void testTcpAsciiHandshake() {
     require(pingReply.has_ping_reply(), "resource manager should answer ping requests with ping replies");
     require(pingReply.destination().value() == pingRequest.source().value(),
         "ping reply should target the client node id");
-    require(pingReply.source().value() == pingRequest.destination().value(),
-        "ping reply should identify the resource manager as sender");
+    requireMessageSender(pingReply, resourceManager.nodeId(),
+        "ping reply");
     require(pingReply.ping_reply().nonce().value() == pingRequest.ping_request().nonce().value(),
         "ping reply should preserve the ping nonce");
     require(pingReply.ping_reply().sequence() == pingRequest.ping_request().sequence(),
@@ -301,6 +354,59 @@ void testTcpAsciiHandshake() {
     require(!client->removeConnection(connectionId), "removing the same connection twice should fail");
     serverTransport->stop();
 }
+
+    void testFullClientUsesQueuedHandshakeAndSigningPipeline() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID clientNodeId = clientKeyPair.nodeID();
+
+        serverTransport->listen("rm-full-client-test");
+        const std::string transportSpec = "memory:rm-full-client-test";
+
+        auto client = TestFullClient::create(std::move(clientKeyPair));
+        const auto connectionId =
+        client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+
+        require(client->hasConnections(), "full client should track created connections");
+        require(client->hasConnection(connectionId), "full client should expose the new connection id");
+        require(client->connectionCount() == 1, "full client should report one live connection");
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 1; }),
+            "resource manager should authenticate the full client connection");
+
+        rsp::proto::RSPMessage pingRequest;
+        setNodeIdBytes(pingRequest.mutable_destination()->mutable_value(), resourceManager.nodeId());
+            pingRequest.mutable_ping_request()->mutable_nonce()->set_value("full-client-ping");
+        pingRequest.mutable_ping_request()->set_sequence(19);
+        pingRequest.mutable_ping_request()->mutable_time_sent()->set_milliseconds_since_epoch(987654321);
+
+        require(client->sendOnConnection(connectionId, pingRequest),
+            "full client should enqueue outbound messages through its signing queue");
+            require(waitForCondition([&client]() { return client->pendingHandledMessageCount() == 1; }),
+                "full client should receive a reply from the resource manager through the verified queue pipeline");
+
+            rsp::proto::RSPMessage reply;
+            require(client->tryDequeueHandledMessage(reply),
+                "full client test harness should capture the handled reply");
+            require(reply.has_ping_reply(),
+                "resource manager should answer the full client's ping request");
+            require(reply.has_nonce() && !reply.nonce().value().empty(),
+                "full client pipeline should populate a top-level message nonce that survives the round trip");
+            require(reply.has_destination(), "resource manager ping reply should identify the destination");
+
+            rsp::proto::NodeId expectedClientSource;
+            setNodeIdBytes(expectedClientSource.mutable_value(), clientNodeId);
+            require(reply.destination().value() == expectedClientSource.value(),
+                "resource manager reply should target the full client's node id");
+            requireMessageSender(reply, resourceManager.nodeId(),
+                "resource manager reply");
+            require(reply.ping_reply().nonce().value() == pingRequest.ping_request().nonce().value(),
+                "resource manager reply should preserve the nested ping nonce");
+
+        require(client->removeConnection(connectionId), "full client should remove an existing connection");
+        serverTransport->stop();
+    }
 
 ClientToClientPingResults testClientToClientRouting() {
     auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
@@ -398,7 +504,8 @@ int main() {
         require(unsupportedTransportThrown, "client should reject unsupported transport names");
 
         testTcpAsciiHandshake();
-                const ClientToClientPingResults clientToClientPingResults = testClientToClientRouting();
+        testFullClientUsesQueuedHandshakeAndSigningPipeline();
+        const ClientToClientPingResults clientToClientPingResults = testClientToClientRouting();
 
                 std::cout << "client-to-client ping round-trip stats over 100 pings: min="
                                     << clientToClientPingResults.stats.minimumMilliseconds

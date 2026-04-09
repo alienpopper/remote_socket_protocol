@@ -1,20 +1,10 @@
 #include "common/message_queue/mq_authz.hpp"
 
+#include "common/message_queue/mq_signing.hpp"
+
 #include <cstring>
 
 namespace {
-
-std::optional<rsp::NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& protoId) {
-    if (protoId.value().size() != 16) {
-        return std::nullopt;
-    }
-
-    uint64_t high = 0;
-    uint64_t low = 0;
-    std::memcpy(&high, protoId.value().data(), sizeof(high));
-    std::memcpy(&low, protoId.value().data() + sizeof(high), sizeof(low));
-    return rsp::NodeID(high, low);
-}
 
 rsp::proto::EndorsementNeeded makeRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree) {
     rsp::proto::EndorsementNeeded requirement;
@@ -51,12 +41,7 @@ MessageQueueAuthZ::MessageQueueAuthZ(SuccessCallback success,
 }
 
 void MessageQueueAuthZ::handleMessage(Message message, rsp::MessageQueueSharedState&) {
-    if (!message.has_source()) {
-        failure_(std::move(message));
-        return;
-    }
-
-    const auto sourceNodeId = nodeIdFromSourceField(message.source());
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
     if (!sourceNodeId.has_value()) {
         failure_(std::move(message));
         return;

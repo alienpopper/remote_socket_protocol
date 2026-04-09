@@ -233,6 +233,7 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/resource_manager/resource_manager.o \
 	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
+	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/test/client_test.o
 
 RESOURCE_SERVICE_TEST_OBJECTS := \

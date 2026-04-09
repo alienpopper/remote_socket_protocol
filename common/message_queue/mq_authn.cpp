@@ -1,5 +1,7 @@
 #include "common/message_queue/mq_authn.hpp"
 
+#include "common/message_queue/mq_signing.hpp"
+
 #include "common/base_types.hpp"
 #include "os/os_random.hpp"
 
@@ -12,22 +14,6 @@ namespace rsp::message_queue {
 namespace {
 
 constexpr uint32_t kNonceLength = 16;
-
-rsp::Buffer serializeUnsignedMessage(const rsp::proto::RSPMessage& message) {
-    rsp::proto::RSPMessage unsignedMessage = message;
-    unsignedMessage.clear_signature();
-
-    std::string payload;
-    if (!unsignedMessage.SerializeToString(&payload)) {
-        throw std::runtime_error("failed to serialize unsigned authentication message");
-    }
-
-    if (payload.empty()) {
-        return rsp::Buffer();
-    }
-
-    return rsp::Buffer(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
-}
 
 std::string randomNonceBytes() {
     std::string nonce(kNonceLength, '\0');
@@ -48,7 +34,7 @@ bool validateReceivedIdentity(const rsp::proto::RSPMessage& identityMessage,
 
     try {
         rsp::KeyPair peerKey = rsp::KeyPair::fromPublicKey(identityMessage.identity().public_key());
-        if (!peerKey.verifyBlock(serializeUnsignedMessage(identityMessage), identityMessage.signature())) {
+        if (!peerKey.verifyBlock(rsp::serializeMessageForSigning(identityMessage), identityMessage.signature())) {
             return false;
         }
 
@@ -107,7 +93,7 @@ bool MessageQueueAuthN::performInitialIdentityExchange(rsp::encoding::Encoding& 
             rsp::proto::RSPMessage identityMessage;
             identityMessage.mutable_identity()->mutable_nonce()->CopyFrom(incomingMessage.challenge_request().nonce());
             *identityMessage.mutable_identity()->mutable_public_key() = keyPair_.publicKey();
-            *identityMessage.mutable_signature() = keyPair_.signBlock(serializeUnsignedMessage(identityMessage));
+            *identityMessage.mutable_signature() = keyPair_.signBlock(rsp::serializeMessageForSigning(identityMessage));
 
             {
                 std::lock_guard<std::mutex> lock(encoding.sendMutex_);

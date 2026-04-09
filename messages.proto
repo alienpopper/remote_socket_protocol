@@ -309,15 +309,15 @@ message ERDAbstractSyntaxTree {
 /*sent when a device needs an endorsment to process the message*/
 /*throttled to 1 per second*/
 message EndorsementNeeded {
-    /*we need some reference to the message sent*/
-    ERDAbstractSyntaxTree tree = 1;
+    Uuid message_nonce = 1;
+    ERDAbstractSyntaxTree tree = 2;
 }
 
 
 message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
-  NodeId source = 2;
+    optional NodeId source = 2;
   oneof submessage {
       ChallengeRequest challenge_request = 3;
       Identity identity = 4;

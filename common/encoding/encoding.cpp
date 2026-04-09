@@ -1,6 +1,7 @@
 #include "common/encoding/encoding.hpp"
 
 #include "common/base_types.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/ping_trace.hpp"
 
 #include <stdexcept>
@@ -188,16 +189,18 @@ std::string toProtoNodeIdValue(const rsp::NodeID& nodeId) {
 
 std::string classifySendPrefix(const rsp::proto::RSPMessage& message, const rsp::KeyPair& localKeyPair) {
     const std::string localNodeId = toProtoNodeIdValue(localKeyPair.nodeID());
+    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+    const std::string senderValue = senderNodeId.has_value() ? toProtoNodeIdValue(*senderNodeId) : std::string();
 
     if (message.has_ping_request()) {
-        if (message.source().value() == localNodeId) {
+        if (senderValue == localNodeId) {
             return "source_request";
         }
 
         return "rm_forward_request";
     }
 
-    if (message.has_ping_reply() && message.source().value() == localNodeId) {
+    if (message.has_ping_reply() && senderValue == localNodeId) {
         return "destination_reply";
     }
 

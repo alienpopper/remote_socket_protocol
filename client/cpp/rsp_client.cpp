@@ -2,6 +2,7 @@
 
 #include "common/base_types.hpp"
 #include "common/endorsement/endorsement.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/ping_trace.hpp"
 
 #include <chrono>
@@ -230,7 +231,6 @@ bool RSPClient::ping(rsp::NodeID nodeId) {
     }();
 
     rsp::proto::RSPMessage pingRequest;
-    *pingRequest.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *pingRequest.mutable_destination() = toProtoNodeId(nodeId);
     pingRequest.mutable_ping_request()->mutable_nonce()->set_value(nonce);
     pingRequest.mutable_ping_request()->set_sequence(sequence);
@@ -326,7 +326,6 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
 
 bool RSPClient::sendIdentity(rsp::NodeID nodeId) {
     rsp::proto::RSPMessage identityMessage;
-    *identityMessage.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *identityMessage.mutable_destination() = toProtoNodeId(nodeId);
     *identityMessage.mutable_identity()->mutable_public_key() = keyPair().publicKey();
     return messageClient_ != nullptr && messageClient_->send(identityMessage);
@@ -335,7 +334,6 @@ bool RSPClient::sendIdentity(rsp::NodeID nodeId) {
 bool RSPClient::sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
                                                    const rsp::proto::Endorsement& requestedMessage) {
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(nodeId);
     *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
     return messageClient_ != nullptr && messageClient_->send(request);
@@ -360,7 +358,6 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::waitForPendingEndorsement(
 
 bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uint32_t maxRecords) {
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(nodeId);
     auto* resourceQuery = request.mutable_resource_query();
     if (!query.empty()) {
@@ -383,7 +380,6 @@ std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeI
                                                                   bool useSocket) {
     const rsp::GUID socketId;
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(nodeId);
     request.mutable_connect_tcp_request()->set_host_port(hostPort);
     *request.mutable_connect_tcp_request()->mutable_socket_number() = toProtoSocketId(socketId);
@@ -471,7 +467,6 @@ std::optional<rsp::proto::SocketReply> RSPClient::listenTCPEx(rsp::NodeID nodeId
                                                               bool childrenAsyncData) {
     const rsp::GUID socketId;
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(nodeId);
     request.mutable_listen_tcp_request()->set_host_port(hostPort);
     *request.mutable_listen_tcp_request()->mutable_socket_number() = toProtoSocketId(socketId);
@@ -603,7 +598,6 @@ std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& l
     }
 
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(destination);
     *request.mutable_accept_tcp()->mutable_listen_socket_number() = toProtoSocketId(listenSocketId);
     if (newSocketId.has_value()) {
@@ -788,7 +782,6 @@ bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
     }
 
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(destination);
     *request.mutable_socket_send()->mutable_socket_number() = toProtoSocketId(socketId);
     request.mutable_socket_send()->set_data(data);
@@ -836,7 +829,6 @@ std::optional<rsp::proto::SocketReply> RSPClient::socketRecvEx(const rsp::GUID& 
     }
 
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(destination);
     *request.mutable_socket_recv()->mutable_socket_number() = toProtoSocketId(socketId);
     request.mutable_socket_recv()->set_max_bytes(maxBytes);
@@ -892,7 +884,6 @@ bool RSPClient::socketClose(const rsp::GUID& socketId) {
     }
 
     rsp::proto::RSPMessage request;
-    *request.mutable_source() = toProtoNodeId(keyPair().nodeID());
     *request.mutable_destination() = toProtoNodeId(destination);
     *request.mutable_socket_close()->mutable_socket_number() = toProtoSocketId(socketId);
 
@@ -1017,7 +1008,8 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
         return;
     }
 
-    if (message.source().value() != toProtoNodeId(iterator->second.destination).value()) {
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!sourceNodeId.has_value() || *sourceNodeId != iterator->second.destination) {
         return;
     }
 
@@ -1029,12 +1021,13 @@ void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
 }
 
 void RSPClient::handleEndorsementDone(const rsp::proto::RSPMessage& message) {
-    if (!message.has_source()) {
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!sourceNodeId.has_value()) {
         return;
     }
 
     std::lock_guard<std::mutex> lock(stateMutex_);
-    const auto iterator = pendingEndorsements_.find(message.source().value());
+    const auto iterator = pendingEndorsements_.find(toProtoNodeId(*sourceNodeId).value());
     if (iterator == pendingEndorsements_.end() || iterator->second.completed) {
         return;
     }
@@ -1086,9 +1079,9 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
                 }
             }
 
-            if (socketReply.has_new_socket_id() && message.has_source()) {
+            if (socketReply.has_new_socket_id()) {
                 const auto newSocketId = fromProtoSocketId(socketReply.new_socket_id());
-                const auto sourceNodeId = fromProtoNodeId(message.source());
+                const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
                 if (newSocketId.has_value() && sourceNodeId.has_value()) {
                     socketRoutes_[*newSocketId] = *sourceNodeId;
                 }

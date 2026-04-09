@@ -11,10 +11,13 @@
 
 #include <chrono>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <future>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -28,6 +31,98 @@ public:
     rsp::NodeID nodeId() const {
         return keyPair().nodeID();
     }
+};
+
+class SignerRestrictedResourceManager : public TestResourceManager {
+public:
+    SignerRestrictedResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports,
+                                    rsp::NodeID allowedSigner,
+                                                                        std::map<rsp::NodeID, std::shared_ptr<rsp::KeyPair>> endorsementServiceKeys)
+        : TestResourceManager(std::move(clientTransports)),
+          allowedSigner_(allowedSigner),
+          endorsementServiceKeys_(std::move(endorsementServiceKeys)) {
+                rebuildAuthorizationQueue();
+    }
+
+protected:
+    std::vector<rsp::Endorsement> getAuthorizationEndorsements(const rsp::NodeID& nodeId) const override {
+        const auto iterator = endorsementServiceKeys_.find(nodeId);
+        if (iterator == endorsementServiceKeys_.end()) {
+            return {};
+        }
+
+        rsp::DateTime validUntil;
+        validUntil += HOURS(1);
+
+        return {rsp::Endorsement::createSigned(
+            *iterator->second,
+            nodeId,
+            rsp::GUID("00112233-4455-6677-8899-aabbccddeeff"),
+            rsp::Buffer(),
+            validUntil)};
+    }
+
+    rsp::proto::ERDAbstractSyntaxTree authorizationTree() const override {
+        rsp::proto::ERDAbstractSyntaxTree tree;
+        std::string value;
+        value.reserve(16);
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            value.push_back(static_cast<char>((allowedSigner_.high() >> shift) & 0xFFULL));
+        }
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            value.push_back(static_cast<char>((allowedSigner_.low() >> shift) & 0xFFULL));
+        }
+        tree.mutable_signer_equals()->mutable_signer()->set_value(value);
+        return tree;
+    }
+
+private:
+    rsp::NodeID allowedSigner_;
+    std::map<rsp::NodeID, std::shared_ptr<rsp::KeyPair>> endorsementServiceKeys_;
+};
+
+class TestEndorsementService : public rsp::endorsement_service::EndorsementService {
+public:
+    using Ptr = std::shared_ptr<TestEndorsementService>;
+
+    static Ptr create(rsp::KeyPair keyPair) {
+        return Ptr(new TestEndorsementService(std::move(keyPair)));
+    }
+
+    bool tryDequeueHandledMessage(rsp::proto::RSPMessage& message) {
+        std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+        if (handledMessages_.empty()) {
+            return false;
+        }
+
+        message = std::move(handledMessages_.front());
+        handledMessages_.pop_front();
+        return true;
+    }
+
+    size_t pendingHandledMessageCount() const {
+        std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+        return handledMessages_.size();
+    }
+
+protected:
+    explicit TestEndorsementService(rsp::KeyPair keyPair)
+        : rsp::endorsement_service::EndorsementService(std::move(keyPair)) {
+    }
+
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override {
+        if (message.has_ping_reply() || message.has_endorsement_needed() || message.has_error()) {
+            std::lock_guard<std::mutex> lock(handledMessagesMutex_);
+            handledMessages_.push_back(message);
+            return true;
+        }
+
+        return rsp::endorsement_service::EndorsementService::handleNodeSpecificMessage(message);
+    }
+
+private:
+    mutable std::mutex handledMessagesMutex_;
+    std::deque<rsp::proto::RSPMessage> handledMessages_;
 };
 
 void require(bool condition, const std::string& message) {
@@ -344,6 +439,95 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     serverTransport->stop();
 }
 
+    void testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+
+        rsp::KeyPair firstEsKeyPair = rsp::KeyPair::generateP256();
+        rsp::KeyPair secondEsKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID firstEsNodeId = firstEsKeyPair.nodeID();
+        const rsp::NodeID secondEsNodeId = secondEsKeyPair.nodeID();
+
+        SignerRestrictedResourceManager resourceManager(
+        {serverTransport},
+        firstEsNodeId,
+            {{firstEsNodeId, std::make_shared<rsp::KeyPair>(firstEsKeyPair.duplicate())},
+             {secondEsNodeId, std::make_shared<rsp::KeyPair>(secondEsKeyPair.duplicate())}});
+
+        serverTransport->listen("rm-signer-authz-test");
+        const std::string transportSpec = "memory:rm-signer-authz-test";
+
+        auto firstEs = TestEndorsementService::create(std::move(firstEsKeyPair));
+        auto secondEs = TestEndorsementService::create(std::move(secondEsKeyPair));
+
+        const auto firstConnectionId =
+        firstEs->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto secondConnectionId =
+        secondEs->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both endorsement services before authz checks");
+
+        rsp::proto::RSPMessage firstPing;
+        *firstPing.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
+        firstPing.mutable_ping_request()->mutable_nonce()->set_value("es0-ping");
+        firstPing.mutable_ping_request()->set_sequence(1);
+        firstPing.mutable_ping_request()->mutable_time_sent()->set_milliseconds_since_epoch(111);
+
+        rsp::proto::RSPMessage secondPing;
+        *secondPing.mutable_destination() = toProtoNodeId(resourceManager.nodeId());
+        secondPing.mutable_ping_request()->mutable_nonce()->set_value("es1-ping");
+        secondPing.mutable_ping_request()->set_sequence(2);
+        secondPing.mutable_ping_request()->mutable_time_sent()->set_milliseconds_since_epoch(222);
+
+        require(firstEs->send(firstPing), "first endorsement service should send its ping through RM");
+        require(secondEs->send(secondPing), "second endorsement service should send its ping through RM");
+
+        require(waitForCondition([&firstEs]() { return firstEs->pendingHandledMessageCount() == 1; }),
+            "authorized endorsement service should receive a ping reply");
+        require(waitForCondition([&secondEs]() { return secondEs->pendingHandledMessageCount() == 1; }),
+            "unauthorized endorsement service should receive an authz failure reply");
+
+        rsp::proto::RSPMessage firstReply;
+        require(firstEs->tryDequeueHandledMessage(firstReply),
+            "first endorsement service should expose its handled reply");
+        require(firstReply.has_ping_reply(),
+            "signer_equals authorization should allow the first endorsement service to ping the RM");
+        require(firstReply.ping_reply().nonce().value() == firstPing.ping_request().nonce().value(),
+            "authorized ping reply should preserve the request nonce");
+
+        rsp::proto::RSPMessage secondReply;
+        require(secondEs->tryDequeueHandledMessage(secondReply),
+            "second endorsement service should expose its handled reply");
+        require(secondReply.has_endorsement_needed(),
+            "signer_equals authorization should reject the second endorsement service");
+        require(secondReply.endorsement_needed().has_tree(),
+            "authorization failure should include the required endorsement tree");
+        require(secondReply.endorsement_needed().tree().has_signer_equals(),
+            "authorization failure tree should require signer_equals");
+        std::string expectedSignerValue;
+        expectedSignerValue.reserve(16);
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            expectedSignerValue.push_back(static_cast<char>((firstEsNodeId.high() >> shift) & 0xFFULL));
+        }
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            expectedSignerValue.push_back(static_cast<char>((firstEsNodeId.low() >> shift) & 0xFFULL));
+        }
+        require(secondReply.endorsement_needed().tree().signer_equals().signer().value() ==
+            expectedSignerValue,
+            "authorization failure tree should name the first endorsement service as the allowed signer");
+        require(secondReply.endorsement_needed().has_message_nonce(),
+            "authorization failure should include the rejected message nonce");
+        require(secondReply.endorsement_needed().message_nonce().value() == secondReply.nonce().value(),
+            "authorization failure should mirror the rejected message nonce into EndorsementNeeded");
+
+        require(firstEs->removeConnection(firstConnectionId),
+            "first endorsement service should remove its resource manager connection");
+        require(secondEs->removeConnection(secondConnectionId),
+            "second endorsement service should remove its resource manager connection");
+
+        serverTransport->stop();
+    }
+
 }  // namespace
 
 int main() {
@@ -362,6 +546,9 @@ int main() {
 
         testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches();
         std::cout << "testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCaches: PASSED\n";
+
+        testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly();
+        std::cout << "testSignerEqualsAuthorizationAllowsFirstEndorsementServiceOnly: PASSED\n";
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << '\n';
         return 1;

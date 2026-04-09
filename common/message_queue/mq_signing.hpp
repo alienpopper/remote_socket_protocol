@@ -13,6 +13,11 @@ namespace rsp {
 // Returns the keypair for a given NodeID, or nullptr if not found.
 using GetKeyFunction = std::function<std::shared_ptr<const KeyPair>(const NodeID&)>;
 
+Buffer serializeMessageForSigning(const rsp::proto::RSPMessage& message);
+std::optional<NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& protoId);
+std::optional<NodeID> nodeIdFromSignerField(const rsp::proto::NodeId& protoId);
+std::optional<NodeID> senderNodeIdFromMessage(const rsp::proto::RSPMessage& message);
+
 // Signs each incoming RSPMessage using the keypair returned by getKeyForNodeID,
 // keyed on the message's source NodeID. On success, calls onSuccess with the
 // signed message. On failure, calls onFailure with the original message and a

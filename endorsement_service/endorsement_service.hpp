@@ -21,7 +21,7 @@ public:
     EndorsementService(EndorsementService&&) = delete;
     EndorsementService& operator=(EndorsementService&&) = delete;
 
-private:
+protected:
     explicit EndorsementService(KeyPair keyPair);
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;

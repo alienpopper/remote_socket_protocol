@@ -354,6 +354,7 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_manager.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj \
