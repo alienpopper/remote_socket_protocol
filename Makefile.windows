@@ -126,6 +126,7 @@ MQ_AUTHZ_TEST_OBJECTS = \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\mq_authz.obj \
+	$(OBJ_DIR)\mq_signing.obj \
 	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \

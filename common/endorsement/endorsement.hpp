@@ -42,7 +42,11 @@ private:
 bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirement,
                                   const Endorsement& endorsement);
 
+bool messageMatchesRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                               const rsp::proto::RSPMessage& message);
+
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
-                                                        const std::vector<Endorsement>& endorsements);
+                                                        const std::vector<Endorsement>& endorsements,
+                                                        const rsp::proto::RSPMessage* message = nullptr);
 
 }  // namespace rsp

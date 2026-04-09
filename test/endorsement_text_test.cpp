@@ -49,6 +49,18 @@ rsp::proto::ERDAbstractSyntaxTree makeSignerEquals(const std::string& uuidStr) {
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeDestinationEquals(const std::string& uuidStr) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_message_destination()->mutable_destination()->set_value(uuidBytes(uuidStr));
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeMessageSourceEquals(const std::string& uuidStr) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    tree.mutable_message_source()->mutable_source()->set_value(uuidBytes(uuidStr));
+    return tree;
+}
+
 rsp::proto::ERDAbstractSyntaxTree makeTrue() {
     rsp::proto::ERDAbstractSyntaxTree tree;
     tree.mutable_true_value();
@@ -146,6 +158,28 @@ void testRoundTripSignerEquals() {
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_signer_equals(), "parsed should have signer_equals");
     require(parsed.signer_equals().signer().value() == uuidBytes(uuid), "SIGNER uuid bytes mismatch");
+}
+
+void testRoundTripDestinationEquals() {
+    const std::string uuid = "12345678-90ab-cdef-0123-456789abcdef";
+    const auto tree = makeDestinationEquals(uuid);
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text == "DESTINATION(12345678-90ab-cdef-0123-456789abcdef)", "DESTINATION text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_message_destination(), "parsed should have message_destination");
+    require(parsed.message_destination().destination().value() == uuidBytes(uuid), "DESTINATION uuid bytes mismatch");
+}
+
+void testRoundTripMessageSourceEquals() {
+    const std::string uuid = "fedcba98-7654-3210-fedc-ba9876543210";
+    const auto tree = makeMessageSourceEquals(uuid);
+    const std::string text = rsp::erd_text::toString(tree);
+    require(text == "SOURCE(fedcba98-7654-3210-fedc-ba9876543210)", "SOURCE text mismatch: " + text);
+
+    const auto parsed = rsp::erd_text::fromString(text);
+    require(parsed.has_message_source(), "parsed should have message_source");
+    require(parsed.message_source().source().value() == uuidBytes(uuid), "SOURCE uuid bytes mismatch");
 }
 
 void testRoundTripTrue() {
@@ -346,6 +380,8 @@ int main() {
         testRoundTripValueEquals();
         testRoundTripValueEqualsEmpty();
         testRoundTripSignerEquals();
+        testRoundTripDestinationEquals();
+        testRoundTripMessageSourceEquals();
         testRoundTripTrue();
         testRoundTripFalse();
         testRoundTripAllOf();

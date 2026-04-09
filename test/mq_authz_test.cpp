@@ -31,6 +31,34 @@ rsp::proto::RSPMessage makeMessageWithSource(const rsp::NodeID& sourceNodeId) {
     return message;
 }
 
+rsp::proto::RSPMessage makeMessageWithSourceAndDestination(const rsp::NodeID& sourceNodeId,
+                                                           const rsp::NodeID& destinationNodeId) {
+    rsp::proto::RSPMessage message = makeMessageWithSource(sourceNodeId);
+    *message.mutable_destination() = makeProtoSourceNodeId(destinationNodeId);
+    return message;
+}
+
+rsp::proto::NodeId makeProtoSignerNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoId;
+    std::string value;
+    value.reserve(16);
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.high() >> shift) & 0xFFULL));
+    }
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.low() >> shift) & 0xFFULL));
+    }
+    protoId.set_value(value);
+    return protoId;
+}
+
+rsp::proto::RSPMessage makeMessageWithSignatureSigner(const rsp::NodeID& signerNodeId) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_signature()->mutable_signer() = makeProtoSignerNodeId(signerNodeId);
+    message.mutable_ping_request();
+    return message;
+}
+
 rsp::proto::ERDAbstractSyntaxTree makeTypeEqualsTree(const rsp::GUID& endorsementType) {
     rsp::proto::ERDAbstractSyntaxTree tree;
     std::string value;
@@ -48,6 +76,34 @@ rsp::proto::ERDAbstractSyntaxTree makeTypeEqualsTree(const rsp::GUID& endorsemen
 rsp::proto::ERDAbstractSyntaxTree makeValueEqualsTree(const std::string& value) {
     rsp::proto::ERDAbstractSyntaxTree tree;
     tree.mutable_value_equals()->set_value(value);
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeMessageDestinationTree(const rsp::NodeID& nodeId) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    std::string value;
+    value.reserve(16);
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.high() >> shift) & 0xFFULL));
+    }
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.low() >> shift) & 0xFFULL));
+    }
+    tree.mutable_message_destination()->mutable_destination()->set_value(value);
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeMessageSourceTree(const rsp::NodeID& nodeId) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    std::string value;
+    value.reserve(16);
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.high() >> shift) & 0xFFULL));
+    }
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        value.push_back(static_cast<char>((nodeId.low() >> shift) & 0xFFULL));
+    }
+    tree.mutable_message_source()->mutable_source()->set_value(value);
     return tree;
 }
 
@@ -240,6 +296,90 @@ void testAuthZAllowsTrueRequirementWithoutEndorsements() {
     require(authorized.has_source(), "true authz should preserve the source message");
 }
 
+void testAuthZAllowsMatchingDestinationWithoutEndorsements() {
+    const rsp::KeyPair sourceKey = rsp::KeyPair::generateP256();
+    const rsp::KeyPair destinationKey = rsp::KeyPair::generateP256();
+
+    std::promise<rsp::proto::RSPMessage> successPromise;
+    auto successFuture = successPromise.get_future();
+
+    rsp::message_queue::MessageQueueAuthZ queue(
+        [&successPromise](rsp::proto::RSPMessage message) { successPromise.set_value(std::move(message)); },
+        [](rsp::proto::RSPMessage) { throw std::runtime_error("unexpected authz failure"); },
+        [](const rsp::NodeID&) { return std::vector<rsp::Endorsement>(); },
+        makeMessageDestinationTree(destinationKey.nodeID()));
+
+    queue.setWorkerCount(1);
+    queue.start();
+    queue.push(makeMessageWithSourceAndDestination(sourceKey.nodeID(), destinationKey.nodeID()));
+
+    const auto authorized = waitFor(successFuture);
+    require(authorized.has_destination(), "destination authz should preserve the message destination");
+}
+
+void testAuthZFailsWhenDestinationIsMissing() {
+    const rsp::KeyPair sourceKey = rsp::KeyPair::generateP256();
+    const rsp::KeyPair destinationKey = rsp::KeyPair::generateP256();
+
+    std::promise<rsp::proto::RSPMessage> failurePromise;
+    auto failureFuture = failurePromise.get_future();
+
+    rsp::message_queue::MessageQueueAuthZ queue(
+        [](rsp::proto::RSPMessage) { throw std::runtime_error("unexpected authz success"); },
+        [&failurePromise](rsp::proto::RSPMessage message) { failurePromise.set_value(std::move(message)); },
+        [](const rsp::NodeID&) { return std::vector<rsp::Endorsement>(); },
+        makeMessageDestinationTree(destinationKey.nodeID()));
+
+    queue.setWorkerCount(1);
+    queue.start();
+    queue.push(makeMessageWithSource(sourceKey.nodeID()));
+
+    const auto failed = waitFor(failureFuture);
+    require(!failed.has_destination(), "missing destination should fail without inventing a destination field");
+}
+
+void testAuthZAllowsMatchingMessageSourceWithoutEndorsements() {
+    const rsp::KeyPair signerKey = rsp::KeyPair::generateP256();
+
+    std::promise<rsp::proto::RSPMessage> successPromise;
+    auto successFuture = successPromise.get_future();
+
+    rsp::message_queue::MessageQueueAuthZ queue(
+        [&successPromise](rsp::proto::RSPMessage message) { successPromise.set_value(std::move(message)); },
+        [](rsp::proto::RSPMessage) { throw std::runtime_error("unexpected authz failure"); },
+        [](const rsp::NodeID&) { return std::vector<rsp::Endorsement>(); },
+        makeMessageSourceTree(signerKey.nodeID()));
+
+    queue.setWorkerCount(1);
+    queue.start();
+    queue.push(makeMessageWithSignatureSigner(signerKey.nodeID()));
+
+    const auto authorized = waitFor(successFuture);
+    require(authorized.has_signature() && authorized.signature().has_signer(),
+            "message-source authz should preserve the signature signer");
+}
+
+void testAuthZFailsWhenSignatureSignerIsMissing() {
+    const rsp::KeyPair signerKey = rsp::KeyPair::generateP256();
+
+    std::promise<rsp::proto::RSPMessage> failurePromise;
+    auto failureFuture = failurePromise.get_future();
+
+    rsp::message_queue::MessageQueueAuthZ queue(
+        [](rsp::proto::RSPMessage) { throw std::runtime_error("unexpected authz success"); },
+        [&failurePromise](rsp::proto::RSPMessage message) { failurePromise.set_value(std::move(message)); },
+        [](const rsp::NodeID&) { return std::vector<rsp::Endorsement>(); },
+        makeMessageSourceTree(signerKey.nodeID()));
+
+    queue.setWorkerCount(1);
+    queue.start();
+    queue.push(makeMessageWithSource(signerKey.nodeID()));
+
+    const auto failed = waitFor(failureFuture);
+    require(!failed.has_signature() || !failed.signature().has_signer(),
+            "missing signature signer should fail message-source authorization");
+}
+
 }  // namespace
 
 int main() {
@@ -250,6 +390,10 @@ int main() {
         testAuthZFailsForExpiredEndorsement();
         testAuthZIgnoresWrongSubjectEndorsement();
         testAuthZAllowsTrueRequirementWithoutEndorsements();
+        testAuthZAllowsMatchingDestinationWithoutEndorsements();
+        testAuthZFailsWhenDestinationIsMissing();
+        testAuthZAllowsMatchingMessageSourceWithoutEndorsements();
+        testAuthZFailsWhenSignatureSignerIsMissing();
         std::cout << "mq_authz_test passed" << std::endl;
         return 0;
     } catch (const std::exception& exception) {

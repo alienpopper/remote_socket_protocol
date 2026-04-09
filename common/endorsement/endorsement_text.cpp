@@ -134,6 +134,16 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
             out += bytesToUUID(tree.signer_equals().signer().value());
             out += ')';
             break;
+        case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
+            out += "DESTINATION(";
+            out += bytesToUUID(tree.message_destination().destination().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDAbstractSyntaxTree::kMessageSource:
+            out += "SOURCE(";
+            out += bytesToUUID(tree.message_source().source().value());
+            out += ')';
+            break;
         case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
             out += "TRUE";
             break;
@@ -307,6 +317,22 @@ struct Parser {
             pos += 7;
             skipWhitespace();
             tree.mutable_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("DESTINATION(", 12)) {
+            pos += 12;
+            skipWhitespace();
+            tree.mutable_message_destination()->mutable_destination()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("SOURCE(", 7)) {
+            pos += 7;
+            skipWhitespace();
+            tree.mutable_message_source()->mutable_source()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;

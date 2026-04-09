@@ -285,6 +285,14 @@ message ERDASTSignerEquals {
     NodeId signer = 1;
 }
 
+message ERDASTMessageDestination {
+    NodeId destination = 1;
+}
+
+message ERDASTMessageSource {
+    NodeId source = 1;
+}
+
 message ERDASTTrue {
 }
 
@@ -299,10 +307,12 @@ message ERDAbstractSyntaxTree {
         ERDASTTypeEquals type_equals = 4;
         ERDASTValueEquals value_equals = 5;
         ERDASTSignerEquals signer_equals = 6;
-        ERDASTTrue true_value = 7;
-        ERDASTFalse false_value = 8;
-        ERDASTAllOf all_of = 9;
-        ERDASTAnyOf any_of = 10;
+        ERDASTMessageDestination message_destination = 7;
+        ERDASTMessageSource message_source = 8;
+        ERDASTTrue true_value = 9;
+        ERDASTFalse false_value = 10;
+        ERDASTAllOf all_of = 11;
+        ERDASTAnyOf any_of = 12;
     }
 }
 

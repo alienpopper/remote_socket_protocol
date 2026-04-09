@@ -197,6 +197,7 @@ MQ_AUTHZ_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \

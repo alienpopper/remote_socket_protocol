@@ -61,6 +61,18 @@ rsp::proto::ERDAbstractSyntaxTree makeSignerEqualsTree(const rsp::NodeID& signer
     return tree;
 }
 
+rsp::proto::ERDAbstractSyntaxTree makeMessageDestinationTree(const rsp::NodeID& destination) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    *tree.mutable_message_destination()->mutable_destination() = toProtoNodeId(destination);
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeMessageSourceTree(const rsp::NodeID& source) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    *tree.mutable_message_source()->mutable_source() = toProtoNodeId(source);
+    return tree;
+}
+
 rsp::proto::ERDAbstractSyntaxTree makeTrueTree() {
     rsp::proto::ERDAbstractSyntaxTree tree;
     tree.mutable_true_value();
@@ -123,6 +135,31 @@ rsp::proto::EndorsementNeeded makeRequirement(const rsp::proto::ERDAbstractSynta
 
 bool isEmptyTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
     return tree.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET;
+}
+
+rsp::proto::NodeId toProtoMessageNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
+}
+
+rsp::proto::RSPMessage makeMessageWithDestination(const rsp::NodeID& destination) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_destination() = toProtoMessageNodeId(destination);
+    message.mutable_ping_request();
+    return message;
+}
+
+rsp::proto::RSPMessage makeMessageWithSignatureSigner(const rsp::NodeID& source) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_signature()->mutable_signer() = toProtoNodeId(source);
+    message.mutable_ping_request();
+    return message;
 }
 
 rsp::Endorsement makeTestEndorsement(const rsp::KeyPair& endorsementServiceKey,
@@ -264,6 +301,10 @@ void testMalformedBufferRejection() {
             "signer-equals should match the endorsement signer");
         require(!rsp::endorsementMatchesRequirement(makeRequirement(makeSignerEqualsTree(otherSignerKey.nodeID())), endorsement),
             "signer-equals should reject a different signer");
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeMessageDestinationTree(subjectKey.nodeID())), endorsement),
+            "message-destination should not match an endorsement without message context");
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(makeMessageSourceTree(subjectKey.nodeID())), endorsement),
+            "message-source should not match an endorsement without message context");
     }
 
     void testRequirementAndOrEqualsNodes() {
@@ -485,6 +526,43 @@ void testMalformedBufferRejection() {
             "any-of with only impossible terms should reduce to false");
     }
 
+    void testReduceRequirementTreePreservesMessageLogicWithoutMessageContext() {
+        const rsp::NodeID expectedDestination = rsp::KeyPair::generateP256().nodeID();
+        const auto tree = makeAndTree(makeMessageDestinationTree(expectedDestination), makeTrueTree());
+
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{});
+
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kMessageDestination,
+            "reduction without a message should preserve message predicates");
+        require(reduced.message_destination().destination().value() == toProtoNodeId(expectedDestination).value(),
+            "reduction without a message should preserve the original destination bytes");
+    }
+
+    void testReduceRequirementTreeEliminatesMismatchedMessageBranches() {
+        const rsp::NodeID expectedDestination = rsp::KeyPair::generateP256().nodeID();
+        const rsp::NodeID actualDestination = rsp::KeyPair::generateP256().nodeID();
+        const auto tree = makeOrTree(makeMessageDestinationTree(expectedDestination), makeValueEqualsTree("network-access"));
+        const auto message = makeMessageWithDestination(actualDestination);
+
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{}, &message);
+
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+            "reduction with a non-matching message should prune the mismatched message branch");
+        require(reduced.value_equals().value() == "network-access",
+            "reduction should preserve the remaining unmatched branch");
+    }
+
+    void testReduceRequirementTreeEliminatesMatchedMessageSource() {
+        const rsp::NodeID expectedSource = rsp::KeyPair::generateP256().nodeID();
+        const auto tree = makeAndTree(makeMessageSourceTree(expectedSource), makeTrueTree());
+        const auto message = makeMessageWithSignatureSigner(expectedSource);
+
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{}, &message);
+
+        require(isEmptyTree(reduced),
+            "reduction with a matching signature signer should eliminate the message-source predicate");
+    }
+
 }  // namespace
 
 int main() {
@@ -506,6 +584,9 @@ int main() {
         testReduceRequirementTreeClearsFullySatisfiedTree();
         testReduceRequirementTreeSimplifiesTrueAndFalseConstants();
         testReduceRequirementTreeSimplifiesAllOfAnyOf();
+        testReduceRequirementTreePreservesMessageLogicWithoutMessageContext();
+        testReduceRequirementTreeEliminatesMismatchedMessageBranches();
+        testReduceRequirementTreeEliminatesMatchedMessageSource();
 
         std::cout << "endorsement_test passed\n";
         return 0;

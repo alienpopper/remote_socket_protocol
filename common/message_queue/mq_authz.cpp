@@ -56,7 +56,7 @@ void MessageQueueAuthZ::handleMessage(Message message, rsp::MessageQueueSharedSt
     }
 
     try {
-        const auto reducedRequirement = rsp::reduceRequirementTree(authorizationTree_, endorsements);
+        const auto reducedRequirement = rsp::reduceRequirementTree(authorizationTree_, endorsements, &message);
         if (reducedRequirement.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET) {
             success_(std::move(message));
             return;
