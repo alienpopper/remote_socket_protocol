@@ -5,6 +5,7 @@
 #include "messages.pb.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace rsp {
 
@@ -40,5 +41,8 @@ private:
 
 bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirement,
                                   const Endorsement& endorsement);
+
+rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                                                        const std::vector<Endorsement>& endorsements);
 
 }  // namespace rsp

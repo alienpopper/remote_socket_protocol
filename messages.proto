@@ -247,6 +247,8 @@ message EndorsementDone {
     Endorsement new_endorsement = 2;
 }
 
+/***Endorsement AST Nodes ***/
+
 message ERDASTEquals {
     ERDAbstractSyntaxTree lhs = 1;
     ERDAbstractSyntaxTree rhs = 2;

@@ -91,6 +91,10 @@ rsp::proto::EndorsementNeeded makeRequirement(const rsp::proto::ERDAbstractSynta
     return requirement;
 }
 
+bool isEmptyTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
+    return tree.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET;
+}
+
 rsp::Endorsement makeTestEndorsement(const rsp::KeyPair& endorsementServiceKey,
                                      const rsp::KeyPair& subjectKey,
                                      const rsp::GUID& endorsementType,
@@ -280,6 +284,68 @@ void testMalformedBufferRejection() {
             "requirements without a tree should not match");
     }
 
+    void testReduceRequirementTreeEliminatesMatchedAndBranch() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
+
+        const auto tree = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("other-value"));
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
+
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+            "reduction should keep only the unmatched value predicate from an and-tree");
+        require(reduced.value_equals().value() == "other-value",
+            "reduction should preserve the unmatched value predicate content");
+    }
+
+    void testReduceRequirementTreeEliminatesSatisfiedOrTree() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
+        const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
+
+        const auto tree = makeOrTree(makeTypeEqualsTree(matchingType), makeTypeEqualsTree(otherType));
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
+
+        require(isEmptyTree(reduced),
+            "reduction should clear an or-tree once any branch is already satisfied");
+    }
+
+    void testReduceRequirementTreePreservesUnmetAlternatives() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::GUID otherType("ffeeddcc-bbaa-9988-7766-554433221100");
+        const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
+
+        const auto leftBranch = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("missing-value"));
+        const auto rightBranch = makeSignerEqualsTree(rsp::KeyPair::generateP256().nodeID());
+        const auto tree = makeOrTree(leftBranch, rightBranch);
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
+
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kOr,
+            "reduction should keep unmet alternatives in an or-tree");
+        require(reduced.or_().lhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kValueEquals,
+            "reduction should drop the matched portion of the partially satisfied branch");
+        require(reduced.or_().rhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kSignerEquals,
+            "reduction should preserve the untouched alternative branch");
+    }
+
+    void testReduceRequirementTreeClearsFullySatisfiedTree() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID matchingType("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::Endorsement endorsement = makeTestEndorsement(endorsementServiceKey, subjectKey, matchingType, "network-access");
+
+        const auto tree = makeAndTree(makeTypeEqualsTree(matchingType), makeValueEqualsTree("network-access"));
+        const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
+
+        require(isEmptyTree(reduced),
+            "reduction should clear a fully satisfied tree");
+    }
+
 }  // namespace
 
 int main() {
@@ -293,6 +359,10 @@ int main() {
         testRequirementSignerEquals();
         testRequirementAndOrEqualsNodes();
         testRequirementComplexAst();
+        testReduceRequirementTreeEliminatesMatchedAndBranch();
+        testReduceRequirementTreeEliminatesSatisfiedOrTree();
+        testReduceRequirementTreePreservesUnmetAlternatives();
+        testReduceRequirementTreeClearsFullySatisfiedTree();
 
         std::cout << "endorsement_test passed\n";
         return 0;

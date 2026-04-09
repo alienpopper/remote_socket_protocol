@@ -143,6 +143,113 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
     return false;
 }
 
+bool isEmptyTree(const rsp::proto::ERDAbstractSyntaxTree& tree) {
+    return tree.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET;
+}
+
+bool anyEndorsementMatchesTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                               const std::vector<Endorsement>& endorsements) {
+    for (const auto& endorsement : endorsements) {
+        if (evaluateRequirementTree(tree, endorsement)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeAndTree(const rsp::proto::ERDAbstractSyntaxTree& lhs,
+                                              const rsp::proto::ERDAbstractSyntaxTree& rhs) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    *tree.mutable_and_()->mutable_lhs() = lhs;
+    *tree.mutable_and_()->mutable_rhs() = rhs;
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeOrTree(const rsp::proto::ERDAbstractSyntaxTree& lhs,
+                                             const rsp::proto::ERDAbstractSyntaxTree& rhs) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    *tree.mutable_or_()->mutable_lhs() = lhs;
+    *tree.mutable_or_()->mutable_rhs() = rhs;
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree makeEqualsTree(const rsp::proto::ERDAbstractSyntaxTree& lhs,
+                                                 const rsp::proto::ERDAbstractSyntaxTree& rhs) {
+    rsp::proto::ERDAbstractSyntaxTree tree;
+    *tree.mutable_equals()->mutable_lhs() = lhs;
+    *tree.mutable_equals()->mutable_rhs() = rhs;
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                                                            const std::vector<Endorsement>& endorsements) {
+    if (anyEndorsementMatchesTree(tree, endorsements)) {
+        return rsp::proto::ERDAbstractSyntaxTree();
+    }
+
+    switch (tree.node_type_case()) {
+        case rsp::proto::ERDAbstractSyntaxTree::kEquals: {
+            if (!tree.equals().has_lhs() || !tree.equals().has_rhs()) {
+                return tree;
+            }
+
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.equals().lhs(), endorsements);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.equals().rhs(), endorsements);
+            if (isEmptyTree(reducedLeft) && isEmptyTree(reducedRight)) {
+                return rsp::proto::ERDAbstractSyntaxTree();
+            }
+
+            if (isEmptyTree(reducedLeft)) {
+                return reducedRight;
+            }
+
+            if (isEmptyTree(reducedRight)) {
+                return reducedLeft;
+            }
+
+            return makeEqualsTree(reducedLeft, reducedRight);
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kAnd: {
+            if (!tree.and_().has_lhs() || !tree.and_().has_rhs()) {
+                return tree;
+            }
+
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.and_().lhs(), endorsements);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.and_().rhs(), endorsements);
+            if (isEmptyTree(reducedLeft)) {
+                return reducedRight;
+            }
+
+            if (isEmptyTree(reducedRight)) {
+                return reducedLeft;
+            }
+
+            return makeAndTree(reducedLeft, reducedRight);
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kOr: {
+            if (!tree.or_().has_lhs() || !tree.or_().has_rhs()) {
+                return tree;
+            }
+
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.or_().lhs(), endorsements);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.or_().rhs(), endorsements);
+            if (isEmptyTree(reducedLeft) || isEmptyTree(reducedRight)) {
+                return rsp::proto::ERDAbstractSyntaxTree();
+            }
+
+            return makeOrTree(reducedLeft, reducedRight);
+        }
+        case rsp::proto::ERDAbstractSyntaxTree::kTypeEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kValueEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::kSignerEquals:
+        case rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET:
+            return tree;
+    }
+
+    return tree;
+}
+
 }  // namespace
 
 Endorsement::Endorsement() = default;
@@ -262,6 +369,15 @@ bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirem
         return evaluateRequirementTree(requirement.tree(), endorsement);
     } catch (const std::runtime_error&) {
         return false;
+    }
+}
+
+rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                                                        const std::vector<Endorsement>& endorsements) {
+    try {
+        return reduceRequirementTreeImpl(tree, endorsements);
+    } catch (const std::runtime_error&) {
+        return tree;
     }
 }
 
