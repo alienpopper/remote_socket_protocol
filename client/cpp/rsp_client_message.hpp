@@ -3,7 +3,7 @@
 #include "client/cpp/rsp_client_export.hpp"
 #include "common/encoding/encoding.hpp"
 #include "common/keypair.hpp"
-#include "common/message_queue.hpp"
+#include "common/message_queue/mq.hpp"
 #include "common/transport/transport.hpp"
 
 #include <cstddef>

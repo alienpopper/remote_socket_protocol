@@ -134,14 +134,14 @@ BASE_TYPES_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/base_types_test.o
 MESSAGE_QUEUE_TEST_OBJECTS := \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/build/gen/messages.pb.o \
 	$(OBJ_DIR)/test/message_queue_test.o
 NODE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -150,7 +150,7 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
@@ -171,7 +171,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
@@ -194,7 +194,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
@@ -217,7 +217,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
-	$(OBJ_DIR)/common/message_queue.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/ascii_handshake.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
@@ -345,7 +345,7 @@ $(OBJ_DIR)/common/node.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/common/ascii_handshake.o: $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/message_queue.o: $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/message_queue/mq.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
@@ -353,29 +353,29 @@ $(OBJ_DIR)/common/endorsement/endorsement.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTO
 
 $(OBJ_DIR)/test/endorsement_test.o: $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/encoding/encoding.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/encoding/encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/test/client_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/test/client_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/test/resource_service_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/test/resource_service_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/message_queue_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/test/endorsement_service_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/test/endorsement_service_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/test/transport_memory_test.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/test/transport_memory_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/endorsement_service/endorsement_service.o: common/message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/endorsement_service/endorsement_service.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)

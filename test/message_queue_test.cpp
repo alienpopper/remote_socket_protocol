@@ -1,4 +1,4 @@
-#include "common/message_queue.hpp"
+#include "common/message_queue/mq.hpp"
 
 #include <atomic>
 #include <chrono>

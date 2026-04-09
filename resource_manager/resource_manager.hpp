@@ -2,7 +2,7 @@
 
 #include "common/ascii_handshake.hpp"
 #include "common/encoding/encoding.hpp"
-#include "common/message_queue.hpp"
+#include "common/message_queue/mq.hpp"
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
 

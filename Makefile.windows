@@ -54,7 +54,7 @@ OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -75,7 +75,7 @@ BASE_TYPES_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types_test.obj
 
 MESSAGE_QUEUE_TEST_OBJECTS = \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\messages.pb.obj \
 	$(OBJ_DIR)\message_queue_test.obj
 
@@ -83,7 +83,7 @@ NODE_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -93,7 +93,7 @@ CLIENT_LIBRARY_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -112,7 +112,7 @@ FULL_CLIENT_LIBRARY_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -129,7 +129,7 @@ RESOURCE_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -148,7 +148,7 @@ ENDORSEMENT_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -168,7 +168,7 @@ RESOURCE_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -191,7 +191,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -214,7 +214,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -255,7 +255,7 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
-	$(OBJ_DIR)\message_queue.obj \
+	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\ascii_handshake.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
@@ -300,7 +300,7 @@ $(RSPFULLCLIENT_STATIC_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB
 $(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message_dll.obj
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
-	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\message_queue.obj $(OBJ_DIR)\ascii_handshake.obj $(OBJ_DIR)\encoding.obj $(OBJ_DIR)\protobuf_encoding.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\transport_memory.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
+	cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\mq.obj $(OBJ_DIR)\ascii_handshake.obj $(OBJ_DIR)\encoding.obj $(OBJ_DIR)\protobuf_encoding.obj $(OBJ_DIR)\endorsement.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\transport_memory.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(RESOURCE_SERVICE_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(RESOURCE_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RESOURCE_SERVICE_TARGET)
@@ -377,16 +377,16 @@ $(OBJ_DIR)\node.obj: common\node.cpp common\node.hpp $(OS_HEADER) $(PROTOBUF_GEN
 $(OBJ_DIR)\keypair.obj: common\keypair.cpp common\keypair.hpp $(BORINGSSL_INCLUDE_HEADER) $(OS_COMMON_HEADER) $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\keypair.cpp /Fo$(OBJ_DIR)\keypair.obj
 
-$(OBJ_DIR)\message_queue.obj: common\message_queue.cpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
-	cl $(CPPFLAGS) $(CXXFLAGS) /c common\message_queue.cpp /Fo$(OBJ_DIR)\message_queue.obj
+$(OBJ_DIR)\mq.obj: common\message_queue\mq.cpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\message_queue\mq.cpp /Fo$(OBJ_DIR)\mq.obj 
 
 $(OBJ_DIR)\ascii_handshake.obj: common\ascii_handshake.cpp common\ascii_handshake.hpp common\transport\transport.hpp common\version.h $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\ascii_handshake.cpp /Fo$(OBJ_DIR)\ascii_handshake.obj
 
-$(OBJ_DIR)\encoding.obj: common\encoding\encoding.cpp common\encoding\encoding.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\encoding.obj: common\encoding\encoding.cpp common\encoding\encoding.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\encoding\encoding.cpp /Fo$(OBJ_DIR)\encoding.obj
 
-$(OBJ_DIR)\protobuf_encoding.obj: common\encoding\protobuf\protobuf_encoding.cpp common\encoding\protobuf\protobuf_encoding.hpp common\encoding\encoding.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\protobuf_encoding.obj: common\encoding\protobuf\protobuf_encoding.cpp common\encoding\protobuf\protobuf_encoding.hpp common\encoding\encoding.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\encoding\protobuf\protobuf_encoding.cpp /Fo$(OBJ_DIR)\protobuf_encoding.obj
 
 $(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\base_types.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)
@@ -404,13 +404,13 @@ $(OBJ_DIR)\transport_tcp.obj: common\transport\transport_tcp.cpp common\transpor
 $(OBJ_DIR)\transport_memory.obj: common\transport\transport_memory.cpp common\transport\transport_memory.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_memory.cpp /Fo$(OBJ_DIR)\transport_memory.obj
 
-$(OBJ_DIR)\rsp_client_message.obj: client\cpp\rsp_client_message.cpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\rsp_client_message.obj: client\cpp\rsp_client_message.cpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message.obj
 
-$(OBJ_DIR)\rsp_client.obj: client\cpp\rsp_client.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\rsp_client.obj: client\cpp\rsp_client.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client.obj
 
-$(OBJ_DIR)\rsp_full_client.obj: client\cpp_full\rsp_client.cpp client\cpp_full\rsp_client.hpp common\transport\transport_tcp.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\rsp_full_client.obj: client\cpp_full\rsp_client.cpp client\cpp_full\rsp_client.hpp common\transport\transport_tcp.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c client\cpp_full\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_full_client.obj
 
 $(OBJ_DIR)\os_fileops.obj: $(OS_COMMON_SOURCE) $(OS_COMMON_HEADER)
@@ -420,14 +420,14 @@ $(OBJ_DIR)\os_socket.obj: $(OS_SOCKET_SOURCE) $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c $(OS_SOCKET_SOURCE) /Fo$(OBJ_DIR)\os_socket.obj
 
 
-$(OBJ_DIR)\resource_manager.obj: resource_manager\resource_manager.cpp resource_manager\resource_manager.hpp common\node.hpp common\transport\transport.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_manager.obj: resource_manager\resource_manager.cpp resource_manager\resource_manager.hpp common\node.hpp common\transport\transport.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_manager\resource_manager.cpp /Fo$(OBJ_DIR)\resource_manager.obj
 
 
 $(OBJ_DIR)\resource_manager_main.obj: resource_manager\resource_manager_main.cpp resource_manager\resource_manager.hpp common\transport\transport_tcp.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_manager\resource_manager_main.cpp /Fo$(OBJ_DIR)\resource_manager_main.obj
 
-$(OBJ_DIR)\resource_service.obj: resource_service\resource_service.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service.obj: resource_service\resource_service.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\resource_service.cpp /Fo$(OBJ_DIR)\resource_service.obj
 
 $(OBJ_DIR)\resource_service_main.obj: resource_service\resource_service_main.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\ascii_handshake.hpp $(PROTOBUF_GENERATED_HEADER)
@@ -445,28 +445,28 @@ $(OBJ_DIR)\endorsement_test.obj: test\endorsement_test.cpp common\endorsement\en
 $(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\base_types_test.cpp /Fo$(OBJ_DIR)\base_types_test.obj
 
-$(OBJ_DIR)\message_queue_test.obj: test\message_queue_test.cpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\message_queue_test.obj: test\message_queue_test.cpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\message_queue_test.cpp /Fo$(OBJ_DIR)\message_queue_test.obj
 
-$(OBJ_DIR)\node_test.obj: test\node_test.cpp common\node.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\node_test.obj: test\node_test.cpp common\node.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\node_test.cpp /Fo$(OBJ_DIR)\node_test.obj
 
-$(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\client_test.cpp /Fo$(OBJ_DIR)\client_test.obj
 
-$(OBJ_DIR)\resource_service_test.obj: test\resource_service_test.cpp client\cpp\rsp_client.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service_test.obj: test\resource_service_test.cpp client\cpp\rsp_client.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\resource_service_test.cpp /Fo$(OBJ_DIR)\resource_service_test.obj
 
-$(OBJ_DIR)\endorsement_service.obj: endorsement_service\endorsement_service.cpp endorsement_service\endorsement_service.hpp client\cpp_full\rsp_client.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\endorsement_service.obj: endorsement_service\endorsement_service.cpp endorsement_service\endorsement_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c endorsement_service\endorsement_service.cpp /Fo$(OBJ_DIR)\endorsement_service.obj
 
 $(OBJ_DIR)\endorsement_service_main.obj: endorsement_service\endorsement_service_main.cpp endorsement_service\endorsement_service.hpp common\ascii_handshake.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c endorsement_service\endorsement_service_main.cpp /Fo$(OBJ_DIR)\endorsement_service_main.obj
 
-$(OBJ_DIR)\endorsement_service_test.obj: test\endorsement_service_test.cpp client\cpp\rsp_client.hpp endorsement_service\endorsement_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\endorsement_service_test.obj: test\endorsement_service_test.cpp client\cpp\rsp_client.hpp endorsement_service\endorsement_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\endorsement_service_test.cpp /Fo$(OBJ_DIR)\endorsement_service_test.obj
 
-$(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\transport_memory_test.cpp /Fo$(OBJ_DIR)\transport_memory_test.obj
 
 clean:

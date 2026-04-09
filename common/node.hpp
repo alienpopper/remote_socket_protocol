@@ -9,7 +9,7 @@
 #include <optional>
 
 #include "common/keypair.hpp"
-#include "common/message_queue.hpp"
+#include "common/message_queue/mq.hpp"
 
 namespace rsp {
 

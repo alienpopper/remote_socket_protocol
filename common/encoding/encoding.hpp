@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/keypair.hpp"
-#include "common/message_queue.hpp"
+#include "common/message_queue/mq.hpp"
 #include "common/transport/transport.hpp"
 #include "messages.pb.h"
 
