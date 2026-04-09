@@ -12,6 +12,7 @@ ENDORSEMENT_TEST_TARGET = $(BIN_DIR)\endorsement_test.exe
 MESSAGE_QUEUE_TEST_TARGET = $(BIN_DIR)\message_queue_test.exe
 MQ_ASCII_HANDSHAKE_TEST_TARGET = $(BIN_DIR)\mq_ascii_handshake_test.exe
 MQ_AUTHN_TEST_TARGET = $(BIN_DIR)\mq_authn_test.exe
+RSP_ENDORSEMENT_TOOL_TARGET = $(BIN_DIR)\rsp_endorsement.exe
 NODE_TEST_TARGET = $(BIN_DIR)\node_test.exe
 RESOURCE_SERVICE_TEST_TARGET = $(BIN_DIR)\resource_service_test.exe
 RESOURCE_SERVICE_TARGET = $(BIN_DIR)\resource_service.exe
@@ -111,6 +112,15 @@ MQ_AUTHN_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\mq_authn_test.obj
+
+RSP_ENDORSEMENT_TOOL_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\rsp_endorsement_main.obj
 
 NODE_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
@@ -305,7 +315,7 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\client_test.obj
 
-all: dirs $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
+all: dirs $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
 
 test: test-base-types test-keypair test-endorsement test-message-queue test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
@@ -379,6 +389,9 @@ $(ENDORSEMENT_SERVICE_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE
 
 $(TRANSPORT_MEMORY_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(TRANSPORT_MEMORY_TEST_TARGET)
+
+$(RSP_ENDORSEMENT_TOOL_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_ENDORSEMENT_TOOL_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(RSP_ENDORSEMENT_TOOL_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RSP_ENDORSEMENT_TOOL_TARGET)
 
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
@@ -504,6 +517,9 @@ $(OBJ_DIR)\mq_ascii_handshake_test.obj: test\mq_ascii_handshake_test.cpp common\
 
 $(OBJ_DIR)\mq_authn_test.obj: test\mq_authn_test.cpp common\message_queue\mq_authn.hpp $(PROTOBUF_GENERATED_HEADER) $(BORINGSSL_INCLUDE_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\mq_authn_test.cpp /Fo$(OBJ_DIR)\mq_authn_test.obj
+
+$(OBJ_DIR)\rsp_endorsement_main.obj: tools\rsp_endorsement\rsp_endorsement_main.cpp common\endorsement\endorsement.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER) $(BORINGSSL_INCLUDE_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c tools\rsp_endorsement\rsp_endorsement_main.cpp /Fo$(OBJ_DIR)\rsp_endorsement_main.obj
 
 $(OBJ_DIR)\node_test.obj: test\node_test.cpp common\node.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\node_test.cpp /Fo$(OBJ_DIR)\node_test.obj

@@ -18,6 +18,7 @@ MESSAGE_QUEUE_TEST_TARGET := $(BIN_DIR)/message_queue_test
 MQ_ASCII_HANDSHAKE_TEST_TARGET := $(BIN_DIR)/mq_ascii_handshake_test
 MQ_SIGNING_TEST_TARGET := $(BIN_DIR)/mq_signing_test
 MQ_AUTHN_TEST_TARGET := $(BIN_DIR)/mq_authn_test
+RSP_ENDORSEMENT_TOOL_TARGET := $(BIN_DIR)/rsp_endorsement
 NODE_TEST_TARGET := $(BIN_DIR)/node_test
 RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
@@ -281,6 +282,15 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/test/transport_memory_test.o
 
+RSP_ENDORSEMENT_TOOL_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/tools/rsp_endorsement/rsp_endorsement_main.o
+
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 CPPFLAGS ?= -I$(PROJECT_ROOT)
@@ -292,7 +302,7 @@ SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 .PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-resource-service test-endorsement-service test-transport-memory
 .PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-node test-resource-service test-endorsement-service test-transport-memory
 
-all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET)
+all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
 
 include third_party/Makefile
 
@@ -354,6 +364,9 @@ $(ENDORSEMENT_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOB
 
 $(TRANSPORT_MEMORY_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
+$(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_ENDORSEMENT_TOOL_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(RSP_ENDORSEMENT_TOOL_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
@@ -444,6 +457,8 @@ $(OBJ_DIR)/test/mq_ascii_handshake_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBU
 $(OBJ_DIR)/test/mq_signing_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/mq_authn_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/tools/rsp_endorsement/rsp_endorsement_main.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
