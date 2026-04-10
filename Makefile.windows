@@ -323,6 +323,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\mq_signing.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(OBJ_DIR)\json_encoding.obj \
 	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
@@ -349,6 +350,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS = \
 	$(OBJ_DIR)\mq_signing.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(OBJ_DIR)\json_encoding.obj \
 	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
@@ -410,6 +412,7 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\mq_signing.obj \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
+	$(OBJ_DIR)\json_encoding.obj \
 	$(OBJ_DIR)\endorsement.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
