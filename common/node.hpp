@@ -67,6 +67,7 @@ public:
 protected:
     virtual bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) = 0;
     virtual void handleOutputMessage(rsp::proto::RSPMessage message) = 0;
+    void stopNodeQueues();
 
     const std::array<uint8_t, 16>& instanceSeed() const;
     const KeyPair& keyPair() const;

@@ -143,6 +143,8 @@ RSPClient::~RSPClient() {
     if (receiveThread_.joinable()) {
         receiveThread_.join();
     }
+
+    stopNodeQueues();
 }
 
 int RSPClient::run() const {

@@ -111,6 +111,8 @@ void RSPClient::stop() {
         incomingMessages_->stop();
     }
 
+    stopNodeQueues();
+
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
         removedConnections.swap(connections_);

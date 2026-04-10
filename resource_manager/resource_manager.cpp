@@ -198,6 +198,8 @@ ResourceManager::~ResourceManager() {
         authnQueue_->stop();
     }
 
+    stopNodeQueues();
+
     std::vector<ActiveEncodingState> encodings;
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);

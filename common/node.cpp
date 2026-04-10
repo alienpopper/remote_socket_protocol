@@ -244,6 +244,10 @@ RSPNode::RSPNode(KeyPair keyPair)
 }
 
 RSPNode::~RSPNode() {
+    stopNodeQueues();
+}
+
+void RSPNode::stopNodeQueues() {
     if (inputQueue_ != nullptr) {
         inputQueue_->stop();
     }
