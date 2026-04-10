@@ -4,6 +4,7 @@
 #include "common/keypair.hpp"
 #include "common/message_queue/mq.hpp"
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -13,7 +14,16 @@ namespace rsp {
 // Returns the keypair for a given NodeID, or nullptr if not found.
 using GetKeyFunction = std::function<std::shared_ptr<const KeyPair>(const NodeID&)>;
 
-Buffer serializeMessageForSigning(const rsp::proto::RSPMessage& message);
+using MessageHash = std::array<uint8_t, 32>;
+
+// Computes the canonical packet hash for an RSPMessage. The outer signature
+// field is excluded so the result can be used as packet signature input.
+MessageHash computeMessageHash(const rsp::proto::RSPMessage& message);
+Buffer messageSignatureInput(const rsp::proto::RSPMessage& message);
+rsp::proto::SignatureBlock signMessage(const KeyPair& keyPair, const rsp::proto::RSPMessage& message);
+bool verifyMessageSignature(const KeyPair& keyPair,
+                            const rsp::proto::RSPMessage& message,
+                            const rsp::proto::SignatureBlock& signatureBlock);
 std::optional<NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& protoId);
 std::optional<NodeID> nodeIdFromSignerField(const rsp::proto::NodeId& protoId);
 std::optional<NodeID> senderNodeIdFromMessage(const rsp::proto::RSPMessage& message);

@@ -188,6 +188,7 @@ MQ_AUTHN_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/encoding/encoding.o \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \

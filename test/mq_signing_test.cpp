@@ -180,13 +180,7 @@ void testCheckSignatureWithGetKeyFunction() {
     // Sign a message first.
     rsp::proto::RSPMessage original = makeMessageWithSource(nodeId);
     {
-        rsp::proto::RSPMessage copy = original;
-        copy.clear_signature();
-        std::string payload;
-        copy.SerializeToString(&payload);
-        rsp::Buffer buf(reinterpret_cast<const uint8_t*>(payload.data()),
-                        static_cast<uint32_t>(payload.size()));
-        *original.mutable_signature() = keyPair.signBlock(buf);
+        *original.mutable_signature() = rsp::signMessage(keyPair, original);
     }
 
     auto publicKey = std::make_shared<rsp::KeyPair>(rsp::KeyPair::fromPublicKey(keyPair.publicKey()));
@@ -226,13 +220,7 @@ void testCheckSignatureWithKeypairConstructor() {
     // Sign a message.
     rsp::proto::RSPMessage original = makeMessageWithSource(nodeId);
     {
-        rsp::proto::RSPMessage copy = original;
-        copy.clear_signature();
-        std::string payload;
-        copy.SerializeToString(&payload);
-        rsp::Buffer buf(reinterpret_cast<const uint8_t*>(payload.data()),
-                        static_cast<uint32_t>(payload.size()));
-        *original.mutable_signature() = signingKey.signBlock(buf);
+        *original.mutable_signature() = rsp::signMessage(signingKey, original);
     }
 
     std::promise<rsp::proto::RSPMessage> successPromise;
@@ -264,13 +252,7 @@ void testCheckSignatureFailsForTamperedMessage() {
     // Sign a message.
     rsp::proto::RSPMessage original = makeMessageWithSource(nodeId);
     {
-        rsp::proto::RSPMessage copy = original;
-        copy.clear_signature();
-        std::string payload;
-        copy.SerializeToString(&payload);
-        rsp::Buffer buf(reinterpret_cast<const uint8_t*>(payload.data()),
-                        static_cast<uint32_t>(payload.size()));
-        *original.mutable_signature() = signingKey.signBlock(buf);
+        *original.mutable_signature() = rsp::signMessage(signingKey, original);
     }
 
     // Tamper: add a destination to change the serialized bytes.
@@ -332,13 +314,7 @@ void testCheckSignatureFailsWhenKeyNotFound() {
     // Sign with one key but verify with a different (non-matching) key.
     rsp::proto::RSPMessage original = makeMessageWithSource(nodeId);
     {
-        rsp::proto::RSPMessage copy = original;
-        copy.clear_signature();
-        std::string payload;
-        copy.SerializeToString(&payload);
-        rsp::Buffer buf(reinterpret_cast<const uint8_t*>(payload.data()),
-                        static_cast<uint32_t>(payload.size()));
-        *original.mutable_signature() = signingKey.signBlock(buf);
+        *original.mutable_signature() = rsp::signMessage(signingKey, original);
     }
 
     std::promise<std::string> failurePromise;

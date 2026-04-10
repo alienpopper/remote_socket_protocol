@@ -1,11 +1,11 @@
-#include "common/encoding/protobuf/message_hash.hpp"
+#include "common/message_queue/mq_signing.hpp"
 
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
-using rsp::encoding::protobuf::MessageHash;
-using rsp::encoding::protobuf::computeMessageHash;
+using rsp::MessageHash;
+using rsp::computeMessageHash;
 
 // ---------------------------------------------------------------------------
 // Test infrastructure

@@ -34,7 +34,7 @@ bool validateReceivedIdentity(const rsp::proto::RSPMessage& identityMessage,
 
     try {
         rsp::KeyPair peerKey = rsp::KeyPair::fromPublicKey(identityMessage.identity().public_key());
-        if (!peerKey.verifyBlock(rsp::serializeMessageForSigning(identityMessage), identityMessage.signature())) {
+        if (!rsp::verifyMessageSignature(peerKey, identityMessage, identityMessage.signature())) {
             return false;
         }
 
@@ -93,7 +93,7 @@ bool MessageQueueAuthN::performInitialIdentityExchange(rsp::encoding::Encoding& 
             rsp::proto::RSPMessage identityMessage;
             identityMessage.mutable_identity()->mutable_nonce()->CopyFrom(incomingMessage.challenge_request().nonce());
             *identityMessage.mutable_identity()->mutable_public_key() = keyPair_.publicKey();
-            *identityMessage.mutable_signature() = keyPair_.signBlock(rsp::serializeMessageForSigning(identityMessage));
+            *identityMessage.mutable_signature() = rsp::signMessage(keyPair_, identityMessage);
 
             {
                 std::lock_guard<std::mutex> lock(encoding.sendMutex_);

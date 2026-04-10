@@ -1,5 +1,6 @@
 #include "common/encoding/protobuf/protobuf_encoding.hpp"
 #include "common/message_queue/mq_authn.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/transport/transport_memory.hpp"
 
 #include <atomic>
@@ -67,22 +68,6 @@ bool writeFramedMessage(const rsp::transport::ConnectionHandle& connection, cons
 
     return connection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
            connection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
-}
-
-rsp::Buffer serializeUnsignedMessage(const rsp::proto::RSPMessage& message) {
-    rsp::proto::RSPMessage unsignedMessage = message;
-    unsignedMessage.clear_signature();
-
-    std::string payload;
-    if (!unsignedMessage.SerializeToString(&payload)) {
-        throw std::runtime_error("failed to serialize unsigned authentication message");
-    }
-
-    if (payload.empty()) {
-        return rsp::Buffer();
-    }
-
-    return rsp::Buffer(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
 }
 
 void require(bool condition, const std::string& message) {
@@ -157,7 +142,7 @@ void testAuthNSuccess() {
         rsp::proto::RSPMessage peerIdentity;
         peerIdentity.mutable_identity()->mutable_nonce()->CopyFrom(initialChallenge.challenge_request().nonce());
         *peerIdentity.mutable_identity()->mutable_public_key() = peerKeyPair.publicKey();
-        *peerIdentity.mutable_signature() = peerKeyPair.signBlock(serializeUnsignedMessage(peerIdentity));
+        *peerIdentity.mutable_signature() = rsp::signMessage(peerKeyPair, peerIdentity);
         require(writeFramedMessage(serverConnection, peerIdentity), "peer should send signed identity response");
     });
 
@@ -220,7 +205,7 @@ void testAuthNFailureOnInvalidIdentity() {
         rsp::proto::RSPMessage invalidIdentity;
         invalidIdentity.mutable_identity()->mutable_nonce()->set_value("wrong-wrong-wrong!");
         *invalidIdentity.mutable_identity()->mutable_public_key() = peerKeyPair.publicKey();
-        *invalidIdentity.mutable_signature() = peerKeyPair.signBlock(serializeUnsignedMessage(invalidIdentity));
+        *invalidIdentity.mutable_signature() = rsp::signMessage(peerKeyPair, invalidIdentity);
         require(writeFramedMessage(serverConnection, invalidIdentity), "peer should send invalid identity response");
     });
 
