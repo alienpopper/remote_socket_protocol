@@ -482,6 +482,21 @@ void hashEndorsementDone(MessageHasher& hasher, const rsp::proto::EndorsementDon
     }
 }
 
+void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementNeeded& message) {
+    if (message.has_message_nonce()) {
+        hasher.tag(1);
+        hashUuid(hasher, message.message_nonce());
+    }
+    if (message.has_tree()) {
+        std::string serializedTree;
+        if (!message.tree().SerializeToString(&serializedTree)) {
+            throw std::runtime_error("failed to serialize endorsement requirement tree");
+        }
+        hasher.tag(2);
+        hasher.feedBytes(serializedTree);
+    }
+}
+
 void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message) {
     if (message.has_destination()) {
         hasher.tag(1);
@@ -570,8 +585,17 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hasher.tag(21);
         hashEndorsementDone(hasher, message.endorsement_done());
         break;
+    case rsp::proto::RSPMessage::kEndorsementNeeded:
+        hasher.tag(23);
+        hashEndorsementNeeded(hasher, message.endorsement_needed());
+        break;
     case rsp::proto::RSPMessage::SUBMESSAGE_NOT_SET:
         break;
+    }
+
+    if (message.has_nonce()) {
+        hasher.tag(22);
+        hashUuid(hasher, message.nonce());
     }
 
     hasher.tag(100);

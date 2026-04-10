@@ -64,18 +64,6 @@ rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
     return protoDateTime;
 }
 
-std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
-    if (nodeId.value().size() != 16) {
-        return std::nullopt;
-    }
-
-    uint64_t high = 0;
-    uint64_t low = 0;
-    std::memcpy(&high, nodeId.value().data(), sizeof(high));
-    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
-    return rsp::NodeID(high, low);
-}
-
 std::optional<rsp::NodeID> nodeIdFromIdentity(const rsp::proto::Identity& identity) {
     try {
         const rsp::KeyPair identityKey = rsp::KeyPair::fromPublicKey(identity.public_key());
@@ -208,9 +196,13 @@ void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState
     }
 
     rsp::proto::RSPMessage reply;
-    const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
-    if (senderNodeId.has_value()) {
-        *reply.mutable_destination() = toProtoNodeId(*senderNodeId);
+    if (message.has_source()) {
+        *reply.mutable_destination() = message.source();
+    } else {
+        const auto senderNodeId = rsp::senderNodeIdFromMessage(message);
+        if (senderNodeId.has_value()) {
+            *reply.mutable_destination() = toProtoNodeId(*senderNodeId);
+        }
     }
     if (message.has_nonce()) {
         *reply.mutable_nonce() = message.nonce();

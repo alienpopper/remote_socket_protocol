@@ -134,6 +134,7 @@ KEYPAIR_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -228,6 +229,7 @@ NODE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/node.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \

@@ -2,32 +2,6 @@
 
 #include "common/message_queue/mq_signing.hpp"
 
-#include <cstring>
-
-namespace {
-
-rsp::proto::EndorsementNeeded makeRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree) {
-    rsp::proto::EndorsementNeeded requirement;
-    *requirement.mutable_tree() = tree;
-    return requirement;
-}
-
-bool endorsementAuthorizes(const rsp::Endorsement& endorsement,
-                          const rsp::NodeID& subjectNodeId,
-                          const rsp::proto::ERDAbstractSyntaxTree& authorizationTree) {
-    if (endorsement.subject() != subjectNodeId) {
-        return false;
-    }
-
-    if (endorsement.validUntil() < rsp::DateTime()) {
-        return false;
-    }
-
-    return rsp::endorsementMatchesRequirement(makeRequirement(authorizationTree), endorsement);
-}
-
-}  // namespace
-
 namespace rsp::message_queue {
 
 MessageQueueAuthZ::MessageQueueAuthZ(SuccessCallback success,

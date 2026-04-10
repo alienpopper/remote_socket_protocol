@@ -167,6 +167,7 @@ NODE_TEST_OBJECTS = \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
+	$(OBJ_DIR)\mq_signing.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -367,6 +368,7 @@ KEYPAIR_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\mq_signing.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \

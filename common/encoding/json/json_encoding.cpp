@@ -382,17 +382,6 @@ bool fromJson(const json& value, rsp::proto::Address& message) {
     return true;
 }
 
-json toJson(const rsp::proto::AddressRange& message) {
-    return json{{"start_address", toJson(message.start_address())},
-                {"end_address", toJson(message.end_address())}};
-}
-
-bool fromJson(const json& value, rsp::proto::AddressRange& message) {
-    return value.is_object() && value.contains("start_address") && value.contains("end_address") &&
-           fromJson(value.at("start_address"), *message.mutable_start_address()) &&
-           fromJson(value.at("end_address"), *message.mutable_end_address());
-}
-
 json toJson(const rsp::proto::PortRange& message) {
     return json{{"start_port", message.start_port()}, {"end_port", message.end_port()}};
 }
