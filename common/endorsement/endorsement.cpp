@@ -14,8 +14,18 @@ namespace rsp {
 
 namespace {
 
+constexpr char kSerializedEndorsementMagic[] = {'R', 'S', 'E', '1'};
+constexpr size_t kSerializedEndorsementMagicSize = sizeof(kSerializedEndorsementMagic);
+
 std::runtime_error makeError(const char* message) {
     return std::runtime_error(message);
+}
+
+void appendUint32(std::string& bytes, uint32_t value) {
+    bytes.push_back(static_cast<char>((value >> 24) & 0xFFU));
+    bytes.push_back(static_cast<char>((value >> 16) & 0xFFU));
+    bytes.push_back(static_cast<char>((value >> 8) & 0xFFU));
+    bytes.push_back(static_cast<char>(value & 0xFFU));
 }
 
 void appendUint64(std::string& bytes, uint64_t value) {
@@ -73,6 +83,97 @@ Buffer serializeDeterministic(const google::protobuf::MessageLite& message) {
     }
 
     return stringToBuffer(serialized);
+}
+
+class BufferReader {
+public:
+    explicit BufferReader(const Buffer& buffer)
+        : data_(buffer.data()), size_(static_cast<size_t>(buffer.size())), offset_(0) {
+    }
+
+    void expectMagic(const char* magic, size_t length) {
+        const std::string bytes = readBytes(length, "serialized endorsement missing magic");
+        if (std::memcmp(bytes.data(), magic, length) != 0) {
+            throw makeError("serialized endorsement has invalid magic");
+        }
+    }
+
+    uint32_t readUint32(const char* fieldName) {
+        const std::string bytes = readBytes(sizeof(uint32_t), fieldName);
+        return (static_cast<uint32_t>(static_cast<uint8_t>(bytes[0])) << 24) |
+               (static_cast<uint32_t>(static_cast<uint8_t>(bytes[1])) << 16) |
+               (static_cast<uint32_t>(static_cast<uint8_t>(bytes[2])) << 8) |
+               static_cast<uint32_t>(static_cast<uint8_t>(bytes[3]));
+    }
+
+    uint64_t readUint64(const char* fieldName) {
+        const std::string bytes = readBytes(sizeof(uint64_t), fieldName);
+        uint64_t value = 0;
+        for (unsigned char byte : bytes) {
+            value = (value << 8) | static_cast<uint64_t>(byte);
+        }
+        return value;
+    }
+
+    std::string readBytes(size_t count, const char* fieldName) {
+        if (offset_ + count > size_) {
+            throw makeError(fieldName);
+        }
+
+        std::string bytes(reinterpret_cast<const char*>(data_ + offset_), count);
+        offset_ += count;
+        return bytes;
+    }
+
+    void expectDone() const {
+        if (offset_ != size_) {
+            throw makeError("serialized endorsement has trailing bytes");
+        }
+    }
+
+private:
+    const uint8_t* data_;
+    size_t size_;
+    size_t offset_;
+};
+
+Buffer serializeBinary(const rsp::proto::Endorsement& message) {
+    std::string serialized;
+    serialized.reserve(kSerializedEndorsementMagicSize + 16 + 16 + 16 + 8 + 4 + 4 +
+                       message.endorsement_value().size() + message.signature().size());
+
+    serialized.append(kSerializedEndorsementMagic, kSerializedEndorsementMagicSize);
+    serialized.append(message.subject().value());
+    serialized.append(message.endorsement_service().value());
+    serialized.append(message.endorsement_type().value());
+    appendUint64(serialized, message.valid_until().milliseconds_since_epoch());
+    appendUint32(serialized, static_cast<uint32_t>(message.endorsement_value().size()));
+    appendUint32(serialized, static_cast<uint32_t>(message.signature().size()));
+    serialized.append(message.endorsement_value());
+    serialized.append(message.signature());
+    return stringToBuffer(serialized);
+}
+
+rsp::proto::Endorsement deserializeBinary(const Buffer& serialized) {
+    BufferReader reader(serialized);
+    reader.expectMagic(kSerializedEndorsementMagic, kSerializedEndorsementMagicSize);
+
+    rsp::proto::Endorsement message;
+    message.mutable_subject()->set_value(reader.readBytes(16, "serialized endorsement missing subject"));
+    message.mutable_endorsement_service()->set_value(
+        reader.readBytes(16, "serialized endorsement missing endorsement service"));
+    message.mutable_endorsement_type()->set_value(
+        reader.readBytes(16, "serialized endorsement missing endorsement type"));
+    message.mutable_valid_until()->set_milliseconds_since_epoch(
+        reader.readUint64("serialized endorsement missing valid-until time"));
+
+    const uint32_t endorsementValueSize = reader.readUint32("serialized endorsement missing value size");
+    const uint32_t signatureSize = reader.readUint32("serialized endorsement missing signature size");
+    message.set_endorsement_value(
+        reader.readBytes(endorsementValueSize, "serialized endorsement value truncated"));
+    message.set_signature(reader.readBytes(signatureSize, "serialized endorsement signature truncated"));
+    reader.expectDone();
+    return message;
 }
 
 void validateUuidLike(const std::string& bytes, const char* fieldName) {
@@ -628,19 +729,25 @@ Endorsement Endorsement::createSigned(const KeyPair& endorsementServiceKeyPair, 
     return endorsement;
 }
 
-Endorsement Endorsement::deserialize(const Buffer& serialized) {
-    rsp::proto::Endorsement message;
-    if (!message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()))) {
-        throw makeError("failed to deserialize endorsement protobuf");
-    }
+Endorsement Endorsement::fromProto(const rsp::proto::Endorsement& message) {
+    validateMessage(message, true);
+    return Endorsement(message);
+}
 
+Endorsement Endorsement::deserialize(const Buffer& serialized) {
+    rsp::proto::Endorsement message = deserializeBinary(serialized);
     validateMessage(message, true);
     return Endorsement(std::move(message));
 }
 
 Buffer Endorsement::serialize() const {
     validateMessage(message_, true);
-    return serializeDeterministic(message_);
+    return serializeBinary(message_);
+}
+
+rsp::proto::Endorsement Endorsement::toProto() const {
+    validateMessage(message_, true);
+    return message_;
 }
 
 bool Endorsement::verifySignature(const KeyPair& endorsementServiceKeyPair) const {

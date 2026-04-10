@@ -28,35 +28,10 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     return protoNodeId;
 }
 
-std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
-    if (nodeId.value().size() != 16) {
-        return std::nullopt;
-    }
-
-    uint64_t high = 0;
-    uint64_t low = 0;
-    std::memcpy(&high, nodeId.value().data(), sizeof(high));
-    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
-    return rsp::NodeID(high, low);
-}
-
 rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
     rsp::proto::DateTime protoDateTime;
     protoDateTime.set_milliseconds_since_epoch(dateTime.millisecondsSinceEpoch());
     return protoDateTime;
-}
-
-rsp::Buffer stringToBuffer(const std::string& value) {
-    if (value.empty()) {
-        return rsp::Buffer();
-    }
-
-    return rsp::Buffer(reinterpret_cast<const uint8_t*>(value.data()), static_cast<uint32_t>(value.size()));
-}
-
-bool parseEndorsementMessage(const rsp::Endorsement& endorsement, rsp::proto::Endorsement& message) {
-    const rsp::Buffer serialized = endorsement.serialize();
-    return message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()));
 }
 
 void recordClientDequeueEvent(const rsp::proto::RSPMessage& message, const rsp::NodeID& localNodeId) {
@@ -287,12 +262,7 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
         endorsementValue,
         requestedValidUntil);
 
-    rsp::proto::Endorsement requestedMessage;
-    if (!parseEndorsementMessage(requested, requestedMessage)) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        pendingEndorsements_.erase(pendingKey);
-        return std::nullopt;
-    }
+    const rsp::proto::Endorsement requestedMessage = requested.toProto();
 
     bool repairedUnknownIdentity = false;
     while (true) {

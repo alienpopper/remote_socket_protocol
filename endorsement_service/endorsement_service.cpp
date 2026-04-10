@@ -20,18 +20,6 @@ namespace {
     EVALUE_ROLE_NAME_SERVICE,
 };
 
-std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
-    if (nodeId.value().size() != 16) {
-        return std::nullopt;
-    }
-
-    uint64_t high = 0;
-    uint64_t low = 0;
-    std::memcpy(&high, nodeId.value().data(), sizeof(high));
-    std::memcpy(&low, nodeId.value().data() + sizeof(high), sizeof(low));
-    return rsp::NodeID(high, low);
-}
-
 rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     rsp::proto::NodeId protoNodeId;
     std::string value(16, '\0');
@@ -41,33 +29,6 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
     protoNodeId.set_value(value);
     return protoNodeId;
-}
-
-rsp::Buffer stringToBuffer(const std::string& value) {
-    if (value.empty()) {
-        return rsp::Buffer();
-    }
-
-    return rsp::Buffer(reinterpret_cast<const uint8_t*>(value.data()), static_cast<uint32_t>(value.size()));
-}
-
-rsp::Buffer serializeEndorsementMessage(const rsp::proto::Endorsement& message) {
-    std::string serialized;
-    if (!message.SerializeToString(&serialized)) {
-        throw std::runtime_error("failed to serialize endorsement request");
-    }
-
-    return stringToBuffer(serialized);
-}
-
-rsp::proto::Endorsement toProtoEndorsement(const rsp::Endorsement& endorsement) {
-    rsp::proto::Endorsement message;
-    const rsp::Buffer serialized = endorsement.serialize();
-    if (!message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()))) {
-        throw std::runtime_error("failed to parse signed endorsement");
-    }
-
-    return message;
 }
 
 }  // namespace
@@ -131,8 +92,7 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
             return send(reply);
         }
 
-        const rsp::Endorsement requestedValues = rsp::Endorsement::deserialize(
-            serializeEndorsementMessage(request.requested_values()));
+        const rsp::Endorsement requestedValues = rsp::Endorsement::fromProto(request.requested_values());
         if (requestedValues.subject() != *sourceNodeId ||
             requestedValues.endorsementService() != *sourceNodeId ||
             !requestedValues.verifySignature(requesterPublicKey)) {
@@ -150,7 +110,7 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
             validUntil);
 
         done->set_status(rsp::proto::ENDORSEMENT_SUCCESS);
-        *done->mutable_new_endorsement() = toProtoEndorsement(issuedEndorsement);
+        *done->mutable_new_endorsement() = issuedEndorsement.toProto();
     } catch (const std::exception&) {
         done->set_status(rsp::proto::ENDORSEMENT_FAILED);
     }

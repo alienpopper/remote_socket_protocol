@@ -18,9 +18,11 @@ public:
     static Endorsement createSigned(const KeyPair& endorsementServiceKeyPair, const NodeID& subject,
                                     const GUID& endorsementType, const Buffer& endorsementValue,
                                     const DateTime& validUntil);
+    static Endorsement fromProto(const rsp::proto::Endorsement& message);
     static Endorsement deserialize(const Buffer& serialized);
 
     Buffer serialize() const;
+    rsp::proto::Endorsement toProto() const;
     bool verifySignature(const KeyPair& endorsementServiceKeyPair) const;
 
     NodeID subject() const;

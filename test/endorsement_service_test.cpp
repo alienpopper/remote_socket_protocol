@@ -142,11 +142,6 @@ bool waitForCondition(const std::function<bool()>& condition) {
     return condition();
 }
 
-bool parseEndorsementMessage(const rsp::Endorsement& endorsement, rsp::proto::Endorsement& message) {
-    const rsp::Buffer serialized = endorsement.serialize();
-    return message.ParseFromArray(serialized.data(), static_cast<int>(serialized.size()));
-}
-
 rsp::Buffer stringToBuffer(const std::string& value) {
     if (value.empty()) {
         return rsp::Buffer();
@@ -175,12 +170,7 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
 }
 
 rsp::Endorsement parseEndorsement(const rsp::proto::Endorsement& message) {
-    std::string serialized;
-    if (!message.SerializeToString(&serialized)) {
-        throw std::runtime_error("failed to serialize endorsement message in test");
-    }
-
-    return rsp::Endorsement::deserialize(stringToBuffer(serialized));
+    return rsp::Endorsement::fromProto(message);
 }
 
 void testEndorsementServiceConnectsToResourceManager() {
@@ -364,9 +354,7 @@ void testClientRequestsNetworkAccessEndorsement() {
         stringToBuffer(EVALUE_ACCESS_NETWORK.toString()),
         requestedValidUntil);
 
-        rsp::proto::Endorsement requestedMessage;
-        require(parseEndorsementMessage(requested, requestedMessage),
-            "test endorsement request should parse into the protobuf endorsement message");
+        const rsp::proto::Endorsement requestedMessage = requested.toProto();
 
         rsp::proto::RSPMessage request;
         *request.mutable_source() = toProtoNodeId(clientNodeId);

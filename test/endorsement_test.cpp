@@ -198,6 +198,16 @@ void testSerializationRoundTrip() {
 
     const rsp::Buffer serialized = endorsement.serialize();
     require(!serialized.empty(), "serialized endorsement should not be empty");
+    require(serialized.size() >= 4, "serialized endorsement should include the custom format header");
+    require(serialized.data()[0] == static_cast<uint8_t>('R') &&
+                serialized.data()[1] == static_cast<uint8_t>('S') &&
+                serialized.data()[2] == static_cast<uint8_t>('E') &&
+                serialized.data()[3] == static_cast<uint8_t>('1'),
+        "serialized endorsement should use the RSE1 disk format header");
+
+    rsp::proto::Endorsement protobufMessage;
+    require(!protobufMessage.ParseFromArray(serialized.data(), static_cast<int>(serialized.size())),
+        "serialized endorsement should no longer be a protobuf payload");
 
     const rsp::Endorsement reparsed = rsp::Endorsement::deserialize(serialized);
     require(reparsed.subject() == endorsement.subject(), "deserialization should preserve subject");
@@ -229,6 +239,32 @@ void testSignatureVerification() {
     require(!endorsement.verifySignature(otherKey),
             "endorsement should not verify with a different key");
 }
+
+    void testProtoRoundTrip() {
+        rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+
+        const uint8_t valueBytes[] = {0xDE, 0xAD, 0xBE, 0xEF};
+        const rsp::Buffer endorsementValue(valueBytes, 4);
+        const rsp::GUID endorsementType("12345678-90ab-cdef-1234-567890abcdef");
+        const rsp::DateTime validUntil = rsp::DateTime::fromMillisecondsSinceEpoch(1800000000456ULL);
+
+        const rsp::Endorsement endorsement = rsp::Endorsement::createSigned(
+        endorsementServiceKey, subjectKey.nodeID(), endorsementType, endorsementValue, validUntil);
+
+        const rsp::proto::Endorsement protoMessage = endorsement.toProto();
+        const rsp::Endorsement reparsed = rsp::Endorsement::fromProto(protoMessage);
+
+        require(reparsed.subject() == endorsement.subject(), "proto conversion should preserve subject");
+        require(reparsed.endorsementService() == endorsement.endorsementService(),
+            "proto conversion should preserve endorsement service");
+        require(reparsed.endorsementType() == endorsement.endorsementType(),
+            "proto conversion should preserve endorsement type");
+        require(reparsed.validUntil().millisecondsSinceEpoch() == endorsement.validUntil().millisecondsSinceEpoch(),
+            "proto conversion should preserve expiration");
+        require(reparsed.verifySignature(endorsementServiceKey),
+            "proto conversion should preserve a valid signature");
+    }
 
 void testTamperingInvalidatesSignature() {
     rsp::KeyPair endorsementServiceKey = rsp::KeyPair::generateP256();
@@ -569,6 +605,7 @@ int main() {
     try {
         testSerializationRoundTrip();
         testSignatureVerification();
+        testProtoRoundTrip();
         testTamperingInvalidatesSignature();
         testMalformedBufferRejection();
         testRequirementTypeEquals();
