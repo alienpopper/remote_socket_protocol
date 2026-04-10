@@ -24,6 +24,7 @@ RSP_ENDORSEMENT_TOOL_TARGET := $(BIN_DIR)/rsp_endorsement
 NODE_TEST_TARGET := $(BIN_DIR)/node_test
 RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/resource_service_test
 RESOURCE_SERVICE_JSON_TEST_TARGET := $(BIN_DIR)/resource_service_json_test
+NODEJS_PING_FIXTURE_TARGET := $(BIN_DIR)/nodejs_ping_fixture
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
 ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
 ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
@@ -339,6 +340,31 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/endorsement_service_test.o
 
+NODEJS_PING_FIXTURE_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue/mq.o \
+	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
+	$(OBJ_DIR)/common/message_queue/mq_authn.o \
+	$(OBJ_DIR)/common/message_queue/mq_authz.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
+	$(OBJ_DIR)/common/encoding/encoding.o \
+	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
+	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)/common/transport/transport.o \
+	$(OBJ_DIR)/common/transport/transport_tcp.o \
+	$(OBJ_DIR)/common/transport/transport_memory.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/resource_manager/resource_manager.o \
+	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
+	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
+	$(OBJ_DIR)/test/nodejs_ping_fixture.o
+
 TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
@@ -379,7 +405,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
 
@@ -450,6 +476,9 @@ $(RESOURCE_SERVICE_JSON_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROT
 $(ENDORSEMENT_SERVICE_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(NODEJS_PING_FIXTURE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(NODEJS_PING_FIXTURE_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(NODEJS_PING_FIXTURE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(TRANSPORT_MEMORY_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -500,6 +529,9 @@ test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
+
+test-nodejs-client: $(NODEJS_PING_FIXTURE_TARGET)
+	node test/nodejs_ping_integration.js $(NODEJS_PING_FIXTURE_TARGET)
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
@@ -568,6 +600,8 @@ $(OBJ_DIR)/tools/rsp_endorsement/rsp_endorsement_main.o: $(BORINGSSL_INCLUDE_HEA
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/endorsement_service_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/test/nodejs_ping_fixture.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/transport_memory_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
