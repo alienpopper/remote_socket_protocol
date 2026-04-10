@@ -78,6 +78,7 @@ private:
     mutable std::map<rsp::NodeID, rsp::proto::ResourceAdvertisement> resourceAdvertisements_;
     mutable std::mutex newEncodingCallbackMutex_;
     NewEncodingCallback newEncodingCallback_;
+    mutable std::mutex authzQueueMutex_;
     rsp::MessageQueueHandle incomingMessages_;
     rsp::MessageQueueHandle authzQueue_;
     rsp::MessageQueueHandle signatureCheckQueue_;

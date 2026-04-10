@@ -175,12 +175,19 @@ ResourceManager::~ResourceManager() {
         incomingMessages_->stop();
     }
 
-    if (authzQueue_ != nullptr) {
-        authzQueue_->stop();
-    }
-
+    // Stop signatureCheckQueue_ before authzQueue_ — it is the feeder for authzQueue_
+    // via handleVerifiedMessage. Once stopped, no new messages can race into authzQueue_.
     if (signatureCheckQueue_ != nullptr) {
         signatureCheckQueue_->stop();
+    }
+
+    rsp::MessageQueueHandle authzQueue;
+    {
+        std::lock_guard<std::mutex> lock(authzQueueMutex_);
+        authzQueue = std::move(authzQueue_);
+    }
+    if (authzQueue != nullptr) {
+        authzQueue->stop();
     }
 
     if (handshakeQueue_ != nullptr) {
@@ -218,17 +225,24 @@ int ResourceManager::run() const {
 }
 
 void ResourceManager::rebuildAuthorizationQueue() {
-    if (authzQueue_ != nullptr) {
-        authzQueue_->stop();
-    }
-
-    authzQueue_ = std::make_shared<rsp::message_queue::MessageQueueAuthZ>(
+    rsp::MessageQueueHandle oldQueue;
+    rsp::MessageQueueHandle newQueue = std::make_shared<rsp::message_queue::MessageQueueAuthZ>(
         [this](rsp::proto::RSPMessage message) { handleAuthorizedMessage(std::move(message)); },
         [this](rsp::proto::RSPMessage message) { handleAuthorizationFailure(std::move(message)); },
         [this](const rsp::NodeID& nodeId) { return getAuthorizationEndorsements(nodeId); },
         authorizationTree());
-    authzQueue_->setWorkerCount(1);
-    authzQueue_->start();
+    newQueue->setWorkerCount(1);
+    newQueue->start();
+
+    {
+        std::lock_guard<std::mutex> lock(authzQueueMutex_);
+        oldQueue = std::move(authzQueue_);
+        authzQueue_ = std::move(newQueue);
+    }
+
+    if (oldQueue != nullptr) {
+        oldQueue->stop();
+    }
 }
 
 bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
@@ -525,7 +539,12 @@ void ResourceManager::handleAuthNFailure(const rsp::encoding::EncodingHandle& en
 }
 
 void ResourceManager::handleVerifiedMessage(rsp::proto::RSPMessage message) {
-    if (authzQueue_ == nullptr || !authzQueue_->push(std::move(message))) {
+    rsp::MessageQueueHandle queue;
+    {
+        std::lock_guard<std::mutex> lock(authzQueueMutex_);
+        queue = authzQueue_;
+    }
+    if (queue == nullptr || !queue->push(std::move(message))) {
         std::cerr << "ResourceManager failed to enqueue verified message for authorization" << std::endl;
     }
 }

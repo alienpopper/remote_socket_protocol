@@ -57,15 +57,11 @@ Encoding::~Encoding() {
 }
 
 bool Encoding::start() {
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        if (running_ || connection_ == nullptr || receivedMessages_ == nullptr || outgoingMessages_ == nullptr ||
-            !localKeyPair_.isValid() || !peerNodeId_.has_value()) {
-            return false;
-        }
-    }
-
     std::lock_guard<std::mutex> lock(stateMutex_);
+    if (running_ || connection_ == nullptr || receivedMessages_ == nullptr || outgoingMessages_ == nullptr ||
+        !localKeyPair_.isValid() || !peerNodeId_.has_value()) {
+        return false;
+    }
     running_ = true;
     outgoingMessages_->start();
     readThread_ = std::thread(&Encoding::readLoop, this);
