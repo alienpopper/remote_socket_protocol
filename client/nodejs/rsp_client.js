@@ -263,6 +263,8 @@ class RSPClient extends EventEmitter {
 
         this._pendingResourceAdvertisements = [];
         this._identityCache = new Map();       // nodeId -> publicKeyPem
+
+        this._socketHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
     }
 
     // --- Connection lifecycle ---
@@ -313,6 +315,7 @@ class RSPClient extends EventEmitter {
         this._awaitedSocketReplies.clear();
         for (const [, p] of this._pendingEndorsements) { clearTimeout(p.timer); p.reject(closedError); }
         this._pendingEndorsements.clear();
+        this._socketHandlers.clear();
 
         socket.end();
         await once(socket, 'close').catch(() => {});
@@ -433,7 +436,7 @@ class RSPClient extends EventEmitter {
         if (!pending || reply.sequence !== pending.sequence) return;
         clearTimeout(pending.timer);
         this._pendingPings.delete(nonce);
-        pending.resolve(msg);
+        pending.resolve(true);
     }
 
     _handleSocketReply(msg, socketReply) {
@@ -469,6 +472,12 @@ class RSPClient extends EventEmitter {
                 if (sourceNodeId) {
                     this._socketRoutes.set(socketReply.new_socket_id.value, sourceNodeId);
                 }
+            }
+
+            const handler = this._socketHandlers.get(socketIdHex);
+            if (handler) {
+                handler(socketReply);
+                return;
             }
 
             const queue = this._socketReplyQueues.get(socketIdHex) || [];
@@ -591,7 +600,7 @@ class RSPClient extends EventEmitter {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this._pendingPings.delete(pingNonce);
-                reject(new Error('ping timed out'));
+                resolve(false);
             }, timeoutMs);
             this._pendingPings.set(pingNonce, {sequence, resolve, reject, timer});
             this._sendSignedMessage(request).catch((err) => {
@@ -847,6 +856,44 @@ class RSPClient extends EventEmitter {
         this._socketRoutes.set(normalizeGuid(socketId), nodeId);
     }
 
+    // Attach a direct reply handler for a socket, bypassing the queue system.
+    // Used by RSPSocket / RSPServer in rsp_net.js for streaming operation.
+    // Drains any already-queued replies so no data is lost between connect and attach.
+    attachSocketHandler(socketId, handler) {
+        this._socketHandlers.set(socketId, handler);
+        const queue = this._socketReplyQueues.get(socketId);
+        if (queue && queue.length > 0) {
+            this._socketReplyQueues.delete(socketId);
+            for (const reply of queue) {
+                const idx = this._pendingSocketReplies.indexOf(reply);
+                if (idx >= 0) this._pendingSocketReplies.splice(idx, 1);
+            }
+            process.nextTick(() => { for (const reply of queue) handler(reply); });
+        }
+    }
+
+    detachSocketHandler(socketId) {
+        this._socketHandlers.delete(socketId);
+    }
+
+    // Fire-and-forget socket send: queues data without waiting for a SUCCESS reply.
+    // Use this from streaming code (RSPSocket._write) to avoid blocking on acknowledgement.
+    async sendSocketData(socketId, data) {
+        const nodeId = this._socketRoutes.get(socketId);
+        if (!nodeId) return false;
+        const dataHex = Buffer.isBuffer(data) ? data.toString('hex') : Buffer.from(data).toString('hex');
+        const request = {
+            destination: {value: encodeNodeIdForField(nodeId)},
+            socket_send: {socket_number: {value: socketId}, data: dataHex},
+        };
+        try {
+            await this._sendSignedMessage(request);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     // --- Endorsements ---
 
     async beginEndorsementRequest(nodeId, endorsementType, endorsementValue = '') {
@@ -927,12 +974,10 @@ class RSPClient extends EventEmitter {
     }
 }
 
-// Backward-compatible alias used by ping.js and other existing callers.
-const RSPJsonClient = RSPClient;
-
 module.exports = {
     RSPClient,
-    RSPJsonClient,
     decodeNodeIdField,
+    encodeNodeIdForField,
+    encodeNodeIdForSigner,
     nodeIdFromPublicKeyPem,
 };

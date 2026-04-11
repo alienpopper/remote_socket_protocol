@@ -3,7 +3,7 @@
 const readline = require('readline');
 const {spawn} = require('child_process');
 
-const {RSPJsonClient} = require('../client/nodejs/rsp_client');
+const {RSPClient} = require('../client/nodejs/rsp_client');
 
 function waitForFixtureReady(fixture) {
     return new Promise((resolve, reject) => {
@@ -76,7 +76,7 @@ async function main() {
 
     const fixture = spawn(fixturePath, [], {stdio: ['ignore', 'pipe', 'pipe']});
     const {info} = await waitForFixtureReady(fixture);
-    const client = new RSPJsonClient();
+    const client = new RSPClient();
 
     try {
         await client.connect(info.transport_spec);

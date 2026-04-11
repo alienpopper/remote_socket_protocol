@@ -1,6 +1,6 @@
 'use strict';
 
-const {RSPJsonClient, decodeNodeIdField} = require('./rsp_client');
+const {RSPClient} = require('./rsp_client');
 
 async function main() {
     const [, , transportSpec, destinationNodeId] = process.argv;
@@ -9,17 +9,17 @@ async function main() {
         process.exit(1);
     }
 
-    const client = new RSPJsonClient();
+    const client = new RSPClient();
     try {
         await client.connect(transportSpec);
-        const reply = await client.ping(destinationNodeId);
+        const ok = await client.ping(destinationNodeId);
         console.log(JSON.stringify({
             local_node_id: client.nodeId,
             resource_manager_node_id: client.peerNodeId,
-            reply_destination_node_id: reply.destination ? decodeNodeIdField(reply.destination.value) : null,
-            sequence: reply.ping_reply.sequence,
-            nonce: reply.ping_reply.nonce.value,
+            destination_node_id: destinationNodeId,
+            success: ok,
         }, null, 2));
+        if (!ok) process.exit(1);
     } finally {
         await client.close().catch(() => {});
     }
