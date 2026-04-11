@@ -4,4 +4,5 @@ third_party/protobuf/
 third_party/json/
 third_party/__pycache__/
 client/nodejs/messages.js
+client/python/messages.py
 

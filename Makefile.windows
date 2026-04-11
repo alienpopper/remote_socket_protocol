@@ -31,6 +31,9 @@ RSPCLIENT_SHARED_TARGET = $(BIN_DIR)\rspclient.dll
 PROTOBUF_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\messages.pb.cc
 PROTOBUF_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\messages.pb.h
 PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj
+GENERATE_MESSAGES_SCRIPT = scripts\generate_messages.py
+NODEJS_MESSAGES_JS = client\nodejs\messages.js
+PYTHON_MESSAGES_PY = client\python\messages.py
 
 !include common\Makefile
 !include os\Makefile.windows
@@ -567,6 +570,9 @@ test-mq-signing: $(MQ_SIGNING_TEST_TARGET)
 
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
+
+generate-messages: messages.proto $(GENERATE_MESSAGES_SCRIPT)
+	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 $(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj

@@ -37,6 +37,10 @@ PROTOBUF_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/messages.pb.cc
 PROTOBUF_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/messages.pb.h
 PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o
 
+GENERATE_MESSAGES_SCRIPT := scripts/generate_messages.py
+NODEJS_MESSAGES_JS := client/nodejs/messages.js
+PYTHON_MESSAGES_PY := client/python/messages.py
+
 COMMON_SOURCES := \
 	$(COMMON_BASE_TYPES_SOURCE) \
 	$(COMMON_NODE_SOURCE) \
@@ -405,7 +409,12 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client generate-messages
+
+$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto $(GENERATE_MESSAGES_SCRIPT)
+	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+
+generate-messages: $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 
 all: $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
 
@@ -530,7 +539,7 @@ test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
 
-test-nodejs-client: $(NODEJS_PING_FIXTURE_TARGET)
+test-nodejs-client: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/nodejs_ping_integration.js $(NODEJS_PING_FIXTURE_TARGET)
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
