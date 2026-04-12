@@ -1,0 +1,17 @@
+{
+  "_comment": "RSP SSH Server Forwarder configuration. Copy to /etc/rsp-sshd/rsp_sshd.conf.json and fill in your node IDs.",
+
+  "rsp_transport": "tcp:127.0.0.1:7000",
+
+  "resource_service_node_id": "<resource-service-node-id>",
+
+  "endorsement_node_id": "<endorsement-service-node-id>",
+
+  "host_port": "127.0.0.1:22",
+
+  "sshd_path": "/usr/sbin/sshd",
+
+  "sshd_config": "/etc/ssh/sshd_config",
+
+  "sshd_debug": false
+}

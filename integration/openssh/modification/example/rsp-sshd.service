@@ -1,0 +1,29 @@
+[Unit]
+Description=RSP SSH Server Forwarder
+Documentation=https://github.com/alienpopper/remote_socket_protocol
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust ExecStart paths to match where the repository is checked out.
+# The first argument is the path to rsp_sshd.js; the second is the config file.
+ExecStart=/usr/bin/node /opt/rsp/integration/openssh/modification/example/rsp_sshd.js /etc/rsp-sshd/rsp_sshd.conf.json
+Restart=on-failure
+RestartSec=5
+
+# Run as a dedicated user with minimum privileges.
+# The user still needs permission to execute sshd (typically owned by root).
+# If sshd requires privilege separation (default), run as root or pre-configure
+# sshd with UsePrivilegeSeparation=no in sshd_config for test environments.
+User=root
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rsp-sshd
+
+# Give the RSP client time to reconnect before systemd kills the process.
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
