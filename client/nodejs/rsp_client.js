@@ -471,8 +471,15 @@ class RSPClient extends EventEmitter {
             let message;
             try {
                 message = await this._receiveRawMessage();
-            } catch {
-                if (!this._stopping) throw new Error('receive loop ended unexpectedly');
+            } catch (error) {
+                const expectedShutdown =
+                    this._stopping ||
+                    !this._socket ||
+                    (error && typeof error.message === 'string' && (
+                        error.message.includes('socket closed while waiting for data') ||
+                        error.message.includes('client is not connected')
+                    ));
+                if (!expectedShutdown) throw new Error('receive loop ended unexpectedly');
                 return;
             }
             try {
