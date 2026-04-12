@@ -35,33 +35,15 @@ function buildApp() {
 }
 
 function adaptSocketForHttp(socket) {
-  if (typeof socket.setTimeout !== "function") {
-    socket.setTimeout = () => socket;
-  }
-  if (typeof socket.setNoDelay !== "function") {
-    socket.setNoDelay = () => socket;
-  }
-  if (typeof socket.setKeepAlive !== "function") {
-    socket.setKeepAlive = () => socket;
-  }
-  if (typeof socket.destroySoon !== "function") {
-    socket.destroySoon = () => socket.end();
-  }
-  if (typeof socket.address !== "function") {
-    socket.address = () => ({ address: "rsp", family: "RSP", port: 0 });
-  }
-  if (socket.remoteAddress === undefined) {
-    socket.remoteAddress = "rsp";
-  }
-  if (socket.remotePort === undefined) {
-    socket.remotePort = 0;
-  }
-  if (socket.localAddress === undefined) {
-    socket.localAddress = "rsp";
-  }
-  if (socket.localPort === undefined) {
-    socket.localPort = 0;
-  }
+  if (typeof socket.setTimeout !== "function") socket.setTimeout = () => socket;
+  if (typeof socket.setNoDelay !== "function") socket.setNoDelay = () => socket;
+  if (typeof socket.setKeepAlive !== "function") socket.setKeepAlive = () => socket;
+  if (typeof socket.destroySoon !== "function") socket.destroySoon = () => socket.end();
+  if (typeof socket.address !== "function") socket.address = () => ({ address: "rsp", family: "RSP", port: 0 });
+  if (socket.remoteAddress === undefined) socket.remoteAddress = "rsp";
+  if (socket.remotePort === undefined) socket.remotePort = 0;
+  if (socket.localAddress === undefined) socket.localAddress = "rsp";
+  if (socket.localPort === undefined) socket.localPort = 0;
 }
 
 async function startOverRSP(app) {
@@ -85,11 +67,7 @@ async function startOverRSP(app) {
 
     let accessReply = null;
     for (let attempt = 0; attempt < 3 && (!accessReply || accessReply.status !== ENDORSEMENT_SUCCESS); attempt += 1) {
-      accessReply = await client.beginEndorsementRequest(
-        endorsementNodeId,
-        ETYPE_ACCESS,
-        EVALUE_ACCESS_NETWORK
-      );
+      accessReply = await client.beginEndorsementRequest(endorsementNodeId, ETYPE_ACCESS, EVALUE_ACCESS_NETWORK);
     }
     if (!accessReply || accessReply.status !== ENDORSEMENT_SUCCESS) {
       throw new Error(`failed to acquire access endorsement (status=${accessReply ? accessReply.status : "null"})`);
@@ -97,11 +75,7 @@ async function startOverRSP(app) {
 
     let roleReply = null;
     for (let attempt = 0; attempt < 3 && (!roleReply || roleReply.status !== ENDORSEMENT_SUCCESS); attempt += 1) {
-      roleReply = await client.beginEndorsementRequest(
-        endorsementNodeId,
-        ETYPE_ROLE,
-        EVALUE_ROLE_RESOURCE_SERVICE
-      );
+      roleReply = await client.beginEndorsementRequest(endorsementNodeId, ETYPE_ROLE, EVALUE_ROLE_RESOURCE_SERVICE);
     }
     if (!roleReply || roleReply.status !== ENDORSEMENT_SUCCESS) {
       throw new Error(`failed to acquire role endorsement (status=${roleReply ? roleReply.status : "null"})`);
@@ -112,28 +86,9 @@ async function startOverRSP(app) {
   const rspServer = await createRSPServer(client, rsNodeId, hostPort, { asyncAccept: true, childrenAsyncData: true });
 
   rspServer.on("connection", (socket) => {
-    console.error("[express-rsp] incoming RSP connection");
     adaptSocketForHttp(socket);
-    socket.on("data", (chunk) => {
-      console.error(`[express-rsp] socket data bytes=${chunk.length}`);
-    });
-    socket.on("end", () => {
-      console.error("[express-rsp] socket end");
-    });
-    socket.on("close", () => {
-      console.error("[express-rsp] socket close");
-    });
-    socket.on("error", (error) => {
-      console.error(`[express-rsp] socket error: ${error.message}`);
-    });
     httpServer.emit("connection", socket);
-    if (typeof socket.resume === "function") {
-      socket.resume();
-    }
-  });
-
-  httpServer.on("request", (req) => {
-    console.error(`[express-rsp] http request ${req.method} ${req.url}`);
+    if (typeof socket.resume === "function") socket.resume();
   });
 
   const shutdown = async () => {

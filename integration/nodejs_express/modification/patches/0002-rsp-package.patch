@@ -1,0 +1,23 @@
+diff --git a/package.json b/package.json
+index ba56466..2222222 100644
+--- a/package.json
++++ b/package.json
+@@ -1,11 +1,16 @@
+ {
+   "name": "working",
+   "version": "1.0.0",
++  "description": "Express app adapted for Remote Socket Protocol integration",
+   "private": true,
+   "main": "app.js",
+   "scripts": {
+-    "start": "node app.js"
++    "start": "node app.js",
++    "dev": "node --watch app.js",
++    "test": "echo \"No standalone tests\" && exit 0"
+   },
++  "license": "ISC",
++  "type": "commonjs",
+   "dependencies": {
+     "express": "^5.1.0"
+   }
+ }
