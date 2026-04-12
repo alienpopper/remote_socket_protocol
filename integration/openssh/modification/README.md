@@ -4,7 +4,7 @@ This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
 
 ## What this integration does
 
-**Server side (`rsp_sshd.js`):**
+**Server side (`rsp_sshd.cpp`):**
 1. Connects a Node.js RSP client to RM (`rsp_transport`).
 2. Optionally requests endorsements from ES.
 3. Opens an RSP listen socket on RS (`resource_service_node_id`, `host_port`).
@@ -18,18 +18,23 @@ This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
 
 ## Directory contents
 
-- `example/rsp_sshd.js`
-  - Node.js server forwarder: listens on RSP, spawns `sshd -i` per connection.
+- `integration/openssh/rsp_sshd.cpp`
+  - C++ server forwarder source: listens on RSP, spawns `sshd -i` per connection.
 - `example/rsp_sshd.conf.json`
   - Example config file (copy to `/etc/rsp-sshd/rsp_sshd.conf.json`).
 - `example/rsp-sshd.service`
-  - systemd unit file for running rsp_sshd.js as a system service.
-- `patches/`
-  - Patch files applied to the OpenSSH working source (currently empty).
-- `fetch_and_apply.sh`
-  - Downloads OpenSSH 10.3p1 source into `integration/openssh/working/` and applies patches.
+  - systemd unit file for running `rsp_sshd` as a system service.
 
-## How to rebuild the working source from scratch
+## Building
+
+From repository root:
+
+```bash
+make rsp-sshd
+# Binary is at build/bin/rsp_sshd
+```
+
+
 
 From repository root:
 

@@ -6,23 +6,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust ExecStart paths to match where the repository is checked out.
-# The first argument is the path to rsp_sshd.js; the second is the config file.
-ExecStart=/usr/bin/node /opt/rsp/integration/openssh/modification/example/rsp_sshd.js /etc/rsp-sshd/rsp_sshd.conf.json
+# Adjust ExecStart path to match where rsp_sshd was installed.
+ExecStart=/usr/local/bin/rsp_sshd /etc/rsp-sshd/rsp_sshd.conf.json
 Restart=on-failure
 RestartSec=5
 
-# Run as a dedicated user with minimum privileges.
-# The user still needs permission to execute sshd (typically owned by root).
-# If sshd requires privilege separation (default), run as root or pre-configure
-# sshd with UsePrivilegeSeparation=no in sshd_config for test environments.
+# sshd -i requires root for privilege separation (default).
+# For test environments with UsePrivilegeSeparation=no, a dedicated user suffices.
 User=root
 
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=rsp-sshd
 
-# Give the RSP client time to reconnect before systemd kills the process.
 TimeoutStopSec=10
 
 [Install]

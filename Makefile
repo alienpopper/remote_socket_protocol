@@ -29,6 +29,7 @@ RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
 ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
 ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
 TRANSPORT_MEMORY_TEST_TARGET := $(BIN_DIR)/transport_memory_test
+RSP_SSHD_TARGET := $(BIN_DIR)/rsp_sshd
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -410,14 +411,14 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client test-nodejs-express generate-messages
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client test-nodejs-express generate-messages rsp-sshd
 
 $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto $(GENERATE_MESSAGES_SCRIPT)
 	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 generate-messages: $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 
-all: generate-messages $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET)
+all: generate-messages $(TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET) $(RSP_SSHD_TARGET)
 
 include third_party/Makefile
 
@@ -494,6 +495,15 @@ $(TRANSPORT_MEMORY_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_
 
 $(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_ENDORSEMENT_TOOL_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RSP_ENDORSEMENT_TOOL_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
+RSP_SSHD_OBJECTS := \
+	$(CLIENT_LIBRARY_OBJECTS) \
+	$(OBJ_DIR)/integration/openssh/rsp_sshd.o
+
+$(RSP_SSHD_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_SSHD_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(RSP_SSHD_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
+rsp-sshd: $(RSP_SSHD_TARGET)
 
 test-base-types: $(BASE_TYPES_TEST_TARGET)
 	$(BASE_TYPES_TEST_TARGET)
