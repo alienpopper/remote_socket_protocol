@@ -1,0 +1,15 @@
+{
+  "_comment": "RSP SSH ProxyCommand client configuration. Copy to /etc/rsp-ssh/rsp_ssh.conf.json.",
+
+  "rsp_transport": "tcp:127.0.0.1:7000",
+
+  "resource_service_node_id": "<resource-service-node-id>",
+
+  "endorsement_node_id": "<endorsement-service-node-id>",
+
+  "host_port": "127.0.0.1:22",
+
+  "connect_timeout_ms": 5000,
+
+  "connect_retries": 0
+}

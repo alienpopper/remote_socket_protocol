@@ -12,16 +12,24 @@ This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
    the RSP socket to sshd's stdin/stdout.
 5. Runs as a systemd service (`rsp-sshd.service`).
 
-**Client side (`rsp_ssh.js`, coming soon):**
-- Used as an `ssh -o ProxyCommand=...` helper.
-- Connects through RSP and hands off the socket to the ssh client.
+**Client side (`rsp_ssh.cpp`):**
+1. Reads config file specifying the RSP transport, RS node, and target `host_port`.
+2. Connects to RM and optionally acquires endorsements from ES.
+3. Opens an RSP socket to the RS node at `host_port` via `connectTCPSocket()`.
+4. Bridges `stdin ↔ socket` and `socket ↔ stdout` with two threads so that
+   `ssh` communicates with the remote sshd transparently.
+5. Used as: `ssh -o ProxyCommand='rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json' user@host`
 
 ## Directory contents
 
 - `integration/openssh/rsp_sshd.cpp`
   - C++ server forwarder source: listens on RSP, spawns `sshd -i` per connection.
+- `integration/openssh/rsp_ssh.cpp`
+  - C++ ProxyCommand client source: connects via RSP and bridges stdin/stdout.
 - `example/rsp_sshd.conf.json`
-  - Example config file (copy to `/etc/rsp-sshd/rsp_sshd.conf.json`).
+  - Server config file template (copy to `/etc/rsp-sshd/rsp_sshd.conf.json`).
+- `example/rsp_ssh.conf.json`
+  - Client config file template (copy to `/etc/rsp-ssh/rsp_ssh.conf.json`).
 - `example/rsp-sshd.service`
   - systemd unit file for running `rsp_sshd` as a system service.
 
@@ -30,9 +38,25 @@ This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
 From repository root:
 
 ```bash
-make rsp-sshd
-# Binary is at build/bin/rsp_sshd
+make rsp-sshd   # build/bin/rsp_sshd
+make rsp-ssh    # build/bin/rsp_ssh
 ```
+
+## Client usage
+
+```bash
+ssh -o ProxyCommand='rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json' user@host
+```
+
+Or add to `~/.ssh/config`:
+
+```
+Host mylab
+    ProxyCommand rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json
+    User alice
+```
+
+Then simply: `ssh mylab`
 
 
 
