@@ -1,63 +1,53 @@
 // rsp_sshd.cpp - OpenSSH server forwarder over RSP
 //
-// Connects to an RSP resource manager as a resource service, listens for
-// incoming RSP connections, and for each connection spawns `sshd -i` in
-// inetd mode, with the RSP-bridged socket fd inherited as stdin/stdout.
+// Registers with an RSP resource manager as a ResourceService.
+// When a client sends a TCP_CONNECT request, spawns `sshd -i` in inetd mode
+// and bridges RSP socket data to sshd's stdin/stdout via a socketpair.
+// Responds to TCP_LISTEN requests with UNIMPLEMENTED.
 //
-// Compatible with systemd: logs to stderr (captured by journald), handles
-// SIGTERM/SIGCHLD cleanly.
+// Compatible with systemd: logs to stderr (journald), handles SIGTERM/SIGCHLD.
 //
 // Usage:
 //   rsp_sshd [/path/to/rsp_sshd.conf.json]
 //
 // Default config path: /etc/rsp-sshd/rsp_sshd.conf.json
 
-#define RSPCLIENT_STATIC
+#include "resource_service/resource_service.hpp"
 
-#include "client/cpp/rsp_client.hpp"
-#include "common/endorsement/well_known_endorsements.h"
+#include "common/keypair.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
-#include "os/os_socket.hpp"
+#include "common/transport/transport.hpp"
 #include "third_party/json/single_include/nlohmann/json.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
-#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 using nlohmann::json;
 
-namespace {
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
-std::atomic<bool> gStopRequested{false};
-
-void signalHandler(int sig) {
-    if (sig == SIGTERM || sig == SIGINT) {
-        gStopRequested.store(true);
-    } else if (sig == SIGCHLD) {
-        // Reap any finished sshd children without blocking.
-        while (waitpid(-1, nullptr, WNOHANG) > 0) {}
-    }
-}
-
-struct Config {
+struct SshdConfig {
     std::string rspTransport;
-    std::string resourceServiceNodeId;
-    std::string endorsementNodeId;   // optional
-    std::string hostPort = "127.0.0.1:22";
-    std::string sshdPath = "/usr/sbin/sshd";
-    std::string sshdConfig;          // optional; empty = sshd default
-    bool        sshdDebug = false;
+    std::string sshdPath    = "/usr/sbin/sshd";
+    std::string sshdConfig;
+    bool        sshdDebug   = false;
 };
 
-Config loadConfig(const std::string& path) {
+static SshdConfig loadConfig(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open config file: " + path);
@@ -66,100 +56,165 @@ Config loadConfig(const std::string& path) {
     json j;
     file >> j;
 
-    Config cfg;
-    cfg.rspTransport          = j.at("rsp_transport").get<std::string>();
-    cfg.resourceServiceNodeId = j.at("resource_service_node_id").get<std::string>();
-
-    if (j.contains("endorsement_node_id")) {
-        cfg.endorsementNodeId = j["endorsement_node_id"].get<std::string>();
-    }
-    if (j.contains("host_port")) {
-        cfg.hostPort = j["host_port"].get<std::string>();
-    }
-    if (j.contains("sshd_path")) {
-        cfg.sshdPath = j["sshd_path"].get<std::string>();
-    }
-    if (j.contains("sshd_config")) {
-        cfg.sshdConfig = j["sshd_config"].get<std::string>();
-    }
-    if (j.contains("sshd_debug")) {
-        cfg.sshdDebug = j["sshd_debug"].get<bool>();
-    }
-
+    SshdConfig cfg;
+    cfg.rspTransport = j.at("rsp_transport").get<std::string>();
+    if (j.contains("sshd_path"))   cfg.sshdPath   = j["sshd_path"].get<std::string>();
+    if (j.contains("sshd_config")) cfg.sshdConfig = j["sshd_config"].get<std::string>();
+    if (j.contains("sshd_debug"))  cfg.sshdDebug  = j["sshd_debug"].get<bool>();
     return cfg;
 }
 
-void log(const std::string& message) {
-    std::cerr << "[rsp-sshd] " << message << '\n';
+static void log(const std::string& msg) {
+    std::cerr << "[rsp-sshd] " << msg << '\n';
 }
 
-bool acquireEndorsement(rsp::client::RSPClient& client,
-                        const rsp::NodeID& esNodeId,
-                        const rsp::GUID& etype,
-                        const rsp::GUID& evalue,
-                        const std::string& label) {
-    for (int attempt = 0; attempt < 3; ++attempt) {
-        auto reply = client.beginEndorsementRequest(esNodeId, etype, evalue);
-        if (reply.has_value() && reply->status() == rsp::proto::ENDORSEMENT_SUCCESS) {
-            return true;
-        }
-    }
-    log("Failed to acquire endorsement: " + label);
-    return false;
-}
+// ---------------------------------------------------------------------------
+// SshdConnection
+//
+// Implements rsp::transport::Connection over one end of a socketpair.
+// The other end is inherited as stdin/stdout by a child sshd -i process.
+// ---------------------------------------------------------------------------
 
-// Fork and exec sshd -i with connFd as its stdin and stdout.
-void spawnSshd(rsp::os::SocketHandle connFd, const Config& cfg) {
-    const pid_t pid = fork();
-    if (pid < 0) {
-        log("fork() failed: " + std::string(strerror(errno)));
-        rsp::os::closeSocket(connFd);
-        return;
+class SshdConnection : public rsp::transport::Connection {
+public:
+    SshdConnection(int appFd, pid_t childPid)
+        : appFd_(appFd), childPid_(childPid) {}
+
+    ~SshdConnection() override { close(); }
+
+    int send(const rsp::Buffer& data) override {
+        if (appFd_ < 0) return -1;
+        return static_cast<int>(::write(appFd_, data.data(), data.size()));
     }
 
-    if (pid == 0) {
-        // Child: wire the socket fd to stdin and stdout, then exec sshd.
-        if (dup2(static_cast<int>(connFd), STDIN_FILENO) < 0 ||
-            dup2(static_cast<int>(connFd), STDOUT_FILENO) < 0) {
-            std::cerr << "[rsp-sshd] dup2 failed: " << strerror(errno) << '\n';
-            _exit(1);
+    int recv(rsp::Buffer& buffer) override {
+        if (appFd_ < 0) return -1;
+        return static_cast<int>(::read(appFd_, buffer.data(), buffer.size()));
+    }
+
+    void close() override {
+        if (appFd_ >= 0) {
+            ::close(appFd_);
+            appFd_ = -1;
         }
-        // Close the original fd if it's not stdin/stdout.
-        if (connFd != STDIN_FILENO && connFd != STDOUT_FILENO) {
-            close(static_cast<int>(connFd));
+        if (childPid_ > 0) {
+            ::kill(childPid_, SIGTERM);
+            childPid_ = -1;
+        }
+    }
+
+private:
+    int   appFd_;
+    pid_t childPid_;
+};
+
+// ---------------------------------------------------------------------------
+// SshdResourceService
+// ---------------------------------------------------------------------------
+
+namespace rsp::resource_service {
+
+class SshdResourceService : public ResourceService {
+public:
+    static std::shared_ptr<SshdResourceService> create(const SshdConfig& cfg) {
+        return std::shared_ptr<SshdResourceService>(
+            new SshdResourceService(rsp::KeyPair::generateP256(), cfg));
+    }
+
+protected:
+    // Override: instead of opening a real TCP connection, fork sshd -i.
+    rsp::transport::ConnectionHandle createTCPConnection(const std::string& /*hostPort*/,
+                                                          uint32_t /*totalAttempts*/,
+                                                          uint32_t /*retryDelayMs*/) override {
+        int fds[2];
+        if (::socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+            log("socketpair failed: " + std::string(strerror(errno)));
+            return nullptr;
         }
 
-        if (cfg.sshdDebug) {
-            if (cfg.sshdConfig.empty()) {
-                execl(cfg.sshdPath.c_str(), cfg.sshdPath.c_str(), "-i", "-d", nullptr);
-            } else {
-                execl(cfg.sshdPath.c_str(), cfg.sshdPath.c_str(), "-i", "-d",
-                      "-f", cfg.sshdConfig.c_str(), nullptr);
+        const pid_t pid = ::fork();
+        if (pid < 0) {
+            log("fork failed: " + std::string(strerror(errno)));
+            ::close(fds[0]);
+            ::close(fds[1]);
+            return nullptr;
+        }
+
+        if (pid == 0) {
+            // Child: dup fds[1] onto stdin/stdout and exec sshd -i.
+            ::close(fds[0]);
+            if (::dup2(fds[1], STDIN_FILENO) < 0 || ::dup2(fds[1], STDOUT_FILENO) < 0) {
+                std::cerr << "[rsp-sshd] dup2 failed: " << strerror(errno) << '\n';
+                ::_exit(1);
             }
-        } else {
-            if (cfg.sshdConfig.empty()) {
-                execl(cfg.sshdPath.c_str(), cfg.sshdPath.c_str(), "-i", nullptr);
-            } else {
-                execl(cfg.sshdPath.c_str(), cfg.sshdPath.c_str(), "-i",
-                      "-f", cfg.sshdConfig.c_str(), nullptr);
+            if (fds[1] != STDIN_FILENO && fds[1] != STDOUT_FILENO) {
+                ::close(fds[1]);
             }
+
+            if (cfg_.sshdDebug) {
+                if (cfg_.sshdConfig.empty()) {
+                    ::execl(cfg_.sshdPath.c_str(), cfg_.sshdPath.c_str(), "-i", "-d", nullptr);
+                } else {
+                    ::execl(cfg_.sshdPath.c_str(), cfg_.sshdPath.c_str(), "-i", "-d",
+                            "-f", cfg_.sshdConfig.c_str(), nullptr);
+                }
+            } else {
+                if (cfg_.sshdConfig.empty()) {
+                    ::execl(cfg_.sshdPath.c_str(), cfg_.sshdPath.c_str(), "-i", nullptr);
+                } else {
+                    ::execl(cfg_.sshdPath.c_str(), cfg_.sshdPath.c_str(), "-i",
+                            "-f", cfg_.sshdConfig.c_str(), nullptr);
+                }
+            }
+            std::cerr << "[rsp-sshd] execl failed: " << strerror(errno) << '\n';
+            ::_exit(1);
         }
 
-        std::cerr << "[rsp-sshd] execl failed: " << strerror(errno) << '\n';
-        _exit(1);
+        // Parent: fds[1] belongs to the child; fds[0] is our side.
+        ::close(fds[1]);
+        log("Spawned sshd -i (pid=" + std::to_string(pid) + ")");
+        return std::make_shared<SshdConnection>(fds[0], pid);
     }
 
-    // Parent: close our copy of the socket; the child owns it now.
-    rsp::os::closeSocket(connFd);
-    log("Spawned sshd -i (pid=" + std::to_string(pid) + ")");
-}
+    // Override: TCP listen is not supported by rsp_sshd.
+    bool handleListenTCPRequest(const rsp::proto::RSPMessage& message) override {
+        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
+                                           "UNIMPLEMENTED: rsp_sshd does not support TCP listen"));
+    }
 
+private:
+    SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg)
+        : ResourceService(std::move(keyPair)), cfg_(cfg) {}
+
+    SshdConfig cfg_;
+};
+
+}  // namespace rsp::resource_service
+
+// ---------------------------------------------------------------------------
+// Signal handling
+// ---------------------------------------------------------------------------
+
+namespace {
+std::atomic<bool> gStopRequested{false};
+
+void signalHandler(int sig) {
+    if (sig == SIGTERM || sig == SIGINT) {
+        gStopRequested.store(true);
+    } else if (sig == SIGCHLD) {
+        while (::waitpid(-1, nullptr, WNOHANG) > 0) {}
+    }
+}
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
     const std::string configPath = (argc > 1) ? argv[1] : "/etc/rsp-sshd/rsp_sshd.conf.json";
 
-    Config cfg;
+    SshdConfig cfg;
     try {
         cfg = loadConfig(configPath);
     } catch (const std::exception& ex) {
@@ -170,51 +225,23 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGINT,  signalHandler);
     std::signal(SIGCHLD, signalHandler);
+    std::signal(SIGPIPE, SIG_IGN);
 
-    auto client = rsp::client::RSPClient::create();
+    auto rs = rsp::resource_service::SshdResourceService::create(cfg);
 
-    const auto connId = client->connectToResourceManager(
+    const auto connId = rs->connectToResourceManager(
         cfg.rspTransport, rsp::message_queue::kAsciiHandshakeEncoding);
     if (connId == rsp::GUID{}) {
         log("Failed to connect to resource manager: " + cfg.rspTransport);
         return 1;
     }
     log("Connected to RSP transport: " + cfg.rspTransport);
-
-    if (!cfg.endorsementNodeId.empty()) {
-        const rsp::NodeID esNodeId{cfg.endorsementNodeId};
-
-        if (!client->ping(esNodeId)) {
-            log("Endorsement service unreachable: " + cfg.endorsementNodeId);
-            return 1;
-        }
-        if (!acquireEndorsement(*client, esNodeId, ETYPE_ACCESS, EVALUE_ACCESS_NETWORK, "network access") ||
-            !acquireEndorsement(*client, esNodeId, ETYPE_ROLE, EVALUE_ROLE_RESOURCE_SERVICE, "resource service role")) {
-            return 1;
-        }
-        log("Endorsements acquired");
-    }
-
-    const rsp::NodeID rsNodeId{cfg.resourceServiceNodeId};
-    const auto listenerFd = client->listenTCPSocket(rsNodeId, cfg.hostPort);
-    if (!listenerFd.has_value() || !rsp::os::isValidSocket(*listenerFd)) {
-        log("Failed to open RSP listen socket on " + cfg.hostPort);
-        return 1;
-    }
-    log("Listening on RSP host_port=" + cfg.hostPort + " via RS node=" + cfg.resourceServiceNodeId);
+    log("Registered as ResourceService — ready to accept SSH connections");
 
     while (!gStopRequested.load()) {
-        const rsp::os::SocketHandle connFd = rsp::os::acceptSocket(*listenerFd);
-        if (!rsp::os::isValidSocket(connFd)) {
-            if (gStopRequested.load()) break;
-            // acceptSocket can return invalid on EINTR (signal); just retry.
-            continue;
-        }
-        log("Incoming RSP connection; spawning sshd -i");
-        spawnSshd(connFd, cfg);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
     log("Shutting down");
-    rsp::os::closeSocket(*listenerFd);
     return 0;
 }

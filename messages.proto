@@ -122,6 +122,7 @@ enum ERROR_CODE{
     UNKNOWN_ERROR = 0;
     UNKNOWN_MESSAGE_TYPE = 1;
     SIGNATURE_FAILED = 2;
+    UNIMPLEMENTED = 3;
 }
 
 message Error {

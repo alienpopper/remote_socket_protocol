@@ -135,6 +135,24 @@ bool ResourceService::sendResourceAdvertisement(ClientConnectionID connectionId)
     return sendOnConnection(connectionId, message);
 }
 
+rsp::transport::ConnectionHandle ResourceService::createTCPConnection(const std::string& hostPort,
+                                                                       uint32_t totalAttempts,
+                                                                       uint32_t retryDelayMs) {
+    for (uint32_t attempt = 0; attempt < totalAttempts; ++attempt) {
+        auto tcpTransport = std::make_shared<rsp::transport::TcpTransport>();
+        auto connection = tcpTransport->connect(hostPort);
+        if (connection != nullptr) {
+            return connection;
+        }
+
+        tcpTransport->stop();
+        if (attempt + 1u < totalAttempts && retryDelayMs > 0u) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+        }
+    }
+    return nullptr;
+}
+
 bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& message) {
     const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
     if (!requesterNodeId.has_value()) {
@@ -174,28 +192,13 @@ bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& mess
     const uint32_t totalAttempts = request.has_retries() ? std::min(request.retries(), 5u) + 1u : 1u;
     const uint32_t retryDelayMilliseconds = request.has_retry_ms() ? std::min(request.retry_ms(), 5000u) : 0u;
 
-    rsp::transport::TransportHandle transport;
-    rsp::transport::ConnectionHandle connection;
-    for (uint32_t attempt = 0; attempt < totalAttempts; ++attempt) {
-        auto tcpTransport = std::make_shared<rsp::transport::TcpTransport>();
-        connection = tcpTransport->connect(request.host_port());
-        if (connection != nullptr) {
-            transport = std::move(tcpTransport);
-            break;
-        }
+    rsp::transport::ConnectionHandle connection = createTCPConnection(request.host_port(), totalAttempts, retryDelayMilliseconds);
 
-        tcpTransport->stop();
-        if (attempt + 1u < totalAttempts && retryDelayMilliseconds > 0u) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMilliseconds));
-        }
-    }
-
-    if (connection == nullptr || transport == nullptr) {
+    if (connection == nullptr) {
         return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
     }
 
     auto socketState = std::make_shared<ManagedSocketState>();
-    socketState->transport = transport;
     socketState->connection = connection;
     socketState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     socketState->socketId = *socketId;

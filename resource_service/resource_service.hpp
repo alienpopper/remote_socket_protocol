@@ -30,6 +30,25 @@ public:
 
     ClientConnectionID connectToResourceManager(const std::string& transportSpec, const std::string& encoding);
 
+protected:
+    explicit ResourceService(KeyPair keyPair);
+
+    virtual bool handleListenTCPRequest(const rsp::proto::RSPMessage& message);
+
+    virtual rsp::transport::ConnectionHandle createTCPConnection(const std::string& hostPort,
+                                                                  uint32_t totalAttempts,
+                                                                  uint32_t retryDelayMs);
+
+    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
+                                                   rsp::proto::SOCKET_STATUS status,
+                                                   const std::string& errorMessage = std::string(),
+                                                   const rsp::GUID* socketId = nullptr) const;
+    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
+                                                   rsp::proto::SOCKET_STATUS status,
+                                                   const std::string& errorMessage = std::string(),
+                                                   const rsp::GUID* socketId = nullptr,
+                                                   bool traceEnabled = false) const;
+
 private:
     struct ManagedSocketState {
         rsp::transport::TransportHandle transport;
@@ -59,12 +78,9 @@ private:
         std::deque<rsp::transport::ConnectionHandle> acceptedConnections;
     };
 
-    explicit ResourceService(KeyPair keyPair);
-
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
 
     bool handleConnectTCPRequest(const rsp::proto::RSPMessage& message);
-    bool handleListenTCPRequest(const rsp::proto::RSPMessage& message);
     bool handleAcceptTCP(const rsp::proto::RSPMessage& message);
     bool handleSocketSend(const rsp::proto::RSPMessage& message);
     bool handleSocketRecv(const rsp::proto::RSPMessage& message);
@@ -77,15 +93,6 @@ private:
     bool validateListeningSocketAccess(const rsp::proto::RSPMessage& message,
                                       const std::shared_ptr<ManagedListenerState>& listenerState) const;
 
-    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
-                                                  rsp::proto::SOCKET_STATUS status,
-                                                  const std::string& errorMessage = std::string(),
-                                                  const rsp::GUID* socketId = nullptr) const;
-    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
-                                                  rsp::proto::SOCKET_STATUS status,
-                                                  const std::string& errorMessage = std::string(),
-                                                  const rsp::GUID* socketId = nullptr,
-                                                  bool traceEnabled = false) const;
     void stopManagedSocket(const std::shared_ptr<ManagedSocketState>& socketState);
     void stopManagedListener(const std::shared_ptr<ManagedListenerState>& listenerState);
     void closeAllManagedSockets();
