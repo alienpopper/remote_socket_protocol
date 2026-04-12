@@ -9,4 +9,4 @@ client/nodejs/messages.js
 client/python/messages.py
 integration/nodejs_express/working/node_modules/
 integration/nodejs_express/working/
-
+integration/openssh/working/
