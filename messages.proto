@@ -24,6 +24,10 @@ message DateTime {
   uint64 milliseconds_since_epoch = 1;
 }
 
+message OptionalBool {
+    bool value = 1;
+}
+
 enum SIGNATURE_ALGORITHMS {
   SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
   P256 = 100;
@@ -329,6 +333,7 @@ message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
   optional NodeId destination = 1;  
     optional NodeId source = 2;
+    OptionalBool trace = 24;
   oneof submessage {
       ChallengeRequest challenge_request = 3;
       Identity identity = 4;

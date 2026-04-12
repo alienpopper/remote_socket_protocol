@@ -366,6 +366,7 @@ NODEJS_PING_FIXTURE_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/resource_manager/resource_manager.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
+	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/nodejs_ping_fixture.o
 
@@ -409,7 +410,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client generate-messages
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client test-nodejs-express generate-messages
 
 $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto $(GENERATE_MESSAGES_SCRIPT)
 	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
@@ -541,6 +542,9 @@ test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 
 test-nodejs-client: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/nodejs_ping_integration.js $(NODEJS_PING_FIXTURE_TARGET)
+
+test-nodejs-express: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
+	node test/nodejs_express_integration.js $(NODEJS_PING_FIXTURE_TARGET)
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 

@@ -312,9 +312,9 @@ async function testConnectRefused(info) {
     const client = new RSPClient();
     try {
         await client.connect(info.transport_spec);
-        // Port 1 is almost universally unreachable / refused.
+        const closedPort = await getFreePort();
         await assert.rejects(
-            () => createConnection(client, info.resource_manager_node_id, '127.0.0.1:1'),
+            () => createConnection(client, info.resource_manager_node_id, `127.0.0.1:${closedPort}`),
             /RSP connect failed/,
             'connecting to a refused port should throw'
         );

@@ -3,9 +3,11 @@
 #include "third_party/json/single_include/nlohmann/json.hpp"
 
 #include "common/base_types.hpp"
+#include "common/message_queue/mq_signing.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <utility>
@@ -796,15 +798,20 @@ json toJson(const rsp::proto::SocketSend& message) {
 }
 
 bool fromJson(const json& value, rsp::proto::SocketSend& message) {
-    if (!value.is_object() || !value.contains("socket_number") || !value.contains("index") || !value.contains("data") ||
-        !value.at("index").is_number_unsigned()) {
+    if (!value.is_object() || !value.contains("socket_number") || !value.contains("data")) {
+        return false;
+    }
+
+    if (value.contains("index") && !value.at("index").is_number_unsigned()) {
         return false;
     }
 
     std::string data;
     return fromJson(value.at("socket_number"), *message.mutable_socket_number()) &&
            decodeBytes(value.at("data"), data) &&
-           (message.set_index(value.at("index").get<uint64_t>()), message.set_data(data), true);
+           (message.set_index(value.contains("index") ? value.at("index").get<uint64_t>() : 0),
+            message.set_data(data),
+            true);
 }
 
 json toJson(const rsp::proto::SocketRecv& message) {
@@ -815,12 +822,14 @@ json toJson(const rsp::proto::SocketRecv& message) {
 }
 
 bool fromJson(const json& value, rsp::proto::SocketRecv& message) {
-    if (!value.is_object() || !value.contains("socket_number") || !value.contains("index") ||
-        !value.at("index").is_number_unsigned() ||
+    if (!value.is_object() || !value.contains("socket_number") ||
         !fromJson(value.at("socket_number"), *message.mutable_socket_number())) {
         return false;
     }
-    message.set_index(value.at("index").get<uint64_t>());
+    if (value.contains("index") && !value.at("index").is_number_unsigned()) {
+        return false;
+    }
+    message.set_index(value.contains("index") ? value.at("index").get<uint64_t>() : 0);
     if (value.contains("max_bytes")) {
         if (!value.at("max_bytes").is_number_unsigned()) return false;
         message.set_max_bytes(value.at("max_bytes").get<uint32_t>());
@@ -1084,6 +1093,7 @@ json toJson(const rsp::proto::RSPMessage& message) {
     json value = json::object();
     if (message.has_destination()) value["destination"] = toJson(message.destination());
     if (message.has_source()) value["source"] = toJson(message.source());
+    if (message.has_trace()) value["trace"] = message.trace().value();
 
     if (message.has_challenge_request()) value["challenge_request"] = toJson(message.challenge_request());
     else if (message.has_identity()) value["identity"] = toJson(message.identity());
@@ -1127,6 +1137,10 @@ bool fromJson(const json& value, rsp::proto::RSPMessage& message) {
 
     if (value.contains("destination") && !fromJson(value.at("destination"), *message.mutable_destination())) return false;
     if (value.contains("source") && !fromJson(value.at("source"), *message.mutable_source())) return false;
+    if (value.contains("trace")) {
+        if (!value.at("trace").is_boolean()) return false;
+        message.mutable_trace()->set_value(value.at("trace").get<bool>());
+    }
     if (value.contains("challenge_request") && !fromJson(value.at("challenge_request"), *message.mutable_challenge_request())) return false;
     if (value.contains("identity") && !fromJson(value.at("identity"), *message.mutable_identity())) return false;
     if (value.contains("route") && !fromJson(value.at("route"), *message.mutable_route())) return false;
@@ -1168,6 +1182,27 @@ bool decodeMessage(const std::string& payload, rsp::proto::RSPMessage& message) 
     return !parsed.is_discarded() && fromJson(parsed, message);
 }
 
+std::string messageKind(const rsp::proto::RSPMessage& message) {
+    if (message.has_ping_request()) return "ping_request";
+    if (message.has_ping_reply()) return "ping_reply";
+    if (message.has_identity()) return "identity";
+    if (message.has_challenge_request()) return "challenge_request";
+    if (message.has_connect_tcp_request()) return "connect_tcp_request";
+    if (message.has_listen_tcp_request()) return "listen_tcp_request";
+    if (message.has_accept_tcp()) return "accept_tcp";
+    if (message.has_socket_send()) return "socket_send";
+    if (message.has_socket_recv()) return "socket_recv";
+    if (message.has_socket_close()) return "socket_close";
+    if (message.has_socket_reply()) return "socket_reply";
+    if (message.has_begin_endorsement_request()) return "begin_endorsement_request";
+    if (message.has_endorsement_done()) return "endorsement_done";
+    if (message.has_endorsement_needed()) return "endorsement_needed";
+    if (message.has_resource_query()) return "resource_query";
+    if (message.has_resource_advertisement()) return "resource_advertisement";
+    if (message.has_error()) return "error";
+    return "unknown";
+}
+
 }  // namespace
 
 JsonEncoding::JsonEncoding(rsp::transport::ConnectionHandle connection,
@@ -1189,20 +1224,32 @@ bool JsonEncoding::readMessage(rsp::proto::RSPMessage& message) {
 
     const uint32_t magic = readUint32(header);
     if (magic != kFrameMagic) {
+        std::cerr << "[json_encoding] read failure: bad magic=0x" << std::hex << magic << std::dec << std::endl;
         return false;
     }
 
     const uint32_t payloadLength = readUint32(header + 4);
     if (payloadLength > kMaxFrameLength) {
+        std::cerr << "[json_encoding] read failure: payload too large bytes=" << payloadLength << std::endl;
         return false;
     }
 
     std::string payload(payloadLength, '\0');
     if (!activeConnection->readExact(reinterpret_cast<uint8_t*>(payload.data()), payloadLength)) {
+        std::cerr << "[json_encoding] read failure: payload readExact failed bytes=" << payloadLength << std::endl;
         return false;
     }
 
-    return decodeMessage(payload, message);
+    if (!decodeMessage(payload, message)) {
+        std::cerr << "[json_encoding] read failure: decodeMessage failed bytes=" << payloadLength << std::endl;
+        return false;
+    }
+
+    if (rsp::messageTraceEnabled(message)) {
+        std::cerr << "[json_encoding] read success kind=" << messageKind(message)
+                  << " bytes=" << payloadLength << std::endl;
+    }
+    return true;
 }
 
 bool JsonEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
@@ -1212,7 +1259,12 @@ bool JsonEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
     }
 
     const std::string payload = encodeMessage(message);
+    const bool trace = rsp::messageTraceEnabled(message);
     if (payload.size() > kMaxFrameLength) {
+        if (trace) {
+            std::cerr << "[json_encoding] write failure: payload too large bytes=" << payload.size()
+                      << " kind=" << messageKind(message) << std::endl;
+        }
         return false;
     }
 
@@ -1221,8 +1273,22 @@ bool JsonEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
     appendUint32(header, kFrameMagic);
     appendUint32(header, static_cast<uint32_t>(payload.size()));
 
-    return activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size())) &&
-           activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
+    const bool headerSent = activeConnection->sendAll(reinterpret_cast<const uint8_t*>(header.data()), static_cast<uint32_t>(header.size()));
+    const bool payloadSent = headerSent &&
+                             activeConnection->sendAll(reinterpret_cast<const uint8_t*>(payload.data()), static_cast<uint32_t>(payload.size()));
+    if (!headerSent || !payloadSent) {
+        if (trace) {
+            std::cerr << "[json_encoding] write failure: sendAll failed kind=" << messageKind(message)
+                      << " bytes=" << payload.size() << std::endl;
+        }
+        return false;
+    }
+
+    if (trace) {
+        std::cerr << "[json_encoding] write success kind=" << messageKind(message)
+                  << " bytes=" << payload.size() << std::endl;
+    }
+    return true;
 }
 
 }  // namespace rsp::encoding::json

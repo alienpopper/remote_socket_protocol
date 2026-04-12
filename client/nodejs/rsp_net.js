@@ -24,6 +24,13 @@ const {Duplex, EventEmitter} = require('stream');
 const messages = require('./messages');
 
 const {SUCCESS, SOCKET_DATA, SOCKET_CLOSED, SOCKET_ERROR, NEW_CONNECTION} = messages.SOCKET_STATUS;
+const TRACE = process.env.RSP_NET_TRACE === '1';
+
+function trace(message) {
+    if (TRACE) {
+        console.error(`[rsp_net] ${message}`);
+    }
+}
 
 // RSPSocket wraps a single RSP socket ID as a Node.js Duplex stream.
 //
@@ -46,8 +53,10 @@ class RSPSocket extends Duplex {
 
     _onSocketReply(reply) {
         const status = reply.error || 0;
+        trace(`socket=${this._socketId} reply_status=${status}`);
         if (status === SOCKET_DATA) {
             const data = reply.data ? Buffer.from(reply.data, 'hex') : Buffer.alloc(0);
+            trace(`socket=${this._socketId} data_len=${data.length}`);
             this.push(data);
         } else if (status === SOCKET_CLOSED || status === SOCKET_ERROR) {
             this._closing = true;
@@ -63,8 +72,15 @@ class RSPSocket extends Duplex {
             return;
         }
         const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
-        this._client.sendSocketData(this._socketId, data)
-            .then(() => callback())
+        trace(`socket=${this._socketId} write_len=${data.length}`);
+        this._client.socketSend(this._socketId, data)
+            .then((sent) => {
+                if (!sent) {
+                    callback(new Error(`socket send failed for socket ${this._socketId}`));
+                    return;
+                }
+                callback();
+            })
             .catch(callback);
     }
 
@@ -73,18 +89,25 @@ class RSPSocket extends Duplex {
     }
 
     _final(callback) {
-        this._doClose().then(() => callback()).catch(callback);
+        // Preserve half-close semantics: allow reading remote response data
+        // after local writes end (e.g., HTTP request followed by response).
+        callback();
     }
 
     _destroy(err, callback) {
-        this._doClose().finally(() => callback(err));
+        this._doClose().catch(() => {}).finally(() => callback(err));
     }
 
     _doClose() {
         if (this._closing) return Promise.resolve();
         this._closing = true;
         this._client.detachSocketHandler(this._socketId);
-        return this._client.socketClose(this._socketId).catch(() => {});
+        return this._client.socketClose(this._socketId)
+            .then((closed) => {
+                if (!closed) {
+                    trace(`socket=${this._socketId} close not acknowledged`);
+                }
+            });
     }
 }
 

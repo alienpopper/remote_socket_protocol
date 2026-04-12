@@ -27,6 +27,8 @@ bool verifyMessageSignature(const KeyPair& keyPair,
 std::optional<NodeID> nodeIdFromSourceField(const rsp::proto::NodeId& protoId);
 std::optional<NodeID> nodeIdFromSignerField(const rsp::proto::NodeId& protoId);
 std::optional<NodeID> senderNodeIdFromMessage(const rsp::proto::RSPMessage& message);
+bool messageTraceEnabled(const rsp::proto::RSPMessage& message);
+void copyMessageTrace(const rsp::proto::RSPMessage& source, rsp::proto::RSPMessage& destination);
 
 // Signs each incoming RSPMessage using the keypair returned by getKeyForNodeID,
 // keyed on the message's source NodeID. On success, calls onSuccess with the

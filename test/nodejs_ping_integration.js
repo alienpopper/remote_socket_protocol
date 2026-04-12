@@ -80,8 +80,14 @@ async function main() {
 
     try {
         await client.connect(info.transport_spec);
-        await client.ping(info.client_service_node_id);
-        await client.ping(info.endorsement_service_node_id);
+        const rmReachable = await client.ping(info.resource_manager_node_id);
+        const esReachable = await client.ping(info.endorsement_service_node_id);
+        const rsReachable = await client.ping(info.resource_service_node_id);
+
+        if (!rmReachable || !esReachable || !rsReachable) {
+            throw new Error(`ping reachability failed (rm=${rmReachable}, es=${esReachable}, rs=${rsReachable})`);
+        }
+
         console.log('nodejs_ping_integration passed');
     } finally {
         await client.close().catch(() => {});

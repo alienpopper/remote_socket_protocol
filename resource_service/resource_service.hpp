@@ -38,6 +38,7 @@ private:
         rsp::GUID socketId;
         bool asyncData = false;
         bool shareSocket = false;
+        bool traceEnabled = false;
         std::atomic<bool> stopping = false;
         std::thread readThread;
     };
@@ -51,6 +52,7 @@ private:
         bool shareChildSockets = false;
         bool childrenUseSocket = false;
         bool childrenAsyncData = false;
+        bool traceEnabled = false;
         std::atomic<bool> stopping = false;
         std::mutex acceptedMutex;
         std::condition_variable acceptedChanged;
@@ -82,7 +84,8 @@ private:
     rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
                                                   rsp::proto::SOCKET_STATUS status,
                                                   const std::string& errorMessage = std::string(),
-                                                  const rsp::GUID* socketId = nullptr) const;
+                                                  const rsp::GUID* socketId = nullptr,
+                                                  bool traceEnabled = false) const;
     void stopManagedSocket(const std::shared_ptr<ManagedSocketState>& socketState);
     void stopManagedListener(const std::shared_ptr<ManagedListenerState>& listenerState);
     void closeAllManagedSockets();

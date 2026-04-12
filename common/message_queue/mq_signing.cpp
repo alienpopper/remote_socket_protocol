@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -508,6 +509,11 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hashNodeId(hasher, message.source());
     }
 
+    if (message.has_trace()) {
+        hasher.tag(24);
+        hasher.feedBool(message.trace().value());
+    }
+
     switch (message.submessage_case()) {
     case rsp::proto::RSPMessage::kChallengeRequest:
         hasher.tag(3);
@@ -676,6 +682,16 @@ std::optional<rsp::NodeID> rsp::senderNodeIdFromMessage(const rsp::proto::RSPMes
     return std::nullopt;
 }
 
+bool rsp::messageTraceEnabled(const rsp::proto::RSPMessage& message) {
+    return message.has_trace() && message.trace().value();
+}
+
+void rsp::copyMessageTrace(const rsp::proto::RSPMessage& source, rsp::proto::RSPMessage& destination) {
+    if (source.has_trace()) {
+        destination.mutable_trace()->set_value(source.trace().value());
+    }
+}
+
 namespace rsp {
 
 //
@@ -702,27 +718,46 @@ MessageQueueSign::MessageQueueSign(std::function<void(rsp::proto::RSPMessage)> o
 }
 
 void MessageQueueSign::handleMessage(Message message, MessageQueueSharedState&) {
+    const bool trace = messageTraceEnabled(message);
+    if (trace) {
+        std::cerr << "[mq_sign] entry" << std::endl;
+    }
     const auto requestedNodeId = senderNodeIdFromMessage(message).value_or(NodeID());
     const auto keyPair = getKey_(requestedNodeId);
     if (!keyPair) {
+        if (trace) {
+            std::cerr << "[mq_sign] failure: no signing key for sender" << std::endl;
+        }
         onFailure_(std::move(message), "no signing key found for message sender");
         return;
     }
 
     if (!keyPair->hasPrivateKey()) {
+        if (trace) {
+            std::cerr << "[mq_sign] failure: signer key has no private key" << std::endl;
+        }
         onFailure_(std::move(message), "key for message sender has no private key");
         return;
     }
 
     try {
         *message.mutable_signature() = signMessage(*keyPair, message);
+        if (trace) {
+            std::cerr << "[mq_sign] success" << std::endl;
+        }
         onSuccess_(std::move(message));
     } catch (const std::exception& e) {
+        if (trace) {
+            std::cerr << "[mq_sign] failure: signing exception " << e.what() << std::endl;
+        }
         onFailure_(std::move(message), std::string("signing failed: ") + e.what());
     }
 }
 
 void MessageQueueSign::handleQueueFull(size_t, size_t limit, const Message& rejected) {
+    if (messageTraceEnabled(rejected)) {
+        std::cerr << "[mq_sign] queue_full limit=" << limit << std::endl;
+    }
     if (onFailure_) {
         onFailure_(rejected, "signing queue full (limit=" + std::to_string(limit) + ")");
     }
@@ -757,35 +792,61 @@ MessageQueueCheckSignature::MessageQueueCheckSignature(
 }
 
 void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueSharedState&) {
+    const bool trace = messageTraceEnabled(message);
+    if (trace) {
+        std::cerr << "[mq_check_signature] entry" << std::endl;
+    }
     if (!message.has_signature()) {
+        if (trace) {
+            std::cerr << "[mq_signing] reject: message has no signature" << std::endl;
+        }
         onFailure_(std::move(message), "message has no signature");
         return;
     }
 
     const auto nodeId = nodeIdFromSignerField(message.signature().signer());
     if (!nodeId.has_value()) {
+        if (trace) {
+            std::cerr << "[mq_signing] reject: signature signer has invalid node ID encoding" << std::endl;
+        }
         onFailure_(std::move(message), "signature signer has invalid node ID encoding");
         return;
     }
 
     const auto keyPair = getKey_(*nodeId);
     if (!keyPair) {
+        if (trace) {
+            std::cerr << "[mq_signing] reject: no verification key for signer " << nodeId->toString() << std::endl;
+        }
         onFailure_(std::move(message), "no verification key found for signer node ID");
         return;
     }
 
     try {
         if (verifyMessageSignature(*keyPair, message, message.signature())) {
+            if (trace) {
+                std::cerr << "[mq_check_signature] success" << std::endl;
+            }
             onSuccess_(std::move(message));
         } else {
+            if (trace) {
+                std::cerr << "[mq_signing] reject: signature verification failed for signer "
+                          << nodeId->toString() << std::endl;
+            }
             onFailure_(std::move(message), "signature verification failed");
         }
     } catch (const std::exception& e) {
+        if (trace) {
+            std::cerr << "[mq_signing] reject: exception during signature check: " << e.what() << std::endl;
+        }
         onFailure_(std::move(message), std::string("signature check failed: ") + e.what());
     }
 }
 
 void MessageQueueCheckSignature::handleQueueFull(size_t, size_t limit, const Message& rejected) {
+    if (messageTraceEnabled(rejected)) {
+        std::cerr << "[mq_check_signature] queue_full limit=" << limit << std::endl;
+    }
     if (onFailure_) {
         onFailure_(rejected, "check-signature queue full (limit=" + std::to_string(limit) + ")");
     }

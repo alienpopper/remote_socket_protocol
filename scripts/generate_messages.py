@@ -529,7 +529,7 @@ function hashFieldValue(field, value, hasher) {
 function hashMessageObject(typeName, value, hasher) {
     const definition = MESSAGE_TYPES[typeName];
     for (const field of definition.fields) {
-        if (field.name === "signature" && (typeName === "RSPMessage" || typeName === "Endorsement")) {
+        if (field.name === "signature" && typeName === "RSPMessage") {
             // Signature fields are excluded from the hash — the hash is what gets signed.
             // Signing raw protobuf bytes instead would require a protobuf dependency in clients.
             continue;
@@ -694,7 +694,7 @@ def _hash_field_value(field: dict, value: Any, hasher: _MessageHasher) -> None:
 def _hash_message_object(type_name: str, value: dict, hasher: _MessageHasher) -> None:
     definition = _SCHEMA["messages"][type_name]
     for field in definition["fields"]:
-        if field["name"] == "signature" and type_name in ("RSPMessage", "Endorsement"):
+        if field["name"] == "signature" and type_name == "RSPMessage":
             continue
         if field["repeated"]:
             list_value = (value or {}).get(field["name"]) or []
@@ -722,7 +722,7 @@ def hash_rsp_message(value: dict) -> bytes:
 
 
 def hash_endorsement(value: dict) -> bytes:
-    """Canonical hash of an Endorsement (excludes signature field)."""
+    """Canonical hash of an Endorsement (includes signature field)."""
     return hash_message("Endorsement", value)
 '''
 

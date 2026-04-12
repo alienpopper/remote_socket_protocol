@@ -29,6 +29,14 @@ const {
     ENDORSEMENT_UNKNOWN_IDENTITY,
 } = messages.ENSDORSMENT_STATUS;
 
+const TRACE = process.env.RSP_CLIENT_TRACE === '1';
+
+function trace(message) {
+    if (TRACE) {
+        console.error(`[rsp_client] ${message}`);
+    }
+}
+
 function normalizeGuid(value) {
     const compact = String(value).replace(/[{}-]/g, '').toLowerCase();
     if (!/^[0-9a-f]{32}$/.test(compact)) {
@@ -141,13 +149,61 @@ function verifyRSPMessageSignature(publicKeyPem, message, signatureBlock) {
     return verifier.verify(publicKeyPem, Buffer.from(signatureBlock.signature, 'hex'));
 }
 
+function encodeVarintUnsigned(value) {
+    let remaining = BigInt(value);
+    if (remaining < 0n) {
+        throw new Error('varint value must be non-negative');
+    }
+    const bytes = [];
+    do {
+        let byte = Number(remaining & 0x7Fn);
+        remaining >>= 7n;
+        if (remaining !== 0n) {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+    } while (remaining !== 0n);
+    return Buffer.from(bytes);
+}
+
+function encodeTag(fieldNumber, wireType) {
+    return encodeVarintUnsigned((BigInt(fieldNumber) << 3n) | BigInt(wireType));
+}
+
+function encodeLengthDelimitedField(fieldNumber, payload) {
+    return Buffer.concat([
+        encodeTag(fieldNumber, 2),
+        encodeVarintUnsigned(payload.length),
+        payload,
+    ]);
+}
+
+function serializeUuidLike(hexValue) {
+    return encodeLengthDelimitedField(1, Buffer.from(hexValue, 'hex'));
+}
+
+function serializeDateTimeMessage(millisecondsSinceEpoch) {
+    return Buffer.concat([
+        encodeTag(1, 0),
+        encodeVarintUnsigned(BigInt(millisecondsSinceEpoch)),
+    ]);
+}
+
+function serializeUnsignedEndorsement(endorsement) {
+    return Buffer.concat([
+        encodeLengthDelimitedField(1, serializeUuidLike(endorsement.subject.value)),
+        encodeLengthDelimitedField(2, serializeUuidLike(endorsement.endorsement_service.value)),
+        encodeLengthDelimitedField(3, serializeUuidLike(endorsement.endorsement_type.value)),
+        encodeLengthDelimitedField(4, Buffer.from(endorsement.endorsement_value || '', 'hex')),
+        encodeLengthDelimitedField(5, serializeDateTimeMessage(endorsement.valid_until.milliseconds_since_epoch)),
+    ]);
+}
+
 function signEndorsement(privateKeyPem, localNodeId, endorsement) {
-    // Hash the endorsement without its signature field, then sign the digest.
-    const unsignedEndorsement = Object.assign({}, endorsement);
-    delete unsignedEndorsement.signature;
-    const digest = messages.hashEndorsement(unsignedEndorsement);
+    const _unused = localNodeId;
+    const unsignedBytes = serializeUnsignedEndorsement(endorsement);
     const signer = crypto.createSign('sha256');
-    signer.update(digest);
+    signer.update(unsignedBytes);
     signer.end();
     return signer.sign(privateKeyPem).toString('hex');
 }
@@ -299,6 +355,8 @@ class RSPClient extends EventEmitter {
 
         this._stopping = true;
         const socket = this._socket;
+        const receiveLoopPromise = this._receiveLoopPromise;
+        this._receiveLoopPromise = null;
         this._socket = null;
         this._reader = null;
         this.peerNodeId = null;
@@ -317,10 +375,28 @@ class RSPClient extends EventEmitter {
         this._pendingEndorsements.clear();
         this._socketHandlers.clear();
 
+        const closed = socket.destroyed ? Promise.resolve() : new Promise((resolve) => {
+            socket.once('close', resolve);
+            socket.once('error', resolve);
+        });
+
         socket.end();
-        await once(socket, 'close').catch(() => {});
-        if (this._receiveLoopPromise) {
-            await this._receiveLoopPromise.catch(() => {});
+
+        if (!socket.destroyed) {
+            const forceCloseTimer = setTimeout(() => {
+                if (!socket.destroyed) {
+                    socket.destroy();
+                }
+            }, 250);
+            await Promise.race([
+                closed,
+                new Promise((resolve) => setTimeout(resolve, 1000)),
+            ]).catch(() => {});
+            clearTimeout(forceCloseTimer);
+        }
+
+        if (receiveLoopPromise) {
+            await receiveLoopPromise.catch(() => {});
         }
     }
 
@@ -421,10 +497,21 @@ class RSPClient extends EventEmitter {
         } else if (hasField(msg, 'endorsement_done')) {
             this._handleEndorsementDone(msg);
         } else if (hasField(msg, 'endorsement_needed')) {
+            trace('received endorsement_needed');
             this.emit('endorsement_needed', msg.endorsement_needed);
         } else if (hasField(msg, 'resource_advertisement')) {
+            trace('received resource_advertisement');
             this._pendingResourceAdvertisements.push(msg.resource_advertisement);
             this.emit('resource_advertisement', msg.resource_advertisement);
+        } else {
+            const keys = Object.keys(msg || {}).join(',');
+            if (hasField(msg, 'error')) {
+                trace(`unhandled message error=${msg.error} keys=${keys}`);
+            } else if (hasField(msg, 'endorsement_needed')) {
+                trace(`endorsement_needed keys=${keys}`);
+            } else {
+                trace(`unhandled message keys=${keys}`);
+            }
         }
     }
 
@@ -441,6 +528,10 @@ class RSPClient extends EventEmitter {
 
     _handleSocketReply(msg, socketReply) {
         const socketIdHex = socketReply.socket_id?.value;
+        const status = socketReply.error || 0;
+        if (socketIdHex) {
+            trace(`socket_reply socket=${socketIdHex} status=${status}`);
+        }
 
         if (socketIdHex) {
             const connectPending = this._pendingConnects.get(socketIdHex);
@@ -468,10 +559,18 @@ class RSPClient extends EventEmitter {
             }
 
             if (socketReply.new_socket_id?.value) {
-                const sourceNodeId = this._decodeSourceNodeId(msg);
+                const sourceNodeId = this._senderNodeIdFromMessage(msg);
                 if (sourceNodeId) {
                     this._socketRoutes.set(socketReply.new_socket_id.value, sourceNodeId);
                 }
+            }
+
+            const awaited = this._awaitedSocketReplies.get(socketIdHex);
+            if (awaited && (!awaited.predicate || awaited.predicate(socketReply))) {
+                this._awaitedSocketReplies.delete(socketIdHex);
+                clearTimeout(awaited.timer);
+                awaited.resolve(socketReply);
+                return;
             }
 
             const handler = this._socketHandlers.get(socketIdHex);
@@ -483,16 +582,6 @@ class RSPClient extends EventEmitter {
             const queue = this._socketReplyQueues.get(socketIdHex) || [];
             queue.push(socketReply);
             this._socketReplyQueues.set(socketIdHex, queue);
-
-            const awaited = this._awaitedSocketReplies.get(socketIdHex);
-            if (awaited) {
-                this._awaitedSocketReplies.delete(socketIdHex);
-                queue.shift();
-                if (queue.length === 0) this._socketReplyQueues.delete(socketIdHex);
-                clearTimeout(awaited.timer);
-                awaited.resolve(socketReply);
-                return;
-            }
         }
 
         this._pendingSocketReplies.push(socketReply);
@@ -500,7 +589,7 @@ class RSPClient extends EventEmitter {
     }
 
     _handleEndorsementDone(msg) {
-        const sourceNodeId = this._decodeSourceNodeId(msg);
+        const sourceNodeId = this._senderNodeIdFromMessage(msg);
         if (!sourceNodeId) return;
         const pendingKey = encodeNodeIdForField(sourceNodeId);
         const pending = this._pendingEndorsements.get(pendingKey);
@@ -510,10 +599,19 @@ class RSPClient extends EventEmitter {
         pending.resolve(msg.endorsement_done);
     }
 
-    _decodeSourceNodeId(msg) {
-        if (!msg.source?.value) return null;
+    _senderNodeIdFromMessage(msg) {
+        if (msg.source?.value) {
+            try {
+                return decodeNodeIdField(msg.source.value);
+            } catch {
+                // Fall through to signature signer when source encoding is absent or malformed.
+            }
+        }
+
+        const signerHex = msg.signature?.signer?.value;
+        if (!signerHex) return null;
         try {
-            return decodeNodeIdField(msg.source.value);
+            return decodeSignerNodeId(signerHex);
         } catch {
             return null;
         }
@@ -535,6 +633,14 @@ class RSPClient extends EventEmitter {
 
     async _sendRawMessage(message) {
         if (!this._socket) throw new Error('client is not connected');
+        if (TRACE) {
+            const keys = Object.keys(message || {}).join(',');
+            if (hasField(message, 'socket_send')) {
+                const socketHex = message.socket_send?.socket_number?.value || 'none';
+                const bytes = message.socket_send?.data ? Buffer.from(message.socket_send.data, 'hex').length : 0;
+                trace(`send_raw keys=${keys} socket_send.socket=${socketHex} bytes=${bytes}`);
+            }
+        }
         const payload = Buffer.from(JSON.stringify(message), 'utf8');
         const header = Buffer.alloc(8);
         header.writeUInt32BE(JSON_FRAME_MAGIC, 0);
@@ -553,7 +659,14 @@ class RSPClient extends EventEmitter {
         }
         const payloadLength = header.readUInt32BE(4);
         const payload = await this._reader.readExact(payloadLength);
-        return JSON.parse(payload.toString('utf8'));
+        const parsed = JSON.parse(payload.toString('utf8'));
+        if (TRACE) {
+            const keys = Object.keys(parsed || {}).join(',');
+            if (hasField(parsed, 'socket_reply') || hasField(parsed, 'error') || hasField(parsed, 'endorsement_needed')) {
+                trace(`recv_raw keys=${keys}`);
+            }
+        }
+        return parsed;
     }
 
     async _sendSignedMessage(message) {
@@ -565,21 +678,24 @@ class RSPClient extends EventEmitter {
 
     // --- Socket reply waiting ---
 
-    _waitForSocketReply(socketId, timeoutMs = DEFAULT_TIMEOUT_MS) {
+    _waitForSocketReply(socketId, timeoutMs = DEFAULT_TIMEOUT_MS, predicate = null) {
         const queue = this._socketReplyQueues.get(socketId);
         if (queue && queue.length > 0) {
-            const reply = queue.shift();
-            if (queue.length === 0) this._socketReplyQueues.delete(socketId);
-            const idx = this._pendingSocketReplies.indexOf(reply);
-            if (idx >= 0) this._pendingSocketReplies.splice(idx, 1);
-            return Promise.resolve(reply);
+            const index = predicate ? queue.findIndex(predicate) : 0;
+            if (index >= 0) {
+                const [reply] = queue.splice(index, 1);
+                if (queue.length === 0) this._socketReplyQueues.delete(socketId);
+                const idx = this._pendingSocketReplies.indexOf(reply);
+                if (idx >= 0) this._pendingSocketReplies.splice(idx, 1);
+                return Promise.resolve(reply);
+            }
         }
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this._awaitedSocketReplies.delete(socketId);
                 reject(new Error(`socket reply timed out for socket ${socketId}`));
             }, timeoutMs);
-            this._awaitedSocketReplies.set(socketId, {resolve, reject, timer});
+            this._awaitedSocketReplies.set(socketId, {resolve, reject, timer, predicate});
         });
     }
 
@@ -761,18 +877,55 @@ class RSPClient extends EventEmitter {
 
     async socketSend(socketId, data) {
         const nodeId = this._socketRoutes.get(socketId);
-        if (!nodeId) return false;
+        if (!nodeId) {
+            trace(`socketSend route-miss socket=${socketId}`);
+            return false;
+        }
 
         const dataHex = Buffer.isBuffer(data) ? data.toString('hex') : Buffer.from(data).toString('hex');
+        trace(`socketSend socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataHex, 'hex').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
             socket_send: {socket_number: {value: socketId}, data: dataHex},
         };
-        try { await this._sendSignedMessage(request); } catch { return false; }
+        try {
+            await this._sendSignedMessage(request);
+        } catch (error) {
+            trace(`socketSend send-error socket=${socketId} error=${error.message}`);
+            return false;
+        }
 
-        let reply;
-        try { reply = await this._waitForSocketReply(socketId); } catch { return false; }
-        return reply && (reply.error || 0) === SUCCESS;
+        const deadline = Date.now() + DEFAULT_TIMEOUT_MS;
+        while (Date.now() < deadline) {
+            const remainingMs = deadline - Date.now();
+            let reply;
+            try {
+                reply = await this._waitForSocketReply(
+                    socketId,
+                    remainingMs,
+                    (candidate) => {
+                        const status = candidate?.error || 0;
+                        return status !== SOCKET_DATA && status !== NEW_CONNECTION && status !== ASYNC_SOCKET;
+                    }
+                );
+            } catch (error) {
+                trace(`socketSend reply-timeout socket=${socketId} error=${error.message}`);
+                return false;
+            }
+
+            const status = reply?.error || 0;
+            trace(`socketSend reply socket=${socketId} status=${status}`);
+            if (status === SUCCESS) {
+                return true;
+            }
+
+            if (status === SOCKET_CLOSED || status === SOCKET_ERROR || status === INVALID_FLAGS) {
+                return false;
+            }
+        }
+
+        trace(`socketSend reply-timeout socket=${socketId}`);
+        return false;
     }
 
     async socketRecvEx(socketId, maxBytes = 4096, waitMs = 0) {
@@ -799,7 +952,10 @@ class RSPClient extends EventEmitter {
 
     async socketClose(socketId) {
         const nodeId = this._socketRoutes.get(socketId);
-        if (!nodeId) return false;
+        if (!nodeId) {
+            trace(`socketClose route-miss socket=${socketId}`);
+            return true;
+        }
 
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
@@ -807,7 +963,8 @@ class RSPClient extends EventEmitter {
         };
         try {
             await this._sendSignedMessage(request);
-        } catch {
+        } catch (error) {
+            trace(`socketClose send-error socket=${socketId} error=${error.message}`);
             this._socketRoutes.delete(socketId);
             return true;
         }
@@ -816,19 +973,28 @@ class RSPClient extends EventEmitter {
         while (Date.now() < deadline) {
             const remaining = deadline - Date.now();
             let reply;
-            try { reply = await this._waitForSocketReply(socketId, remaining); } catch { break; }
+            try {
+                reply = await this._waitForSocketReply(
+                    socketId,
+                    remaining,
+                    (candidate) => {
+                        const status = candidate?.error || 0;
+                        return status !== SOCKET_DATA && status !== NEW_CONNECTION && status !== ASYNC_SOCKET;
+                    }
+                );
+            } catch {
+                break;
+            }
             if (!reply) break;
             if (reply.error === SUCCESS || reply.error === SOCKET_CLOSED) {
                 this._socketRoutes.delete(socketId);
                 return true;
             }
-            if (reply.error !== SOCKET_DATA && reply.error !== ASYNC_SOCKET && reply.error !== NEW_CONNECTION) {
-                return false;
-            }
+            return false;
         }
 
         this._socketRoutes.delete(socketId);
-        return true;
+        return false;
     }
 
     // --- Non-blocking dequeue (mirrors C++ tryDequeue* API) ---
@@ -880,16 +1046,22 @@ class RSPClient extends EventEmitter {
     // Use this from streaming code (RSPSocket._write) to avoid blocking on acknowledgement.
     async sendSocketData(socketId, data) {
         const nodeId = this._socketRoutes.get(socketId);
-        if (!nodeId) return false;
+        if (!nodeId) {
+            trace(`sendSocketData route-miss socket=${socketId}`);
+            return false;
+        }
         const dataHex = Buffer.isBuffer(data) ? data.toString('hex') : Buffer.from(data).toString('hex');
+        trace(`sendSocketData socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataHex, 'hex').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
             socket_send: {socket_number: {value: socketId}, data: dataHex},
         };
         try {
             await this._sendSignedMessage(request);
+            trace(`sendSocketData sent socket=${socketId}`);
             return true;
-        } catch {
+        } catch (error) {
+            trace(`sendSocketData error socket=${socketId} error=${error.message}`);
             return false;
         }
     }
@@ -906,7 +1078,7 @@ class RSPClient extends EventEmitter {
 
         const requested = {
             subject: {value: encodeNodeIdForSigner(this.nodeId)},
-            endorsement_service: {value: encodeNodeIdForSigner(nodeId)},
+            endorsement_service: {value: encodeNodeIdForSigner(this.nodeId)},
             endorsement_type: {value: normalizeGuid(endorsementType)},
             endorsement_value: endorsementValueHex,
             valid_until: {milliseconds_since_epoch: Date.now() + 86400000},
