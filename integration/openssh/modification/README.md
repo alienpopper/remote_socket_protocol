@@ -22,9 +22,9 @@ This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
 
 ## Directory contents
 
-- `integration/openssh/rsp_sshd.cpp`
+- `modification/rsp_sshd.cpp`
   - C++ server forwarder source: listens on RSP, spawns `sshd -i` per connection.
-- `integration/openssh/rsp_ssh.cpp`
+- `modification/rsp_ssh.cpp`
   - C++ ProxyCommand client source: connects via RSP and bridges stdin/stdout.
 - `example/rsp_sshd.conf.json`
   - Server config file template (copy to `/etc/rsp-sshd/rsp_sshd.conf.json`).

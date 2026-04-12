@@ -499,7 +499,7 @@ $(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_L
 
 RSP_SSHD_OBJECTS := \
 	$(CLIENT_LIBRARY_OBJECTS) \
-	$(OBJ_DIR)/integration/openssh/rsp_sshd.o
+	$(OBJ_DIR)/integration/openssh/modification/rsp_sshd.o
 
 $(RSP_SSHD_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_SSHD_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RSP_SSHD_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
@@ -508,7 +508,7 @@ rsp-sshd: $(RSP_SSHD_TARGET)
 
 RSP_SSH_OBJECTS := \
 	$(CLIENT_LIBRARY_OBJECTS) \
-	$(OBJ_DIR)/integration/openssh/rsp_ssh.o
+	$(OBJ_DIR)/integration/openssh/modification/rsp_ssh.o
 
 $(RSP_SSH_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_SSH_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RSP_SSH_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
