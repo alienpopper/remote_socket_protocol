@@ -284,7 +284,7 @@ function parseTransportSpec(transportSpec) {
 // objects rather than positional parameters.
 
 class RSPClient extends EventEmitter {
-    constructor(keyPair) {
+    constructor(keyPair, options = {}) {
         super();
         const generated = keyPair || crypto.generateKeyPairSync('ec', {
             namedCurve: 'prime256v1',
@@ -300,6 +300,12 @@ class RSPClient extends EventEmitter {
         this._reader = null;
         this._stopping = false;
         this._receiveLoopPromise = null;
+        this._transportSpec = null;
+        this._reconnectPromise = null;
+
+        this._autoReconnect = false;
+        this._autoReconnectInitialDelayMs = 250;
+        this._autoReconnectMaxDelayMs = 3000;
 
         this.peerNodeId = null;
         this.peerPublicKeyPem = null;
@@ -321,11 +327,44 @@ class RSPClient extends EventEmitter {
         this._identityCache = new Map();       // nodeId -> publicKeyPem
 
         this._socketHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
+
+        this._configureAutoReconnect(options.autoReconnect);
     }
 
     // --- Connection lifecycle ---
 
-    async connect(transportSpec) {
+    _configureAutoReconnect(autoReconnectOptions) {
+        if (autoReconnectOptions === undefined) {
+            return;
+        }
+        if (typeof autoReconnectOptions === 'boolean') {
+            this._autoReconnect = autoReconnectOptions;
+            return;
+        }
+        if (typeof autoReconnectOptions !== 'object' || autoReconnectOptions === null) {
+            throw new Error('autoReconnect must be a boolean or options object');
+        }
+
+        this._autoReconnect = autoReconnectOptions.enabled !== false;
+        if (Number.isFinite(autoReconnectOptions.initialDelayMs) && autoReconnectOptions.initialDelayMs >= 0) {
+            this._autoReconnectInitialDelayMs = Math.floor(autoReconnectOptions.initialDelayMs);
+        }
+        if (Number.isFinite(autoReconnectOptions.maxDelayMs) && autoReconnectOptions.maxDelayMs >= 0) {
+            this._autoReconnectMaxDelayMs = Math.floor(autoReconnectOptions.maxDelayMs);
+        }
+        if (this._autoReconnectMaxDelayMs < this._autoReconnectInitialDelayMs) {
+            this._autoReconnectMaxDelayMs = this._autoReconnectInitialDelayMs;
+        }
+    }
+
+    async connect(transportSpec, options = {}) {
+        this._configureAutoReconnect(options.autoReconnect);
+        this._transportSpec = transportSpec;
+        this._stopping = false;
+        await this._connectTransport(transportSpec);
+    }
+
+    async _connectTransport(transportSpec) {
         const endpoint = parseTransportSpec(transportSpec);
         const socket = net.createConnection(endpoint);
         socket.setNoDelay(true);
@@ -351,18 +390,27 @@ class RSPClient extends EventEmitter {
     }
 
     async close() {
-        if (!this._socket) return;
-
         this._stopping = true;
-        const socket = this._socket;
+        this._autoReconnect = false;
+
+        const reconnectPromise = this._reconnectPromise;
+        this._reconnectPromise = null;
+
+        this._teardownConnection('client closed');
+
+        if (reconnectPromise) {
+            await reconnectPromise.catch(() => {});
+        }
+
         const receiveLoopPromise = this._receiveLoopPromise;
         this._receiveLoopPromise = null;
-        this._socket = null;
-        this._reader = null;
-        this.peerNodeId = null;
-        this.peerPublicKeyPem = null;
+        if (receiveLoopPromise) {
+            await receiveLoopPromise.catch(() => {});
+        }
+    }
 
-        const closedError = new Error('client closed');
+    _rejectAllPending(errorMessage) {
+        const closedError = new Error(errorMessage);
         for (const [, p] of this._pendingPings) { clearTimeout(p.timer); p.reject(closedError); }
         this._pendingPings.clear();
         for (const [, p] of this._pendingConnects) { clearTimeout(p.timer); p.reject(closedError); }
@@ -373,30 +421,79 @@ class RSPClient extends EventEmitter {
         this._awaitedSocketReplies.clear();
         for (const [, p] of this._pendingEndorsements) { clearTimeout(p.timer); p.reject(closedError); }
         this._pendingEndorsements.clear();
+    }
+
+    _teardownConnection(reason) {
+        const socket = this._socket;
+        this._socket = null;
+        this._reader = null;
+        this.peerNodeId = null;
+        this.peerPublicKeyPem = null;
+
+        this._rejectAllPending(reason);
+
         this._socketHandlers.clear();
+        this._socketRoutes.clear();
+        this._socketReplyQueues.clear();
+        this._pendingSocketReplies = [];
 
-        const closed = socket.destroyed ? Promise.resolve() : new Promise((resolve) => {
-            socket.once('close', resolve);
-            socket.once('error', resolve);
-        });
-
-        socket.end();
+        if (!socket) {
+            return;
+        }
 
         if (!socket.destroyed) {
-            const forceCloseTimer = setTimeout(() => {
+            socket.end();
+            setTimeout(() => {
                 if (!socket.destroyed) {
                     socket.destroy();
                 }
             }, 250);
-            await Promise.race([
-                closed,
-                new Promise((resolve) => setTimeout(resolve, 1000)),
-            ]).catch(() => {});
-            clearTimeout(forceCloseTimer);
         }
+    }
 
-        if (receiveLoopPromise) {
-            await receiveLoopPromise.catch(() => {});
+    async _ensureConnectedForSend() {
+        if (this._socket) {
+            return;
+        }
+        if (!this._autoReconnect || !this._transportSpec || this._stopping) {
+            throw new Error('client is not connected');
+        }
+        await this._reconnect('send path');
+        if (!this._socket) {
+            throw new Error('client is not connected');
+        }
+    }
+
+    async _reconnect(trigger) {
+        if (this._reconnectPromise) {
+            return this._reconnectPromise;
+        }
+        this._reconnectPromise = (async () => {
+            if (!this._autoReconnect || !this._transportSpec || this._stopping) {
+                return;
+            }
+
+            this._teardownConnection('connection lost during reconnect');
+            this.emit('reconnecting', trigger);
+
+            let delayMs = this._autoReconnectInitialDelayMs;
+            while (!this._stopping && this._autoReconnect) {
+                try {
+                    await this._connectTransport(this._transportSpec);
+                    this.emit('reconnected');
+                    return;
+                } catch (error) {
+                    this.emit('reconnect_attempt_failed', error);
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                    delayMs = Math.min(delayMs * 2, this._autoReconnectMaxDelayMs);
+                }
+            }
+        })();
+
+        try {
+            await this._reconnectPromise;
+        } finally {
+            this._reconnectPromise = null;
         }
     }
 
@@ -472,14 +569,21 @@ class RSPClient extends EventEmitter {
             try {
                 message = await this._receiveRawMessage();
             } catch (error) {
-                const expectedShutdown =
-                    this._stopping ||
+                const transportClosed =
                     !this._socket ||
+                    (this._socket && (!this._socket.readable || this._socket.destroyed)) ||
                     (error && typeof error.message === 'string' && (
                         error.message.includes('socket closed while waiting for data') ||
-                        error.message.includes('client is not connected')
+                        error.message.includes('client is not connected') ||
+                        error.message.includes('ECONNRESET') ||
+                        error.message.includes('EPIPE')
                     ));
-                if (!expectedShutdown) throw new Error('receive loop ended unexpectedly');
+
+                if (!this._stopping && transportClosed && this._autoReconnect) {
+                    await this._reconnect('receive loop');
+                } else if (!this._stopping && !transportClosed) {
+                    throw new Error('receive loop ended unexpectedly');
+                }
                 return;
             }
             try {
@@ -639,7 +743,7 @@ class RSPClient extends EventEmitter {
     // --- Message send/receive primitives ---
 
     async _sendRawMessage(message) {
-        if (!this._socket) throw new Error('client is not connected');
+        await this._ensureConnectedForSend();
         if (TRACE) {
             const keys = Object.keys(message || {}).join(',');
             if (hasField(message, 'socket_send')) {
@@ -652,9 +756,32 @@ class RSPClient extends EventEmitter {
         const header = Buffer.alloc(8);
         header.writeUInt32BE(JSON_FRAME_MAGIC, 0);
         header.writeUInt32BE(payload.length, 4);
-        await new Promise((resolve, reject) => {
-            this._socket.write(Buffer.concat([header, payload]), (err) => err ? reject(err) : resolve());
-        });
+
+        const frame = Buffer.concat([header, payload]);
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            await this._ensureConnectedForSend();
+            const targetSocket = this._socket;
+            try {
+                await new Promise((resolve, reject) => {
+                    targetSocket.write(frame, (err) => err ? reject(err) : resolve());
+                });
+                return;
+            } catch (error) {
+                const canRetry =
+                    this._autoReconnect &&
+                    !this._stopping &&
+                    attempt === 0 &&
+                    error && typeof error.message === 'string' && (
+                        error.message.includes('EPIPE') ||
+                        error.message.includes('ECONNRESET') ||
+                        error.message.includes('socket is closed')
+                    );
+                if (!canRetry) {
+                    throw error;
+                }
+                await this._reconnect('send retry');
+            }
+        }
     }
 
     async _receiveRawMessage() {

@@ -129,10 +129,56 @@ def _verify_rsp_message_signature(public_key, message: dict, signature_block: di
 
 
 def _sign_endorsement(private_key, local_node_id: str, endorsement: dict) -> str:
-    unsigned = {k: v for k, v in endorsement.items() if k != "signature"}
-    digest = _messages.hash_endorsement(unsigned)
-    sig_bytes = private_key.sign(digest, ec.ECDSA(hashes.SHA256()))
+    _unused = local_node_id
+    unsigned_bytes = _serialize_unsigned_endorsement(endorsement)
+    sig_bytes = private_key.sign(unsigned_bytes, ec.ECDSA(hashes.SHA256()))
     return sig_bytes.hex()
+
+
+def _encode_varint_unsigned(value: int) -> bytes:
+    if value < 0:
+        raise ValueError("varint value must be non-negative")
+    out = bytearray()
+    remaining = int(value)
+    while True:
+        byte = remaining & 0x7F
+        remaining >>= 7
+        if remaining:
+            byte |= 0x80
+        out.append(byte)
+        if not remaining:
+            break
+    return bytes(out)
+
+
+def _encode_tag(field_number: int, wire_type: int) -> bytes:
+    return _encode_varint_unsigned((field_number << 3) | wire_type)
+
+
+def _encode_length_delimited_field(field_number: int, payload: bytes) -> bytes:
+    return _encode_tag(field_number, 2) + _encode_varint_unsigned(len(payload)) + payload
+
+
+def _serialize_uuid_like(hex_value: str) -> bytes:
+    return _encode_length_delimited_field(1, bytes.fromhex(hex_value))
+
+
+def _serialize_date_time_message(milliseconds_since_epoch: int) -> bytes:
+    return _encode_tag(1, 0) + _encode_varint_unsigned(milliseconds_since_epoch)
+
+
+def _serialize_unsigned_endorsement(endorsement: dict) -> bytes:
+    parts = [
+        _encode_length_delimited_field(1, _serialize_uuid_like(endorsement["subject"]["value"])),
+        _encode_length_delimited_field(2, _serialize_uuid_like(endorsement["endorsement_service"]["value"])),
+        _encode_length_delimited_field(3, _serialize_uuid_like(endorsement["endorsement_type"]["value"])),
+        _encode_length_delimited_field(4, bytes.fromhex(endorsement.get("endorsement_value") or "")),
+        _encode_length_delimited_field(
+            5,
+            _serialize_date_time_message(int(endorsement["valid_until"]["milliseconds_since_epoch"])),
+        ),
+    ]
+    return b"".join(parts)
 
 
 def _public_key_pem_bytes(public_key) -> bytes:
@@ -426,8 +472,10 @@ class RSPClient:
             new_socket_id = (socket_reply.get("new_socket_id") or {}).get("value")
             if new_socket_id:
                 source_node_id = self._decode_source_node_id(msg)
+                if not source_node_id:
+                    source_node_id = self._socket_routes.get(socket_id_hex)
                 if source_node_id:
-                    self._socket_routes[new_socket_id] = source_node_id
+                    self._socket_routes[_normalize_guid(new_socket_id)] = source_node_id
 
             handler = self._socket_handlers.get(socket_id_hex)
             if handler:
@@ -757,7 +805,8 @@ class RSPClient:
     # --- Socket send / recv / close ---
 
     async def socket_send(self, socket_id: str, data: bytes) -> bool:
-        node_id = self._socket_routes.get(socket_id)
+        lookup_socket_id = _normalize_guid(socket_id)
+        node_id = self._socket_routes.get(lookup_socket_id) or self._socket_routes.get(socket_id)
         if not node_id:
             return False
         data_hex = data.hex() if isinstance(data, (bytes, bytearray)) else bytes(data).hex()
@@ -770,11 +819,24 @@ class RSPClient:
         except Exception:
             return False
 
-        try:
-            reply = await self._wait_for_socket_reply(socket_id)
-        except Exception:
-            return False
-        return reply is not None and (reply.get("error") or 0) == SUCCESS
+        import time
+        deadline = time.monotonic() + DEFAULT_TIMEOUT_S
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            try:
+                reply = await self._wait_for_socket_reply(socket_id, remaining)
+            except Exception:
+                return False
+
+            status = (reply.get("error") if reply else None) or 0
+            if status == SUCCESS:
+                return True
+            if status in (SOCKET_DATA, NEW_CONNECTION, ASYNC_SOCKET):
+                continue
+            if status in (SOCKET_CLOSED, SOCKET_ERROR, INVALID_FLAGS):
+                return False
+
+        return False
 
     async def socket_recv_ex(
         self, socket_id: str, max_bytes: int = 4096, wait_ms: int = 0

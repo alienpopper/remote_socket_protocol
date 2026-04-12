@@ -663,6 +663,15 @@ def _field_present(value: dict, name: str) -> bool:
 
 def _hash_scalar(field: dict, value: Any, hasher: _MessageHasher) -> None:
     t = field["type"]
+    if value is None:
+        if t == "bool":
+            value = False
+        elif t == "string":
+            value = ""
+        elif t == "bytes":
+            value = b""
+        else:
+            value = 0
     if t == "bool":
         hasher.feed_bool(bool(value))
     elif t == "string":

@@ -40,7 +40,9 @@ class RSPSocket:
 
     async def write(self, data: bytes) -> None:
         """Send data using fire-and-forget send."""
-        await self._client.send_socket_data(self._socket_id, data)
+        sent = await self._client.socket_send(self._socket_id, data)
+        if not sent:
+            raise ConnectionError(f"socket send failed for socket {self._socket_id}")
 
     async def close(self) -> None:
         if self._closed:
