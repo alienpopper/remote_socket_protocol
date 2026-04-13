@@ -236,6 +236,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     log("Connected to RSP transport: " + cfg.rspTransport);
+    log("Node ID: " + rs->nodeId().toString());
     log("Registered as ResourceService — ready to accept SSH connections");
 
     while (!gStopRequested.load()) {

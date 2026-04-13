@@ -14,6 +14,8 @@ int main(int argc, char** argv) {
         endorsementService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cout << "endorsement service connected to " << transportSpec
               << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n';
+        std::cout << "endorsement service node ID: " << endorsementService->nodeId().toString() << '\n';
+        std::cout.flush();
         return endorsementService->run();
     } catch (const std::exception& exception) {
         std::cerr << "endorsement_service failed: " << exception.what() << '\n';
