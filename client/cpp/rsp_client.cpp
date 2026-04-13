@@ -1061,12 +1061,20 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
 
             const auto bridgeIterator = nativeSocketBridges_.find(*replySocketId);
             const auto awaitedIterator = awaitedSocketReplies_.find(*replySocketId);
-            if (bridgeIterator != nativeSocketBridges_.end() && awaitedIterator == awaitedSocketReplies_.end() &&
-                (socketReply.error() == rsp::proto::SOCKET_DATA ||
-                 socketReply.error() == rsp::proto::SOCKET_CLOSED ||
-                 socketReply.error() == rsp::proto::SOCKET_ERROR)) {
+            const bool isSocketData = socketReply.error() == rsp::proto::SOCKET_DATA;
+            const bool isDataOrClose = isSocketData ||
+                                       socketReply.error() == rsp::proto::SOCKET_CLOSED ||
+                                       socketReply.error() == rsp::proto::SOCKET_ERROR;
+            // SOCKET_DATA must always reach the bridge immediately even while we are
+            // awaiting a SUCCESS reply to a SOCKET_SEND; otherwise the bridge worker
+            // blocks in socketSend() and never drains the incoming data, causing a
+            // deadlock during full-duplex streams (e.g. SSH handshake).
+            // SOCKET_CLOSED/SOCKET_ERROR also go to the bridge, but only when there is
+            // no pending waiter; if a waiter exists we let the error wake it instead.
+            if (bridgeIterator != nativeSocketBridges_.end() && isDataOrClose &&
+                (isSocketData || awaitedIterator == awaitedSocketReplies_.end())) {
                 nativeSocketBridge = bridgeIterator->second;
-                if (socketReply.error() != rsp::proto::SOCKET_DATA) {
+                if (!isSocketData) {
                     nativeSocketBridge->remoteClosed.store(true);
                     nativeSocketBridge->stopping.store(true);
                 }

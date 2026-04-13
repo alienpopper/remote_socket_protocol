@@ -1,99 +1,158 @@
 # OpenSSH over RSP Integration
 
-This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer.
+This integration runs standard OpenSSH (`sshd`/`ssh`) over the RSP socket layer,
+providing a fully authenticated, routed SSH transport without any direct network
+path between client and server.
 
-## What this integration does
+## Architecture
 
-**Server side (`rsp_sshd.cpp`):**
-1. Connects a Node.js RSP client to RM (`rsp_transport`).
-2. Optionally requests endorsements from ES.
-3. Opens an RSP listen socket on RS (`resource_service_node_id`, `host_port`).
-4. For each incoming RSP connection, spawns `sshd -i` (inetd mode) and bridges
-   the RSP socket to sshd's stdin/stdout.
-5. Runs as a systemd service (`rsp-sshd.service`).
+```
+SSH client
+  └─ ssh -o ProxyCommand='rsp_ssh conf.json' user@host
+       └─ rsp_ssh  ──TCP──►  Resource Manager (RM)  ◄──TCP──  rsp_sshd
+                                                                  └─ fork sshd -i (per connection)
+```
 
-**Client side (`rsp_ssh.cpp`):**
-1. Reads config file specifying the RSP transport, RS node, and target `host_port`.
-2. Connects to RM and optionally acquires endorsements from ES.
-3. Opens an RSP socket to the RS node at `host_port` via `connectTCPSocket()`.
-4. Bridges `stdin ↔ socket` and `socket ↔ stdout` with two threads so that
-   `ssh` communicates with the remote sshd transparently.
-5. Used as: `ssh -o ProxyCommand='rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json' user@host`
+- **RM** (`resource_manager`) is the central router. Both `rsp_ssh` and `rsp_sshd` connect to it.
+- **ES** (`endorsement_service`) is optional but recommended: enforces that only endorsed clients may connect.
+- **`rsp_sshd`** is a `ResourceService` subclass. It registers with the RM and, for each incoming `TCP_CONNECT`, forks `sshd -i` (inetd mode) and bridges the RSP socket to sshd's stdin/stdout.
+- **`rsp_ssh`** is an SSH `ProxyCommand`. It connects to the RM, acquires endorsements, then opens an RSP socket to `rsp_sshd` and bridges `stdin ↔ socket ↔ stdout`.
 
 ## Directory contents
 
-- `modification/rsp_sshd.cpp`
-  - C++ server forwarder source: listens on RSP, spawns `sshd -i` per connection.
-- `modification/rsp_ssh.cpp`
-  - C++ ProxyCommand client source: connects via RSP and bridges stdin/stdout.
-- `example/rsp_sshd.conf.json`
-  - Server config file template (copy to `/etc/rsp-sshd/rsp_sshd.conf.json`).
-- `example/rsp_ssh.conf.json`
-  - Client config file template (copy to `/etc/rsp-ssh/rsp_ssh.conf.json`).
-- `example/rsp-sshd.service`
-  - systemd unit file for running `rsp_sshd` as a system service.
+- `rsp_sshd.cpp` — C++ ResourceService that spawns `sshd -i` per connection.
+- `rsp_ssh.cpp` — C++ ProxyCommand client; bridges stdin/stdout over RSP.
+- `example/rsp_sshd.conf.json` — Server config template.
+- `example/rsp_ssh.conf.json` — Client config template.
+- `example/rsp-sshd.service` — systemd unit file for `rsp_sshd`.
 
 ## Building
 
-From repository root:
+From the repository root:
 
 ```bash
-make rsp-sshd   # build/bin/rsp_sshd
-make rsp-ssh    # build/bin/rsp_ssh
+make rsp-sshd   # produces build/bin/rsp_sshd
+make rsp-ssh    # produces build/bin/rsp_ssh
 ```
 
-## Client usage
+The RM and ES are built as part of the normal build:
 
 ```bash
-ssh -o ProxyCommand='rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json' user@host
+make            # builds everything including resource_manager and endorsement_service
+```
+
+## Deployment
+
+### 1. Run the Resource Manager
+
+On a host reachable by both client and server:
+
+```bash
+resource_manager 0.0.0.0:7000
+```
+
+### 2. Run the Endorsement Service (optional but recommended)
+
+```bash
+endorsement_service tcp:<rm-host>:7000
+# Logs its Node ID — record it for client/server configs
+```
+
+### 3. Configure and run `rsp_sshd` on the SSH server host
+
+Create `/etc/rsp-sshd/rsp_sshd.conf.json`:
+
+```json
+{
+  "rsp_transport": "tcp:<rm-host>:7000",
+  "sshd_path": "/usr/sbin/sshd",
+  "sshd_config": "/etc/ssh/sshd_config",
+  "sshd_debug": false
+}
+```
+
+> **Note:** `sshd -i` requires readable host keys. If the system host keys are
+> root-only, generate user-accessible keys:
+> ```bash
+> mkdir -p /etc/rsp-sshd/host-keys
+> ssh-keygen -t ed25519 -f /etc/rsp-sshd/host-keys/ssh_host_ed25519_key -N ""
+> ssh-keygen -t rsa    -f /etc/rsp-sshd/host-keys/ssh_host_rsa_key     -N ""
+> ```
+> Then set `sshd_config` to a file that uses those keys (`HostKey /etc/rsp-sshd/host-keys/...`).
+
+Start `rsp_sshd` — it logs its **Node ID** on startup:
+
+```
+[rsp-sshd] Connected to RSP transport: tcp:<rm-host>:7000
+[rsp-sshd] Node ID: <uuid>
+[rsp-sshd] Registered as ResourceService — ready to accept SSH connections
+```
+
+Record the Node ID.
+
+### 4. Configure `rsp_ssh` on the client
+
+Create `~/.rsp-ssh/rsp_ssh.conf.json`:
+
+```json
+{
+  "rsp_transport": "tcp:<rm-host>:7000",
+  "resource_service_node_id": "<rsp_sshd-node-id>",
+  "endorsement_node_id": "<es-node-id>",
+  "host_port": "127.0.0.1:22",
+  "connect_timeout_ms": 5000,
+  "connect_retries": 3
+}
+```
+
+### 5. Connect
+
+```bash
+ssh -o "ProxyCommand=rsp_ssh ~/.rsp-ssh/rsp_ssh.conf.json" user@host
 ```
 
 Or add to `~/.ssh/config`:
 
 ```
 Host mylab
-    ProxyCommand rsp_ssh /etc/rsp-ssh/rsp_ssh.conf.json
+    ProxyCommand rsp_ssh ~/.rsp-ssh/rsp_ssh.conf.json
     User alice
 ```
 
 Then simply: `ssh mylab`
 
-
-
-From repository root:
+## Running as a systemd service
 
 ```bash
-bash integration/openssh/modification/fetch_and_apply.sh
+sudo cp build/bin/rsp_sshd /usr/local/bin/
+sudo mkdir -p /etc/rsp-sshd
+sudo cp integration/openssh/modification/example/rsp_sshd.conf.json /etc/rsp-sshd/
+# Edit /etc/rsp-sshd/rsp_sshd.conf.json
+
+sudo cp integration/openssh/modification/example/rsp-sshd.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now rsp-sshd
+sudo journalctl -u rsp-sshd -f   # view logs
 ```
 
-## Server config file fields
+## Config reference
+
+### `rsp_sshd.conf.json`
 
 | Field | Required | Default | Description |
 |---|---|---|---|
 | `rsp_transport` | yes | — | RM address, e.g. `tcp:host:7000` |
-| `resource_service_node_id` | yes | — | NodeID of the RSP resource service |
-| `endorsement_node_id` | no | — | NodeID of ES (skips endorsement if omitted) |
-| `host_port` | no | `127.0.0.1:22` | Virtual host:port advertised on RS |
 | `sshd_path` | no | `/usr/sbin/sshd` | Path to sshd binary |
-| `sshd_config` | no | system default | Path to sshd_config |
-| `sshd_debug` | no | `false` | Pass `-d` to sshd (verbose, single connection) |
+| `sshd_config` | no | system default | Path to sshd_config file |
+| `sshd_debug` | no | `false` | Pass `-d` to sshd (verbose; single connection only) |
 
-## Deploying the systemd service
+### `rsp_ssh.conf.json`
 
-```bash
-# Install config
-sudo mkdir -p /etc/rsp-sshd
-sudo cp example/rsp_sshd.conf.json /etc/rsp-sshd/rsp_sshd.conf.json
-# Edit /etc/rsp-sshd/rsp_sshd.conf.json with your node IDs
-
-# Install service (adjust ExecStart paths in rsp-sshd.service first)
-sudo cp example/rsp-sshd.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now rsp-sshd
-```
-
-## Validation command
-
-```bash
-make test-openssh
-```
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `rsp_transport` | yes | — | RM address, e.g. `tcp:host:7000` |
+| `resource_service_node_id` | yes | — | Node ID logged by `rsp_sshd` on startup |
+| `endorsement_node_id` | no | — | ES Node ID (endorsement skipped if omitted) |
+| `host_port` | no | `127.0.0.1:22` | Host:port passed to `rsp_sshd` for the connection |
+| `connect_timeout_ms` | no | `5000` | Per-attempt connection timeout |
+| `connect_retries` | no | `0` | Number of retry attempts |
