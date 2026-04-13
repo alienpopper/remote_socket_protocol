@@ -37,9 +37,17 @@ using nlohmann::json;
 namespace {
 
 std::atomic<bool> gDone{false};
+std::atomic<int>  gSocketFd{-1};
 
 void signalHandler(int) {
     gDone.store(true);
+    // Interrupt blocking reads in the pump threads by closing the socket.
+    // This makes read(socketFd) return an error, which causes both pump
+    // threads to notice gDone and exit.
+    const int fd = gSocketFd.exchange(-1);
+    if (fd != -1) {
+        ::shutdown(fd, SHUT_RDWR);
+    }
 }
 
 struct Config {
@@ -133,12 +141,14 @@ void pumpFd(int srcFd, int dstFd, const std::string& label) {
     }
 
     gDone.store(true);
-    // Signal the other direction by shutting down the relevant descriptor.
-    // For the stdin→socket direction: closing dstFd (socket write end)
-    // causes the socket→stdout thread to see EOF on the socket.
-    // For the socket→stdout direction: closing dstFd (stdout) causes ssh
-    // to terminate.
-    ::shutdown(dstFd, SHUT_WR);
+    // When stdin→socket finishes: signal EOF to sshd so the socket→stdout
+    // thread sees the connection close.
+    // When socket→stdout finishes: close/shutdown the socket so stdinToSocket
+    // unblocks (gSocketFd.exchange ensures we only close once).
+    const int sockFd = gSocketFd.exchange(-1);
+    if (sockFd != -1) {
+        ::shutdown(sockFd, SHUT_RDWR);
+    }
     (void)label;
 }
 
@@ -193,6 +203,7 @@ int main(int argc, char* argv[]) {
     log("RSP socket connected to " + cfg.hostPort);
 
     const int fd = static_cast<int>(*sockFd);
+    gSocketFd.store(fd);
 
     // Two threads bridge the two directions concurrently.
     // Either direction finishing sets gDone and unblocks the other.
@@ -207,7 +218,11 @@ int main(int argc, char* argv[]) {
     stdinToSocket.join();
     socketToStdout.join();
 
-    rsp::os::closeSocket(*sockFd);
+    // Close the socket if not already closed by the signal handler.
+    const int remainingFd = gSocketFd.exchange(-1);
+    if (remainingFd != -1) {
+        rsp::os::closeSocket(static_cast<rsp::os::SocketHandle>(remainingFd));
+    }
     log("Connection closed");
     return 0;
 }
