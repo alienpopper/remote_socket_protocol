@@ -30,6 +30,7 @@ public:
 private:
     SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg);
 
+    rsp::proto::ResourceAdvertisement buildResourceAdvertisement() const override;
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
     bool handleConnectSshd(const rsp::proto::RSPMessage& message);
 

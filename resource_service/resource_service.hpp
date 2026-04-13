@@ -27,8 +27,9 @@ protected:
     static rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId);
     static void fillProtoAddress(const rsp::os::IPAddress& address, rsp::proto::Address* protoAddress);
 
+    virtual rsp::proto::ResourceAdvertisement buildResourceAdvertisement() const = 0;
+
 private:
-    rsp::proto::ResourceAdvertisement buildResourceAdvertisement() const;
     bool sendResourceAdvertisement(ClientConnectionID connectionId) const;
 };
 

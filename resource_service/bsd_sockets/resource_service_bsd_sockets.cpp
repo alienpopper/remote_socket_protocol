@@ -65,6 +65,27 @@ BsdSocketsResourceService::~BsdSocketsResourceService() {
     closeAllManagedSockets();
 }
 
+rsp::proto::ResourceAdvertisement BsdSocketsResourceService::buildResourceAdvertisement() const {
+    rsp::proto::ResourceAdvertisement advertisement;
+    const auto addresses = rsp::os::listNonLocalAddresses();
+
+    auto* connectRecord = advertisement.add_records();
+    auto* tcpConnect = connectRecord->mutable_tcp_connect();
+    for (const auto& address : addresses) {
+        fillProtoAddress(address, tcpConnect->add_source_addresses());
+    }
+
+    auto* listenRecord = advertisement.add_records();
+    auto* tcpListen = listenRecord->mutable_tcp_listen();
+    for (const auto& address : addresses) {
+        fillProtoAddress(address, tcpListen->add_listen_address());
+    }
+    tcpListen->mutable_allowed_range()->set_start_port(0);
+    tcpListen->mutable_allowed_range()->set_end_port(0);
+
+    return advertisement;
+}
+
 bool BsdSocketsResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_connect_tcp_request()) {
         return connectQueue_ != nullptr && connectQueue_->push(message);

@@ -13,3 +13,6 @@ message ConnectSshd {
     optional bool use_socket = 9;
     optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
 }
+
+
+/*TODO: when we implement namespace, the send/recv/close messages will appear here*/

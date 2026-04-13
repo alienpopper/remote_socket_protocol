@@ -47,27 +47,6 @@ void ResourceService::fillProtoAddress(const rsp::os::IPAddress& address, rsp::p
     protoAddress->set_ipv6(address.ipv6.data(), address.ipv6.size());
 }
 
-rsp::proto::ResourceAdvertisement ResourceService::buildResourceAdvertisement() const {
-    rsp::proto::ResourceAdvertisement advertisement;
-    const auto addresses = rsp::os::listNonLocalAddresses();
-
-    auto* connectRecord = advertisement.add_records();
-    auto* tcpConnect = connectRecord->mutable_tcp_connect();
-    for (const auto& address : addresses) {
-        fillProtoAddress(address, tcpConnect->add_source_addresses());
-    }
-
-    auto* listenRecord = advertisement.add_records();
-    auto* tcpListen = listenRecord->mutable_tcp_listen();
-    for (const auto& address : addresses) {
-        fillProtoAddress(address, tcpListen->add_listen_address());
-    }
-    tcpListen->mutable_allowed_range()->set_start_port(0);
-    tcpListen->mutable_allowed_range()->set_end_port(0);
-
-    return advertisement;
-}
-
 bool ResourceService::sendResourceAdvertisement(ClientConnectionID connectionId) const {
     const auto destinationNodeId = peerNodeID(connectionId);
     if (!destinationNodeId.has_value()) {

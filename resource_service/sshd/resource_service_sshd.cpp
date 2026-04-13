@@ -120,6 +120,16 @@ std::shared_ptr<SshdResourceService> SshdResourceService::create(const SshdConfi
 SshdResourceService::SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg)
     : BsdSocketsResourceService(std::move(keyPair)), cfg_(cfg) {}
 
+rsp::proto::ResourceAdvertisement SshdResourceService::buildResourceAdvertisement() const {
+    rsp::proto::ResourceAdvertisement advertisement;
+    auto* record = advertisement.add_records();
+    auto* sshd = record->mutable_sshd();
+    if (!cfg_.sshdConfig.empty()) {
+        sshd->set_server_name(cfg_.sshdConfig);
+    }
+    return advertisement;
+}
+
 bool SshdResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_connect_sshd()) {
         return handleConnectSshd(message);

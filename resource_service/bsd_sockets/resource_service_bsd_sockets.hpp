@@ -31,6 +31,8 @@ public:
 protected:
     explicit BsdSocketsResourceService(KeyPair keyPair);
 
+    rsp::proto::ResourceAdvertisement buildResourceAdvertisement() const override;
+
     virtual bool handleListenTCPRequest(const rsp::proto::RSPMessage& message);
 
     struct TCPConnectionResult {

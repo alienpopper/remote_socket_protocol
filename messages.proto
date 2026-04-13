@@ -98,10 +98,17 @@ message ResourceTCPListen{
     PortRange allowed_range = 3;
 }
 
+message ResourceSSHD{
+    optional NodeId node_id = 1;
+    optional string server_name = 2;
+}
+
+
 message ResourceRecord{
     oneof resource_type {
         ResourceTCPConnect tcp_connect = 1;
         ResourceTCPListen tcp_listen = 2;
+        ResourceSSHD sshd = 3;
     }
 }
 
