@@ -1,6 +1,6 @@
 #define RSPCLIENT_STATIC
 
-#include "resource_service/resource_service.hpp"
+#include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
@@ -93,7 +93,7 @@ void testResourceServiceConnectsToResourceManagerUsingJsonEncoding() {
     require(serverTransport->listen("rm-json-test"), "resource manager listener should start for JSON test");
     const std::string transportSpec = "memory:rm-json-test";
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     const auto connectionId = resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kJsonHandshakeEncoding);
 
     require(resourceService->hasConnection(connectionId), "resource service should track the JSON RM connection");

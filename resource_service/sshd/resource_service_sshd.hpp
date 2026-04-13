@@ -1,6 +1,6 @@
 #pragma once
 
-#include "resource_service/resource_service.hpp"
+#include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include <string>
 
@@ -23,7 +23,7 @@ SshdConfig loadSshdConfig(const std::string& path);
 // SshdResourceService
 // ---------------------------------------------------------------------------
 
-class SshdResourceService : public ResourceService {
+class SshdResourceService : public BsdSocketsResourceService {
 public:
     static std::shared_ptr<SshdResourceService> create(const SshdConfig& cfg);
 

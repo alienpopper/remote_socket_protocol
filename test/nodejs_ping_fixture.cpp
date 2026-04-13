@@ -5,7 +5,7 @@
 #include "common/transport/transport_tcp.hpp"
 #include "endorsement_service/endorsement_service.hpp"
 #include "resource_manager/resource_manager.hpp"
-#include "resource_service/resource_service.hpp"
+#include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -78,7 +78,7 @@ int main() {
 
         rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
 
         const std::string transportSpec = std::string("tcp:127.0.0.1:") + std::to_string(serverTransport->listenedPort());
 

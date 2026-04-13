@@ -12,10 +12,6 @@ message NodeId {
   bytes value = 1; //uuid
 }
 
-message SocketID {
-    bytes value = 1; //uuid
-}
-
 message EndorsementType {
     bytes value = 1; //uuid
 }
@@ -143,82 +139,7 @@ message PingReply {
     DateTime time_replied = 4;
 }
 
-enum SOCKET_STATUS {
-  SUCCESS = 0;
-    CONNECT_REFUSED = 1;
-    CONNECT_TIMEOUT = 2;
-    SOCKET_CLOSED = 3;
-    SOCKET_DATA = 4;
-    SOCKET_ERROR = 5; //error reported from the underlying OS socket
-    NEW_CONNECTION = 6;
-    ASYNC_SOCKET = 7; //synchronous operation attempted on an async socket
-    NODEID_MISMATCH = 9;
-    INVALID_FLAGS = 10;
-    SOCKET_IN_USE = 11;
-    TIMED_OUT = 12;
-}
-
-message SocketReply {
-    SocketID socket_id = 1;
-    SOCKET_STATUS error = 2;
-    optional string message = 3;
-    optional string new_socket_remote_address = 4;
-    optional SocketID new_socket_id = 5;  //RS chosen if async, client chosen if blocking
-    optional int32 socket_error_code = 6; //error code reported from the underlying OS socket
-    optional bytes data = 7;
-}
-
-
-message ConnectTCPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional bool reuse_addr = 3;
-    optional uint32 source_port = 4;
-    optional uint32 timeout_ms = 5;
-    optional uint32 retries = 6; //maximum 5
-    optional uint32 retry_ms = 7; //maximum 5 seconds
-    optional bool async_data = 8;
-    optional bool use_socket = 9;
-    optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
-}
-
-message ListenTCPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional bool reuse_addr = 3;
-    optional uint32 timeout_ms = 4;
-    optional bool async_accept = 5;
-    optional bool share_listening_socket = 6; //different nodeIDs are allowed to use this socket
-    optional bool share_child_sockets = 7; //only valid if async_accept
-    optional bool children_use_socket = 8; //only valid if async_accept
-    optional bool children_async_data = 9; //only valid if async_accept
-}
-
-message AcceptTCP {
-    SocketID listen_socket_number = 1;
-    optional SocketID new_socket_number = 2;  //if not provided, RS will choose one
-    optional uint32 timeout_ms = 3;
-    optional bool share_child_socket = 4;
-    optional bool child_use_socket = 5;
-  optional bool child_async_data = 6;
-}
-
-message SocketSend { 
-   SocketID socket_number = 1;
-   uint64 index = 3; //incrementing for out-of-order and missing
-   bytes data = 2;
-}
-
-message SocketRecv {
-    SocketID socket_number = 1;
-    uint64 index = 3; //incrementing for out-of-order and missing
-    optional uint32 max_bytes = 2;
-    optional uint32 wait_ms = 4; //wait up to ms for max_bytes
-}
-
-message SocketClose {
-    SocketID socket_number = 1;
-}
+import "resource_service/bsd_sockets/bsd_sockets.proto";
 
 
 /****Endorsement Server Messages ****/

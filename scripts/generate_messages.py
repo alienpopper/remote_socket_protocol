@@ -197,6 +197,14 @@ def _remove_spans(text, spans):
 def parse_proto(proto_path):
     with open(proto_path, "r", encoding="utf-8") as f:
         text = f.read()
+    # Resolve import directives relative to the proto file's parent directory.
+    import os
+    base_dir = os.path.dirname(proto_path) or "."
+    for m in re.finditer(r'import\s+"([^"]+)"\s*;', text):
+        import_path = os.path.join(base_dir, m.group(1))
+        if os.path.isfile(import_path):
+            with open(import_path, "r", encoding="utf-8") as f2:
+                text += "\n" + f2.read()
     text = strip_comments(text)
     enums = parse_enums(text)
     messages = parse_messages(text, enums)

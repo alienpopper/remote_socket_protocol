@@ -37,7 +37,10 @@ RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
 RSPFULLCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient_full.a
 PROTOBUF_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/messages.pb.cc
 PROTOBUF_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/messages.pb.h
-PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o
+BSD_SOCKETS_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.pb.cc
+BSD_SOCKETS_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.pb.h
+BSD_SOCKETS_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/bsd_sockets/bsd_sockets.pb.o
+PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT)
 
 GENERATE_MESSAGES_SCRIPT := scripts/generate_messages.py
 NODEJS_MESSAGES_JS := client/nodejs/messages.js
@@ -99,6 +102,7 @@ FULL_CLIENT_LIBRARY_SOURCES := \
 RESOURCE_SERVICE_SOURCES := \
 	$(FULL_CLIENT_LIBRARY_SOURCES) \
 	resource_service/resource_service.cpp \
+	resource_service/bsd_sockets/resource_service_bsd_sockets.cpp \
 	resource_service/resource_service_main.cpp
 
 ENDORSEMENT_SERVICE_SOURCES := \
@@ -160,7 +164,7 @@ BASE_TYPES_TEST_OBJECTS := \
 	$(OBJ_DIR)/test/base_types_test.o
 MESSAGE_QUEUE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq.o \
-	$(OBJ_DIR)/build/gen/messages.pb.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/test/message_queue_test.o
 MQ_ASCII_HANDSHAKE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
@@ -292,6 +296,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/test/resource_service_test.o
 
 RESOURCE_SERVICE_JSON_TEST_OBJECTS := \
@@ -317,6 +322,7 @@ RESOURCE_SERVICE_JSON_TEST_OBJECTS := \
 	$(OBJ_DIR)/resource_manager/resource_manager.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/test/resource_service_json_test.o
 
 ENDORSEMENT_SERVICE_TEST_OBJECTS := \
@@ -369,6 +375,7 @@ NODEJS_PING_FIXTURE_OBJECTS := \
 	$(OBJ_DIR)/resource_manager/resource_manager.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/nodejs_ping_fixture.o
 
@@ -393,6 +400,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/test/transport_memory_test.o
 
 RSP_ENDORSEMENT_TOOL_OBJECTS := \
@@ -500,6 +508,7 @@ $(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_L
 RSP_SSHD_OBJECTS := \
 	$(FULL_CLIENT_LIBRARY_OBJECTS) \
 	$(OBJ_DIR)/resource_service/resource_service.o \
+	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o
 
 $(RSP_SSHD_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_SSHD_OBJECTS)
@@ -581,15 +590,23 @@ test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(P
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --cpp_out=$(PROTOBUF_GENERATED_DIR) $<
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
+$(BSD_SOCKETS_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_GENERATED_HEADER): $(BSD_SOCKETS_GENERATED_SOURCE)
+
 $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROTOBUF_GENERATED_SOURCE) -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROTOBUF_GENERATED_SOURCE) -o $(OBJ_DIR)/build/gen/messages.pb.o
+
+$(BSD_SOCKETS_GENERATED_OBJECT): $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_GENERATED_HEADER)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(BSD_SOCKETS_GENERATED_SOURCE) -o $@
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 

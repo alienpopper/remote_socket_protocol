@@ -2,7 +2,7 @@
 
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
-#include "resource_service/resource_service.hpp"
+#include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
@@ -384,7 +384,7 @@ void testResourceServiceConnectsToResourceManager() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     const auto connectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
@@ -479,7 +479,7 @@ void testClientExchangesTcpDataThroughResourceService() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
@@ -538,7 +538,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClientMessage::create();
 
     const auto resourceServiceConnectionId =
@@ -632,7 +632,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto resourceService = rsp::resource_service::ResourceService::create();
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create();
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
@@ -707,7 +707,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         const auto connectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
@@ -778,7 +778,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
@@ -853,7 +853,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-    auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
     auto client = rsp::client::RSPClient::create();
 
     const auto resourceServiceConnectionId =
@@ -907,7 +907,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     const std::string transportSpec = "memory:" + memoryChannel;
         const std::string listenerEndpoint = findAvailableEndpoint(35300, 35400);
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
@@ -966,7 +966,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     const std::string transportSpec = "memory:" + memoryChannel;
         const std::string listenerEndpoint = findAvailableEndpoint(35400, 35500);
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
@@ -1051,7 +1051,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     const std::string transportSpec = "memory:" + memoryChannel;
         const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
@@ -1109,7 +1109,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         auto ownerClient = rsp::client::RSPClient::create();
         auto otherClient = rsp::client::RSPClient::create();
 
@@ -1202,7 +1202,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     const std::string transportSpec = "memory:" + memoryChannel;
         const std::string listenerEndpoint = findAvailableEndpoint(35600, 35700);
 
-        auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+        auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
         auto client = rsp::client::RSPClient::create();
 
         const auto resourceServiceConnectionId =
@@ -1265,7 +1265,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     require(serverTransport->listen(memoryChannel), "memory transport listener should start");
     const std::string transportSpec = "memory:" + memoryChannel;
 
-            auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+            auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
             auto client = rsp::client::RSPClient::create();
 
             const auto resourceServiceConnectionId =
@@ -1309,7 +1309,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
     const std::string transportSpec = "memory:" + memoryChannel;
             const std::string listenerEndpoint = findAvailableEndpoint(35500, 35600);
 
-            auto resourceService = rsp::resource_service::ResourceService::create(std::move(resourceServiceKeyPair));
+            auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
             auto client = rsp::client::RSPClient::create();
 
             const auto resourceServiceConnectionId =

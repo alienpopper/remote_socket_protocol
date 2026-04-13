@@ -30,7 +30,10 @@ RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
 RSPCLIENT_SHARED_TARGET = $(BIN_DIR)\rspclient.dll
 PROTOBUF_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\messages.pb.cc
 PROTOBUF_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\messages.pb.h
-PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj
+BSD_SOCKETS_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets.pb.cc
+BSD_SOCKETS_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets.pb.h
+BSD_SOCKETS_GENERATED_OBJECT = $(OBJ_DIR)\bsd_sockets.pb.obj
+PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj $(BSD_SOCKETS_GENERATED_OBJECT)
 GENERATE_MESSAGES_SCRIPT = scripts\generate_messages.py
 NODEJS_MESSAGES_JS = client\nodejs\messages.js
 PYTHON_MESSAGES_PY = client\python\messages.py
@@ -95,7 +98,7 @@ BASE_TYPES_TEST_OBJECTS = \
 
 MESSAGE_QUEUE_TEST_OBJECTS = \
 	$(OBJ_DIR)\mq.obj \
-	$(OBJ_DIR)\messages.pb.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\message_queue_test.obj
 
 MQ_ASCII_HANDSHAKE_TEST_OBJECTS = \
@@ -235,6 +238,7 @@ RESOURCE_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\resource_service.obj \
+	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_main.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -285,6 +289,7 @@ RESOURCE_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\resource_service.obj \
+	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_test.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -310,6 +315,7 @@ RESOURCE_SERVICE_JSON_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_manager.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\resource_service.obj \
+	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_json_test.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -364,6 +370,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS = \
 	$(OBJ_DIR)\rsp_client.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\resource_service.obj \
+	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\transport_memory_test.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
@@ -478,11 +485,18 @@ $(ENDORSEMENT_TEXT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LI
 $(MESSAGE_HASH_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MESSAGE_HASH_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(MESSAGE_HASH_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(MESSAGE_HASH_TEST_TARGET)
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service\bsd_sockets\bsd_sockets.proto $(PROTOBUF_PROTOC)
 	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=. --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto
+	$(PROTOBUF_PROTOC) --proto_path=. --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service\bsd_sockets\bsd_sockets.proto
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_GENERATED_HEADER): $(BSD_SOCKETS_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_GENERATED_OBJECT): $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c $(BSD_SOCKETS_GENERATED_SOURCE) /Fo$(BSD_SOCKETS_GENERATED_OBJECT)
 
 $(BASE_TYPES_TEST_TARGET): dirs $(BASE_TYPES_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(BASE_TYPES_TEST_TARGET)
@@ -648,10 +662,13 @@ $(OBJ_DIR)\resource_manager.obj: resource_manager\resource_manager.cpp resource_
 $(OBJ_DIR)\resource_manager_main.obj: resource_manager\resource_manager_main.cpp resource_manager\resource_manager.hpp common\transport\transport_tcp.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_manager\resource_manager_main.cpp /Fo$(OBJ_DIR)\resource_manager_main.obj
 
-$(OBJ_DIR)\resource_service.obj: resource_service\resource_service.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service.obj: resource_service\resource_service.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\resource_service.cpp /Fo$(OBJ_DIR)\resource_service.obj
 
-$(OBJ_DIR)\resource_service_main.obj: resource_service\resource_service_main.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq_ascii_handshake.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service_bsd_sockets.obj: resource_service\bsd_sockets\resource_service_bsd_sockets.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp common\message_queue\mq.hpp common\transport\transport_tcp.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\bsd_sockets\resource_service_bsd_sockets.cpp /Fo$(OBJ_DIR)\resource_service_bsd_sockets.obj
+
+$(OBJ_DIR)\resource_service_main.obj: resource_service\resource_service_main.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq_ascii_handshake.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\resource_service_main.cpp /Fo$(OBJ_DIR)\resource_service_main.obj
 
 $(OBJ_DIR)\os_random.obj: $(OS_SOURCE) $(OS_HEADER)
@@ -696,10 +713,10 @@ $(OBJ_DIR)\node_test.obj: test\node_test.cpp common\node.hpp common\message_queu
 $(OBJ_DIR)\client_test.obj: test\client_test.cpp client\cpp\rsp_client.hpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\client_test.cpp /Fo$(OBJ_DIR)\client_test.obj
 
-$(OBJ_DIR)\resource_service_test.obj: test\resource_service_test.cpp client\cpp\rsp_client.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service_test.obj: test\resource_service_test.cpp client\cpp\rsp_client.hpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\resource_service_test.cpp /Fo$(OBJ_DIR)\resource_service_test.obj
 
-$(OBJ_DIR)\resource_service_json_test.obj: test\resource_service_json_test.cpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\resource_service_json_test.obj: test\resource_service_json_test.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\resource_service_json_test.cpp /Fo$(OBJ_DIR)\resource_service_json_test.obj
 
 $(OBJ_DIR)\endorsement_service.obj: endorsement_service\endorsement_service.cpp endorsement_service\endorsement_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
@@ -711,7 +728,7 @@ $(OBJ_DIR)\endorsement_service_main.obj: endorsement_service\endorsement_service
 $(OBJ_DIR)\endorsement_service_test.obj: test\endorsement_service_test.cpp client\cpp\rsp_client.hpp endorsement_service\endorsement_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\endorsement_service_test.cpp /Fo$(OBJ_DIR)\endorsement_service_test.obj
 
-$(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\transport_memory_test.cpp /Fo$(OBJ_DIR)\transport_memory_test.obj
 
 clean:

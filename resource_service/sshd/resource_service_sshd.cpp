@@ -118,9 +118,9 @@ std::shared_ptr<SshdResourceService> SshdResourceService::create(const SshdConfi
 }
 
 SshdResourceService::SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg)
-    : ResourceService(std::move(keyPair)), cfg_(cfg) {}
+    : BsdSocketsResourceService(std::move(keyPair)), cfg_(cfg) {}
 
-ResourceService::TCPConnectionResult SshdResourceService::createTCPConnection(
+BsdSocketsResourceService::TCPConnectionResult SshdResourceService::createTCPConnection(
     const std::string& /*hostPort*/,
     uint32_t /*totalAttempts*/,
     uint32_t /*retryDelayMs*/) {

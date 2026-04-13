@@ -208,8 +208,8 @@ void testRoundTripAllOf() {
     });
     const std::string text = rsp::erd_text::toString(tree);
     require(text ==
-                "ALLOF(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111), TRUE, "
-                "ENDORSEMENT_SIGNER(22222222-2222-2222-2222-222222222222))",
+                "ALLOF(ENDORSEMENT(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111)), TRUE, "
+                "ENDORSEMENT(ENDORSEMENT_SIGNER(22222222-2222-2222-2222-222222222222)))",
             "ALLOF text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
@@ -226,7 +226,7 @@ void testRoundTripAnyOf() {
     });
     const std::string text = rsp::erd_text::toString(tree);
     require(text ==
-                "ANYOF(FALSE, ENDORSEMENT_VALUE(cafebabe), ENDORSEMENT_TYPE(33333333-3333-3333-3333-333333333333))",
+                "ANYOF(FALSE, ENDORSEMENT(ENDORSEMENT_VALUE(cafebabe)), ENDORSEMENT(ENDORSEMENT_TYPE(33333333-3333-3333-3333-333333333333)))",
             "ANYOF text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);

@@ -3,7 +3,7 @@
 #include "common/transport/transport_memory.hpp"
 #include "messages.pb.h"
 #include "resource_manager/resource_manager.hpp"
-#include "resource_service/resource_service.hpp"
+#include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include <chrono>
 #include <cstring>
@@ -134,7 +134,7 @@ void testMemoryTransportResourceServicePing() {
             "RM memory transport should listen for in-process connections");
 
     // Connect RS to RM via memory transport.
-    auto resourceService = rsp::resource_service::ResourceService::create();
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create();
     const auto rsConnectionId =
         resourceService->connectToResourceManager("memory:mem-rs-rm-channel", rsp::message_queue::kAsciiHandshakeEncoding);
     require(resourceService->hasConnections(), "RS should connect to RM via memory transport");
