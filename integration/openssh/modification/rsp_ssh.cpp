@@ -29,6 +29,7 @@
 #include <string>
 #include <thread>
 
+#include <sys/socket.h>
 #include <unistd.h>
 
 using nlohmann::json;
@@ -90,8 +91,16 @@ bool acquireEndorsement(rsp::client::RSPClient& client,
                         const rsp::GUID& etype,
                         const rsp::GUID& evalue,
                         const std::string& label) {
+    // Convert GUID to Buffer for the endorsement value
+    const uint64_t high = evalue.high();
+    const uint64_t low = evalue.low();
+    uint8_t bytes[16];
+    std::memcpy(bytes, &high, 8);
+    std::memcpy(bytes + 8, &low, 8);
+    const rsp::Buffer evalueBuffer(bytes, 16);
+
     for (int attempt = 0; attempt < 3; ++attempt) {
-        auto reply = client.beginEndorsementRequest(esNodeId, etype, evalue);
+        auto reply = client.beginEndorsementRequest(esNodeId, etype, evalueBuffer);
         if (reply.has_value() && reply->status() == rsp::proto::ENDORSEMENT_SUCCESS) {
             return true;
         }
