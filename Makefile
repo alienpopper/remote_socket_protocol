@@ -500,7 +500,7 @@ $(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_L
 RSP_SSHD_OBJECTS := \
 	$(FULL_CLIENT_LIBRARY_OBJECTS) \
 	$(OBJ_DIR)/resource_service/resource_service.o \
-	$(OBJ_DIR)/integration/openssh/modification/rsp_sshd.o
+	$(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o
 
 $(RSP_SSHD_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_SSHD_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RSP_SSHD_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
