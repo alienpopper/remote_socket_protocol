@@ -1,20 +1,34 @@
 # Python HTTP Server over RSP Integration
 
-This directory mirrors the layout used by `integration/nodejs_express`.
+This integration runs a Python HTTP server over the RSP socket layer and is
+validated by the repository integration harness.
 
-## Structure
+## What is implemented
 
-- `working/`
-  - Scratch area for a generated/assembled runnable app.
-- `modification/README.md`
-  - This documentation.
-- `modification/fetch_and_apply.sh`
-  - Script placeholder to fetch source and apply patches.
+- `working/app.py`
+  - Python HTTP server that uses `client/python/rsp_client.py` and
+    `client/python/rsp_net.py` to listen via RSP.
+- `test/python_http_server_integration.js`
+  - End-to-end harness that starts fixture services and validates HTTP responses
+    through RM/RS.
+- `Makefile` target `test-python-http-server`
+  - Canonical command for this integration path.
+
+## Directory contents
+
 - `modification/example/app.py`
-  - Example Python HTTP server entrypoint.
+  - Reference copy of the integrated Python app.
+- `modification/fetch_and_apply.sh`
+  - Placeholder fetch/apply script (packaging workflow not finalized yet).
 - `modification/patches/`
-  - Patch files applied by the fetch script.
+  - Placeholder patch files for future reproducible packaging flow.
 
-## Notes
+## Validation
 
-This is scaffold-only for now. Fill in the fetch/apply script and patch files when implementing the Python HTTP server integration path.
+From repository root:
+
+```bash
+make test-python-http-server
+```
+
+Expected result: `python_http_server_integration passed` and clean teardown.

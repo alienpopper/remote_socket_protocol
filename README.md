@@ -5,6 +5,11 @@ designed for debugging, pentesting, and hardware testing across isolated network
 It replaces ad-hoc tools like SSH tunnels, VPNs, and netcat with a stable,
 authenticated, routable socket layer.
 
+## As-Built Status
+
+This repository currently ships working implementations of RM, RS, ES, and multiple
+clients/integrations.
+
 ## Core Concepts
 
 | Component | Role |
@@ -13,9 +18,9 @@ authenticated, routable socket layer.
 | **RS** (Resource Service) | Provides socket access (e.g. SSH, HTTP) to clients |
 | **CS** (Client Service) | Consumes remote sockets (client-side applications) |
 | **ES** (Endorsement Service) | Issues cryptographic endorsements controlling access |
-| **NS** (Name Service) | Maps human-readable names to Node IDs |
+| **NS** (Name Service) | Maps human-readable names to Node IDs (**as-designed, not implemented yet**) |
 
-See [`architecture.md`](architecture.md) for the full design.
+See [architecture.md](architecture.md) for implementation details and design notes.
 
 ## Integrations
 
@@ -30,14 +35,20 @@ Run `ssh` through RSP with no direct network path between client and server.
 ssh -o "ProxyCommand=rsp_ssh ~/.rsp-ssh/rsp_ssh.conf.json" user@host
 ```
 
-See [`integration/openssh/modification/README.md`](integration/openssh/modification/README.md)
+See [integration/openssh/modification/README.md](integration/openssh/modification/README.md)
 for full build, deployment, and configuration instructions.
 
 ### Node.js Express over RSP
 
 Serve an Express HTTP app over RSP sockets.
 
-See [`integration/nodejs_express/modification/README.md`](integration/nodejs_express/modification/README.md).
+See [integration/nodejs_express/modification/README.md](integration/nodejs_express/modification/README.md).
+
+### Python HTTP Server over RSP
+
+Serve a Python HTTP server over RSP sockets using the Python client.
+
+See [integration/python_http_server/modification/README.md](integration/python_http_server/modification/README.md).
 
 ## Building
 
@@ -47,6 +58,17 @@ Dependencies: cmake 3.22+, protobuf, boringssl (fetched via `third_party/`).
 make            # build everything
 make rsp-sshd   # build/bin/rsp_sshd only
 make rsp-ssh    # build/bin/rsp_ssh only
+```
+
+## Validation Targets
+
+```bash
+make test
+make test-nodejs-client
+make test-nodejs-client-reconnect
+make test-nodejs-express
+make test-nodejs-express-stress
+make test-python-http-server
 ```
 
 ## License
