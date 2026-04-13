@@ -69,13 +69,13 @@ rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeEqualsTree(const rsp::GUID&
     for (int shift = 56; shift >= 0; shift -= 8) {
         value.push_back(static_cast<char>((endorsementType.low() >> shift) & 0xFFULL));
     }
-    tree.mutable_endorsement_type_equals()->mutable_type()->set_value(value);
+    tree.mutable_endorsement()->mutable_tree()->mutable_type_equals()->mutable_type()->set_value(value);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementValueEqualsTree(const std::string& value) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_value_equals()->set_value(value);
+    tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value(value);
     return tree;
 }
 
@@ -89,7 +89,7 @@ rsp::proto::ERDAbstractSyntaxTree makeMessageDestinationTree(const rsp::NodeID& 
     for (int shift = 56; shift >= 0; shift -= 8) {
         value.push_back(static_cast<char>((nodeId.low() >> shift) & 0xFFULL));
     }
-    tree.mutable_message_destination()->mutable_destination()->set_value(value);
+    tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination()->set_value(value);
     return tree;
 }
 
@@ -103,7 +103,7 @@ rsp::proto::ERDAbstractSyntaxTree makeMessageSourceTree(const rsp::NodeID& nodeI
     for (int shift = 56; shift >= 0; shift -= 8) {
         value.push_back(static_cast<char>((nodeId.low() >> shift) & 0xFFULL));
     }
-    tree.mutable_message_source()->mutable_source()->set_value(value);
+    tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(value);
     return tree;
 }
 

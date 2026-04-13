@@ -278,25 +278,6 @@ message ERDASTAnyOf {
     repeated ERDAbstractSyntaxTree terms = 1;
 }
 
-message ERDASTEndorsementTypeEquals {
-    EndorsementType type = 1;
-}
-
-message ERDASTEndorsementValueEquals {
-    bytes value = 1;
-}
-
-message ERDASTEndorsementSignerEquals {
-    NodeId signer = 1;
-}
-
-message ERDASTMessageDestination {
-    NodeId destination = 1;
-}
-
-message ERDASTMessageSource {
-    NodeId source = 1;
-}
 
 message ERDASTTrue {
 }
@@ -304,21 +285,124 @@ message ERDASTTrue {
 message ERDASTFalse {
 }
 
-//TODO fix this so that we can't match the type from one and the value from another.  This scheme is only for development
+message ERDASTEndEquals {
+    ERDASTEndTree lhs = 1;
+    ERDASTEndTree rhs = 2;
+}
+
+message ERDASTEndAnd {
+    ERDASTEndTree lhs = 1;
+    ERDASTEndTree rhs = 2;
+}
+
+message ERDASTEndOr {
+    ERDASTEndTree lhs = 1;
+    ERDASTEndTree rhs = 2;
+}
+
+message ERDASTEndAllOf {
+    repeated ERDASTEndTree terms = 1;
+}
+
+message ERDASTEndAnyOf {
+    repeated ERDASTEndTree terms = 1;
+}
+
+
+message ERDASTEndTypeEquals {
+    EndorsementType type = 1;
+}
+
+message ERDASTEndValueEquals {
+    bytes value = 1;
+}
+
+message ERDASTEndSignerEquals {
+    NodeId signer = 1;
+}
+
+message ERDASTEndTree {
+    oneof node_type{
+        ERDASTEndEquals equals = 1;
+        ERDASTEndAnd and = 2;
+        ERDASTEndOr or = 3;
+        ERDASTTrue true_value = 9;
+        ERDASTFalse false_value = 10;
+        ERDASTEndAllOf all_of = 11;
+        ERDASTEndAnyOf any_of = 12;
+        ERDASTEndTypeEquals type_equals = 100;
+        ERDASTEndValueEquals value_equals = 101;
+        ERDASTEndSignerEquals signer_equals = 102;
+    }
+}
+
+//This Test node should stop mixing and matching values/types/etc across endorsements
+message ERDASTEndorsement {  
+    ERDASTEndTree tree = 1;
+}
+
+
+message ERDASTMesEquals {
+    ERDASTMessageTree lhs = 1;
+    ERDASTMessageTree rhs = 2;
+}
+
+message ERDASTMesAnd {
+    ERDASTMessageTree lhs = 1;
+    ERDASTMessageTree rhs = 2;
+}
+
+message ERDASTMesOr {
+    ERDASTMessageTree lhs = 1;
+    ERDASTMessageTree rhs = 2;
+}
+
+message ERDASTMesAllOf {
+    repeated ERDASTMessageTree terms = 1;
+}
+
+message ERDASTMesAnyOf {
+    repeated ERDASTMessageTree terms = 1;
+}
+
+
+message ERDASTMesDestination {
+    NodeId destination = 1;
+}
+
+message ERDASTMesSource {
+    NodeId source = 1;
+}
+
+message ERDASTMessageTree{
+    oneof node_type{
+        ERDASTMesEquals equals = 1;
+        ERDASTMesAnd and = 2;
+        ERDASTMesOr or = 3;
+        ERDASTTrue true_value = 9;
+        ERDASTFalse false_value = 10;
+        ERDASTMesAllOf all_of = 11;
+        ERDASTMesAnyOf any_of = 12;
+        ERDASTMesDestination destination = 100;
+        ERDASTMesSource source = 101;
+    }
+}
+
+message ERDASTMessage {
+    ERDASTMessageTree tree = 1;
+}
+
 message ERDAbstractSyntaxTree {
     oneof node_type{
         ERDASTEquals equals = 1;
         ERDASTAnd and = 2;
         ERDASTOr or = 3;
-        ERDASTEndorsementTypeEquals endorsement_type_equals = 4;
-        ERDASTEndorsementValueEquals endorsement_value_equals = 5;
-        ERDASTEndorsementSignerEquals endorsement_signer_equals = 6;
-        ERDASTMessageDestination message_destination = 7;
-        ERDASTMessageSource message_source = 8;
         ERDASTTrue true_value = 9;
         ERDASTFalse false_value = 10;
         ERDASTAllOf all_of = 11;
         ERDASTAnyOf any_of = 12;
+        ERDASTEndorsement endorsement = 100;
+        ERDASTMessage message = 101;
     }
 }
 

@@ -102,6 +102,142 @@ void appendNary(const char* op,
     out += ')';
 }
 
+void appendEndTree(const rsp::proto::ERDASTEndTree& tree, std::string& out);
+void appendMessageTree(const rsp::proto::ERDASTMessageTree& tree, std::string& out);
+
+void appendEndBinary(const char* op,
+                     const rsp::proto::ERDASTEndTree& lhs,
+                     const rsp::proto::ERDASTEndTree& rhs,
+                     std::string& out) {
+    out += op;
+    out += '(';
+    appendEndTree(lhs, out);
+    out += ", ";
+    appendEndTree(rhs, out);
+    out += ')';
+}
+
+void appendEndNary(const char* op,
+                   const google::protobuf::RepeatedPtrField<rsp::proto::ERDASTEndTree>& terms,
+                   std::string& out) {
+    out += op;
+    out += '(';
+    for (int index = 0; index < terms.size(); ++index) {
+        if (index != 0) {
+            out += ", ";
+        }
+        appendEndTree(terms.Get(index), out);
+    }
+    out += ')';
+}
+
+void appendEndTree(const rsp::proto::ERDASTEndTree& tree, std::string& out) {
+    switch (tree.node_type_case()) {
+        case rsp::proto::ERDASTEndTree::kAnd:
+            appendEndBinary("AND", tree.and_().lhs(), tree.and_().rhs(), out);
+            break;
+        case rsp::proto::ERDASTEndTree::kOr:
+            appendEndBinary("OR", tree.or_().lhs(), tree.or_().rhs(), out);
+            break;
+        case rsp::proto::ERDASTEndTree::kEquals:
+            appendEndBinary("EQ", tree.equals().lhs(), tree.equals().rhs(), out);
+            break;
+        case rsp::proto::ERDASTEndTree::kAllOf:
+            appendEndNary("ALLOF", tree.all_of().terms(), out);
+            break;
+        case rsp::proto::ERDASTEndTree::kAnyOf:
+            appendEndNary("ANYOF", tree.any_of().terms(), out);
+            break;
+        case rsp::proto::ERDASTEndTree::kTypeEquals:
+            out += "ENDORSEMENT_TYPE(";
+            out += bytesToUUID(tree.type_equals().type().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTEndTree::kValueEquals:
+            out += "ENDORSEMENT_VALUE(";
+            out += bytesToHex(tree.value_equals().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTEndTree::kSignerEquals:
+            out += "ENDORSEMENT_SIGNER(";
+            out += bytesToUUID(tree.signer_equals().signer().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTEndTree::kTrueValue:
+            out += "TRUE";
+            break;
+        case rsp::proto::ERDASTEndTree::kFalseValue:
+            out += "FALSE";
+            break;
+        case rsp::proto::ERDASTEndTree::NODE_TYPE_NOT_SET:
+            break;
+    }
+}
+
+void appendMesBinary(const char* op,
+                     const rsp::proto::ERDASTMessageTree& lhs,
+                     const rsp::proto::ERDASTMessageTree& rhs,
+                     std::string& out) {
+    out += op;
+    out += '(';
+    appendMessageTree(lhs, out);
+    out += ", ";
+    appendMessageTree(rhs, out);
+    out += ')';
+}
+
+void appendMesNary(const char* op,
+                   const google::protobuf::RepeatedPtrField<rsp::proto::ERDASTMessageTree>& terms,
+                   std::string& out) {
+    out += op;
+    out += '(';
+    for (int index = 0; index < terms.size(); ++index) {
+        if (index != 0) {
+            out += ", ";
+        }
+        appendMessageTree(terms.Get(index), out);
+    }
+    out += ')';
+}
+
+void appendMessageTree(const rsp::proto::ERDASTMessageTree& tree, std::string& out) {
+    switch (tree.node_type_case()) {
+        case rsp::proto::ERDASTMessageTree::kAnd:
+            appendMesBinary("AND", tree.and_().lhs(), tree.and_().rhs(), out);
+            break;
+        case rsp::proto::ERDASTMessageTree::kOr:
+            appendMesBinary("OR", tree.or_().lhs(), tree.or_().rhs(), out);
+            break;
+        case rsp::proto::ERDASTMessageTree::kEquals:
+            appendMesBinary("EQ", tree.equals().lhs(), tree.equals().rhs(), out);
+            break;
+        case rsp::proto::ERDASTMessageTree::kAllOf:
+            appendMesNary("ALLOF", tree.all_of().terms(), out);
+            break;
+        case rsp::proto::ERDASTMessageTree::kAnyOf:
+            appendMesNary("ANYOF", tree.any_of().terms(), out);
+            break;
+        case rsp::proto::ERDASTMessageTree::kDestination:
+            out += "DESTINATION(";
+            out += bytesToUUID(tree.destination().destination().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTMessageTree::kSource:
+            out += "SOURCE(";
+            out += bytesToUUID(tree.source().source().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTMessageTree::kTrueValue:
+            out += "TRUE";
+            break;
+        case rsp::proto::ERDASTMessageTree::kFalseValue:
+            out += "FALSE";
+            break;
+        case rsp::proto::ERDASTMessageTree::NODE_TYPE_NOT_SET:
+            break;
+    }
+}
+
 void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out) {
     switch (tree.node_type_case()) {
         case rsp::proto::ERDAbstractSyntaxTree::kAnd:
@@ -119,29 +255,14 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
         case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
             appendNary("ANYOF", tree.any_of().terms(), out);
             break;
-        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementTypeEquals:
-            out += "ENDORSEMENT_TYPE(";
-            out += bytesToUUID(tree.endorsement_type_equals().type().value());
+        case rsp::proto::ERDAbstractSyntaxTree::kEndorsement:
+            out += "ENDORSEMENT(";
+            appendEndTree(tree.endorsement().tree(), out);
             out += ')';
             break;
-        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals:
-            out += "ENDORSEMENT_VALUE(";
-            out += bytesToHex(tree.endorsement_value_equals().value());
-            out += ')';
-            break;
-        case rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals:
-            out += "ENDORSEMENT_SIGNER(";
-            out += bytesToUUID(tree.endorsement_signer_equals().signer().value());
-            out += ')';
-            break;
-        case rsp::proto::ERDAbstractSyntaxTree::kMessageDestination:
-            out += "DESTINATION(";
-            out += bytesToUUID(tree.message_destination().destination().value());
-            out += ')';
-            break;
-        case rsp::proto::ERDAbstractSyntaxTree::kMessageSource:
-            out += "SOURCE(";
-            out += bytesToUUID(tree.message_source().source().value());
+        case rsp::proto::ERDAbstractSyntaxTree::kMessage:
+            out += "MESSAGE(";
+            appendMessageTree(tree.message().tree(), out);
             out += ')';
             break;
         case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
@@ -265,6 +386,206 @@ struct Parser {
         }
     }
 
+    // Endorsement sub-tree parsing
+    void parseEndBinaryArgs(rsp::proto::ERDASTEndTree* lhs,
+                            rsp::proto::ERDASTEndTree* rhs) {
+        expect('(');
+        *lhs = parseEndTree();
+        skipWhitespace();
+        expect(',');
+        *rhs = parseEndTree();
+        skipWhitespace();
+        expect(')');
+    }
+
+    void parseEndNaryArgs(google::protobuf::RepeatedPtrField<rsp::proto::ERDASTEndTree>* terms) {
+        expect('(');
+        skipWhitespace();
+        if (peek() == ')') {
+            ++pos;
+            return;
+        }
+
+        while (true) {
+            *terms->Add() = parseEndTree();
+            skipWhitespace();
+            if (peek() == ',') {
+                ++pos;
+                continue;
+            }
+
+            expect(')');
+            return;
+        }
+    }
+
+    rsp::proto::ERDASTEndTree parseEndTree() {
+        skipWhitespace();
+        rsp::proto::ERDASTEndTree tree;
+
+        if (startsWith("AND(", 4)) {
+            pos += 3;
+            parseEndBinaryArgs(tree.mutable_and_()->mutable_lhs(),
+                               tree.mutable_and_()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("OR(", 3)) {
+            pos += 2;
+            parseEndBinaryArgs(tree.mutable_or_()->mutable_lhs(),
+                               tree.mutable_or_()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("EQ(", 3)) {
+            pos += 2;
+            parseEndBinaryArgs(tree.mutable_equals()->mutable_lhs(),
+                               tree.mutable_equals()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("ALLOF(", 6)) {
+            pos += 5;
+            parseEndNaryArgs(tree.mutable_all_of()->mutable_terms());
+            return tree;
+        }
+        if (startsWith("ANYOF(", 6)) {
+            pos += 5;
+            parseEndNaryArgs(tree.mutable_any_of()->mutable_terms());
+            return tree;
+        }
+        if (startsWith("ENDORSEMENT_TYPE(", 17)) {
+            pos += 17;
+            skipWhitespace();
+            tree.mutable_type_equals()->mutable_type()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("ENDORSEMENT_VALUE(", 18)) {
+            pos += 18;
+            skipWhitespace();
+            tree.mutable_value_equals()->set_value(parseHexBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("ENDORSEMENT_SIGNER(", 19)) {
+            pos += 19;
+            skipWhitespace();
+            tree.mutable_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("TRUE", 4)) {
+            pos += 4;
+            tree.mutable_true_value();
+            return tree;
+        }
+        if (startsWith("FALSE", 5)) {
+            pos += 5;
+            tree.mutable_false_value();
+            return tree;
+        }
+
+        throw std::runtime_error(
+            "unexpected token in endorsement sub-tree at position " + std::to_string(pos));
+    }
+
+    // Message sub-tree parsing
+    void parseMesBinaryArgs(rsp::proto::ERDASTMessageTree* lhs,
+                            rsp::proto::ERDASTMessageTree* rhs) {
+        expect('(');
+        *lhs = parseMessageTree();
+        skipWhitespace();
+        expect(',');
+        *rhs = parseMessageTree();
+        skipWhitespace();
+        expect(')');
+    }
+
+    void parseMesNaryArgs(google::protobuf::RepeatedPtrField<rsp::proto::ERDASTMessageTree>* terms) {
+        expect('(');
+        skipWhitespace();
+        if (peek() == ')') {
+            ++pos;
+            return;
+        }
+
+        while (true) {
+            *terms->Add() = parseMessageTree();
+            skipWhitespace();
+            if (peek() == ',') {
+                ++pos;
+                continue;
+            }
+
+            expect(')');
+            return;
+        }
+    }
+
+    rsp::proto::ERDASTMessageTree parseMessageTree() {
+        skipWhitespace();
+        rsp::proto::ERDASTMessageTree tree;
+
+        if (startsWith("AND(", 4)) {
+            pos += 3;
+            parseMesBinaryArgs(tree.mutable_and_()->mutable_lhs(),
+                               tree.mutable_and_()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("OR(", 3)) {
+            pos += 2;
+            parseMesBinaryArgs(tree.mutable_or_()->mutable_lhs(),
+                               tree.mutable_or_()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("EQ(", 3)) {
+            pos += 2;
+            parseMesBinaryArgs(tree.mutable_equals()->mutable_lhs(),
+                               tree.mutable_equals()->mutable_rhs());
+            return tree;
+        }
+        if (startsWith("ALLOF(", 6)) {
+            pos += 5;
+            parseMesNaryArgs(tree.mutable_all_of()->mutable_terms());
+            return tree;
+        }
+        if (startsWith("ANYOF(", 6)) {
+            pos += 5;
+            parseMesNaryArgs(tree.mutable_any_of()->mutable_terms());
+            return tree;
+        }
+        if (startsWith("DESTINATION(", 12)) {
+            pos += 12;
+            skipWhitespace();
+            tree.mutable_destination()->mutable_destination()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("SOURCE(", 7)) {
+            pos += 7;
+            skipWhitespace();
+            tree.mutable_source()->mutable_source()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("TRUE", 4)) {
+            pos += 4;
+            tree.mutable_true_value();
+            return tree;
+        }
+        if (startsWith("FALSE", 5)) {
+            pos += 5;
+            tree.mutable_false_value();
+            return tree;
+        }
+
+        throw std::runtime_error(
+            "unexpected token in message sub-tree at position " + std::to_string(pos));
+    }
+
     rsp::proto::ERDAbstractSyntaxTree parseTree() {
         skipWhitespace();
         rsp::proto::ERDAbstractSyntaxTree tree;
@@ -297,10 +618,18 @@ struct Parser {
             parseNaryArgs(tree.mutable_any_of()->mutable_terms());
             return tree;
         }
+        if (startsWith("ENDORSEMENT(", 12)) {
+            pos += 12;
+            skipWhitespace();
+            *tree.mutable_endorsement()->mutable_tree() = parseEndTree();
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
         if (startsWith("ENDORSEMENT_TYPE(", 17)) {
             pos += 17;
             skipWhitespace();
-            tree.mutable_endorsement_type_equals()->mutable_type()->set_value(parseUUIDBytes());
+            tree.mutable_endorsement()->mutable_tree()->mutable_type_equals()->mutable_type()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;
@@ -308,7 +637,7 @@ struct Parser {
         if (startsWith("ENDORSEMENT_VALUE(", 18)) {
             pos += 18;
             skipWhitespace();
-            tree.mutable_endorsement_value_equals()->set_value(parseHexBytes());
+            tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value(parseHexBytes());
             skipWhitespace();
             expect(')');
             return tree;
@@ -316,7 +645,15 @@ struct Parser {
         if (startsWith("ENDORSEMENT_SIGNER(", 19)) {
             pos += 19;
             skipWhitespace();
-            tree.mutable_endorsement_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
+            tree.mutable_endorsement()->mutable_tree()->mutable_signer_equals()->mutable_signer()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("MESSAGE(", 8)) {
+            pos += 8;
+            skipWhitespace();
+            *tree.mutable_message()->mutable_tree() = parseMessageTree();
             skipWhitespace();
             expect(')');
             return tree;
@@ -324,7 +661,7 @@ struct Parser {
         if (startsWith("DESTINATION(", 12)) {
             pos += 12;
             skipWhitespace();
-            tree.mutable_message_destination()->mutable_destination()->set_value(parseUUIDBytes());
+            tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;
@@ -332,7 +669,7 @@ struct Parser {
         if (startsWith("SOURCE(", 7)) {
             pos += 7;
             skipWhitespace();
-            tree.mutable_message_source()->mutable_source()->set_value(parseUUIDBytes());
+            tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(parseUUIDBytes());
             skipWhitespace();
             expect(')');
             return tree;

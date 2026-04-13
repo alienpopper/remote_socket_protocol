@@ -45,31 +45,31 @@ rsp::proto::EndorsementType toProtoEndorsementType(const rsp::GUID& endorsementT
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeEqualsTree(const rsp::GUID& endorsementType) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_endorsement_type_equals()->mutable_type() = toProtoEndorsementType(endorsementType);
+    *tree.mutable_endorsement()->mutable_tree()->mutable_type_equals()->mutable_type() = toProtoEndorsementType(endorsementType);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementValueEqualsTree(const std::string& value) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_value_equals()->set_value(value);
+    tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value(value);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementSignerEqualsTree(const rsp::NodeID& signer) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_endorsement_signer_equals()->mutable_signer() = toProtoNodeId(signer);
+    *tree.mutable_endorsement()->mutable_tree()->mutable_signer_equals()->mutable_signer() = toProtoNodeId(signer);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageDestinationTree(const rsp::NodeID& destination) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_message_destination()->mutable_destination() = toProtoNodeId(destination);
+    *tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination() = toProtoNodeId(destination);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageSourceTree(const rsp::NodeID& source) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_message_source()->mutable_source() = toProtoNodeId(source);
+    *tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source() = toProtoNodeId(source);
     return tree;
 }
 
@@ -454,9 +454,9 @@ void testMalformedBufferRejection() {
         const auto tree = makeAndTree(makeEndorsementTypeEqualsTree(matchingType), makeEndorsementValueEqualsTree("other-value"));
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{endorsement});
 
-        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "reduction should keep only the unmatched value predicate from an and-tree");
-        require(reduced.endorsement_value_equals().value() == "other-value",
+        require(reduced.endorsement().tree().value_equals().value() == "other-value",
             "reduction should preserve the unmatched value predicate content");
     }
 
@@ -488,9 +488,9 @@ void testMalformedBufferRejection() {
 
         require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kOr,
             "reduction should keep unmet alternatives in an or-tree");
-        require(reduced.or_().lhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reduced.or_().lhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "reduction should drop the matched portion of the partially satisfied branch");
-        require(reduced.or_().rhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementSignerEquals,
+        require(reduced.or_().rhs().node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "reduction should preserve the untouched alternative branch");
     }
 
@@ -519,13 +519,13 @@ void testMalformedBufferRejection() {
         const auto reducedAnd = rsp::reduceRequirementTree(
             makeAndTree(makeTrueTree(), makeEndorsementValueEqualsTree("missing-value")),
             std::vector<rsp::Endorsement>{});
-        require(reducedAnd.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reducedAnd.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "true and X should reduce to X");
 
         const auto reducedOr = rsp::reduceRequirementTree(
             makeOrTree(makeFalseTree(), makeEndorsementValueEqualsTree("missing-value")),
             std::vector<rsp::Endorsement>{});
-        require(reducedOr.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reducedOr.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "false or X should reduce to X");
     }
 
@@ -542,7 +542,7 @@ void testMalformedBufferRejection() {
                 makeEndorsementValueEqualsTree("missing-value"),
             }),
             std::vector<rsp::Endorsement>{endorsement});
-        require(reducedAllOf.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reducedAllOf.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "all-of should reduce by dropping satisfied terms");
 
         const auto reducedAnyOf = rsp::reduceRequirementTree(
@@ -568,9 +568,9 @@ void testMalformedBufferRejection() {
 
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{});
 
-        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kMessageDestination,
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kMessage,
             "reduction without a message should preserve message predicates");
-        require(reduced.message_destination().destination().value() == toProtoNodeId(expectedDestination).value(),
+        require(reduced.message().tree().destination().destination().value() == toProtoNodeId(expectedDestination).value(),
             "reduction without a message should preserve the original destination bytes");
     }
 
@@ -582,9 +582,9 @@ void testMalformedBufferRejection() {
 
         const auto reduced = rsp::reduceRequirementTree(tree, std::vector<rsp::Endorsement>{}, &message);
 
-        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsementValueEquals,
+        require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kEndorsement,
             "reduction with a non-matching message should prune the mismatched message branch");
-        require(reduced.endorsement_value_equals().value() == "network-access",
+        require(reduced.endorsement().tree().value_equals().value() == "network-access",
             "reduction should preserve the remaining unmatched branch");
     }
 
@@ -597,6 +597,117 @@ void testMalformedBufferRejection() {
 
         require(isEmptyTree(reduced),
             "reduction with a matching signature signer should eliminate the message-source predicate");
+    }
+
+    // Helper: builds an ERDAbstractSyntaxTree with a single ERDASTEndorsement wrapping
+    // an AND of type_equals and value_equals inside the endorsement sub-tree.
+    // This ensures both checks are applied to the SAME endorsement.
+    rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeAndValueTree(
+        const rsp::GUID& endorsementType, const std::string& value) {
+        rsp::proto::ERDAbstractSyntaxTree tree;
+        auto* endTree = tree.mutable_endorsement()->mutable_tree();
+        auto* andNode = endTree->mutable_and_();
+        *andNode->mutable_lhs()->mutable_type_equals()->mutable_type() = toProtoEndorsementType(endorsementType);
+        andNode->mutable_rhs()->mutable_value_equals()->set_value(value);
+        return tree;
+    }
+
+    void testCrossEndorsementMatchingPrevented() {
+        // Two endorsements with different type/value combinations:
+        //   endorsement A: type=typeA, value="alpha"
+        //   endorsement B: type=typeB, value="beta"
+        // A requirement asking for type=typeA AND value="beta" must NOT match,
+        // because no single endorsement has that combination.
+        rsp::KeyPair esKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID typeA("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::GUID typeB("ffeeddcc-bbaa-9988-7766-554433221100");
+        const rsp::Endorsement endorsementA = makeTestEndorsement(esKey, subjectKey, typeA, "alpha");
+        const rsp::Endorsement endorsementB = makeTestEndorsement(esKey, subjectKey, typeB, "beta");
+
+        // Requirement: single endorsement must have typeA AND value "beta"
+        const auto crossReq = makeEndorsementTypeAndValueTree(typeA, "beta");
+
+        // Neither endorsement alone satisfies both predicates
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(crossReq), endorsementA),
+            "endorsement A (typeA/alpha) should not match typeA+beta");
+        require(!rsp::endorsementMatchesRequirement(makeRequirement(crossReq), endorsementB),
+            "endorsement B (typeB/beta) should not match typeA+beta");
+
+        // Correct combinations DO match
+        const auto correctReqA = makeEndorsementTypeAndValueTree(typeA, "alpha");
+        require(rsp::endorsementMatchesRequirement(makeRequirement(correctReqA), endorsementA),
+            "endorsement A should match typeA+alpha");
+
+        const auto correctReqB = makeEndorsementTypeAndValueTree(typeB, "beta");
+        require(rsp::endorsementMatchesRequirement(makeRequirement(correctReqB), endorsementB),
+            "endorsement B should match typeB+beta");
+    }
+
+    void testReduceWithMultipleEndorsementsNoCrossMatching() {
+        // Verify that reduceRequirementTree with multiple endorsements does NOT
+        // satisfy a requirement by mixing attributes across endorsements.
+        rsp::KeyPair esKey = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID typeA("00112233-4455-6677-8899-aabbccddeeff");
+        const rsp::GUID typeB("ffeeddcc-bbaa-9988-7766-554433221100");
+        const rsp::Endorsement endorsementA = makeTestEndorsement(esKey, subjectKey, typeA, "alpha");
+        const rsp::Endorsement endorsementB = makeTestEndorsement(esKey, subjectKey, typeB, "beta");
+        const std::vector<rsp::Endorsement> endorsements = {endorsementA, endorsementB};
+
+        // Cross-matching requirement: typeA + value "beta" — no single endorsement has this
+        const auto crossReq = makeEndorsementTypeAndValueTree(typeA, "beta");
+        const auto reduced = rsp::reduceRequirementTree(crossReq, endorsements);
+
+        // The tree should NOT be fully reduced (not empty) because no single endorsement matches
+        require(!isEmptyTree(reduced),
+            "cross-matched type/value across endorsements should not reduce to empty");
+
+        // But a correctly matching requirement SHOULD reduce to empty
+        const auto correctReq = makeEndorsementTypeAndValueTree(typeA, "alpha");
+        const auto reducedCorrect = rsp::reduceRequirementTree(correctReq, endorsements);
+        require(isEmptyTree(reducedCorrect),
+            "correctly matched type+value on same endorsement should reduce to empty");
+    }
+
+    void testMultipleEndorsementsWithSignerCrossMatching() {
+        // endorsement A: signerKey1, typeX
+        // endorsement B: signerKey2, typeY
+        // Requirement: signerKey1 AND typeY — must NOT match any single endorsement
+        rsp::KeyPair signerKey1 = rsp::KeyPair::generateP256();
+        rsp::KeyPair signerKey2 = rsp::KeyPair::generateP256();
+        rsp::KeyPair subjectKey = rsp::KeyPair::generateP256();
+        const rsp::GUID typeX("11111111-1111-1111-1111-111111111111");
+        const rsp::GUID typeY("22222222-2222-2222-2222-222222222222");
+        const rsp::Endorsement endorsementA = makeTestEndorsement(signerKey1, subjectKey, typeX, "val");
+        const rsp::Endorsement endorsementB = makeTestEndorsement(signerKey2, subjectKey, typeY, "val");
+        const std::vector<rsp::Endorsement> endorsements = {endorsementA, endorsementB};
+
+        // Build: single endorsement must have signer=signerKey1 AND type=typeY
+        rsp::proto::ERDAbstractSyntaxTree crossReq;
+        {
+            auto* endTree = crossReq.mutable_endorsement()->mutable_tree();
+            auto* andNode = endTree->mutable_and_();
+            *andNode->mutable_lhs()->mutable_signer_equals()->mutable_signer() = toProtoNodeId(signerKey1.nodeID());
+            *andNode->mutable_rhs()->mutable_type_equals()->mutable_type() = toProtoEndorsementType(typeY);
+        }
+
+        const auto reduced = rsp::reduceRequirementTree(crossReq, endorsements);
+        require(!isEmptyTree(reduced),
+            "signer from endorsement A + type from endorsement B should not reduce to empty");
+
+        // Correct: signerKey1 AND typeX — endorsement A has both
+        rsp::proto::ERDAbstractSyntaxTree correctReq;
+        {
+            auto* endTree = correctReq.mutable_endorsement()->mutable_tree();
+            auto* andNode = endTree->mutable_and_();
+            *andNode->mutable_lhs()->mutable_signer_equals()->mutable_signer() = toProtoNodeId(signerKey1.nodeID());
+            *andNode->mutable_rhs()->mutable_type_equals()->mutable_type() = toProtoEndorsementType(typeX);
+        }
+
+        const auto reducedCorrect = rsp::reduceRequirementTree(correctReq, endorsements);
+        require(isEmptyTree(reducedCorrect),
+            "signer and type from same endorsement should reduce to empty");
     }
 
 }  // namespace
@@ -624,6 +735,9 @@ int main() {
         testReduceRequirementTreePreservesMessageLogicWithoutMessageContext();
         testReduceRequirementTreeEliminatesMismatchedMessageBranches();
         testReduceRequirementTreeEliminatesMatchedMessageSource();
+        testCrossEndorsementMatchingPrevented();
+        testReduceWithMultipleEndorsementsNoCrossMatching();
+        testMultipleEndorsementsWithSignerCrossMatching();
 
         std::cout << "endorsement_test passed\n";
         return 0;

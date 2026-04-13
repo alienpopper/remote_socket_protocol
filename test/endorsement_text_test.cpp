@@ -33,31 +33,31 @@ std::string uuidBytes(const std::string& uuidStr) {
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementTypeEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_type_equals()->mutable_type()->set_value(uuidBytes(uuidStr));
+    tree.mutable_endorsement()->mutable_tree()->mutable_type_equals()->mutable_type()->set_value(uuidBytes(uuidStr));
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementValueEquals(const std::string& bytes) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_value_equals()->set_value(bytes);
+    tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value(bytes);
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeEndorsementSignerEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_signer_equals()->mutable_signer()->set_value(uuidBytes(uuidStr));
+    tree.mutable_endorsement()->mutable_tree()->mutable_signer_equals()->mutable_signer()->set_value(uuidBytes(uuidStr));
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeDestinationEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_message_destination()->mutable_destination()->set_value(uuidBytes(uuidStr));
+    tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination()->set_value(uuidBytes(uuidStr));
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageSourceEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_message_source()->mutable_source()->set_value(uuidBytes(uuidStr));
+    tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(uuidBytes(uuidStr));
     return tree;
 }
 
@@ -119,67 +119,67 @@ void testRoundTripEndorsementTypeEquals() {
     const std::string uuid = "00112233-4455-6677-8899-aabbccddeeff";
     const auto tree = makeEndorsementTypeEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "ENDORSEMENT_TYPE(00112233-4455-6677-8899-aabbccddeeff)", "ENDORSEMENT_TYPE text mismatch: " + text);
+    require(text == "ENDORSEMENT(ENDORSEMENT_TYPE(00112233-4455-6677-8899-aabbccddeeff))", "ENDORSEMENT_TYPE text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_endorsement_type_equals(), "parsed should have endorsement_type_equals");
-    require(parsed.endorsement_type_equals().type().value() == uuidBytes(uuid), "ENDORSEMENT_TYPE uuid bytes mismatch");
+    require(parsed.has_endorsement(), "parsed should have endorsement");
+    require(parsed.endorsement().tree().type_equals().type().value() == uuidBytes(uuid), "ENDORSEMENT_TYPE uuid bytes mismatch");
 }
 
 void testRoundTripEndorsementValueEquals() {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_value_equals()->set_value(std::string("\xde\xad\xbe\xef", 4));
+    tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value(std::string("\xde\xad\xbe\xef", 4));
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "ENDORSEMENT_VALUE(deadbeef)", "ENDORSEMENT_VALUE text mismatch: " + text);
+    require(text == "ENDORSEMENT(ENDORSEMENT_VALUE(deadbeef))", "ENDORSEMENT_VALUE text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_endorsement_value_equals(), "parsed should have endorsement_value_equals");
-    require(parsed.endorsement_value_equals().value() == std::string("\xde\xad\xbe\xef", 4),
+    require(parsed.has_endorsement(), "parsed should have endorsement");
+    require(parsed.endorsement().tree().value_equals().value() == std::string("\xde\xad\xbe\xef", 4),
             "ENDORSEMENT_VALUE bytes mismatch");
 }
 
 void testRoundTripEndorsementValueEqualsEmpty() {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_endorsement_value_equals()->set_value("");
+    tree.mutable_endorsement()->mutable_tree()->mutable_value_equals()->set_value("");
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "ENDORSEMENT_VALUE()", "empty ENDORSEMENT_VALUE text mismatch: " + text);
+    require(text == "ENDORSEMENT(ENDORSEMENT_VALUE())", "empty ENDORSEMENT_VALUE text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_endorsement_value_equals(), "parsed should have endorsement_value_equals");
-    require(parsed.endorsement_value_equals().value().empty(), "ENDORSEMENT_VALUE should be empty");
+    require(parsed.has_endorsement(), "parsed should have endorsement");
+    require(parsed.endorsement().tree().value_equals().value().empty(), "ENDORSEMENT_VALUE should be empty");
 }
 
 void testRoundTripEndorsementSignerEquals() {
     const std::string uuid = "aabbccdd-eeff-0011-2233-445566778899";
     const auto tree = makeEndorsementSignerEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "ENDORSEMENT_SIGNER(aabbccdd-eeff-0011-2233-445566778899)", "ENDORSEMENT_SIGNER text mismatch: " + text);
+    require(text == "ENDORSEMENT(ENDORSEMENT_SIGNER(aabbccdd-eeff-0011-2233-445566778899))", "ENDORSEMENT_SIGNER text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_endorsement_signer_equals(), "parsed should have endorsement_signer_equals");
-    require(parsed.endorsement_signer_equals().signer().value() == uuidBytes(uuid), "ENDORSEMENT_SIGNER uuid bytes mismatch");
+    require(parsed.has_endorsement(), "parsed should have endorsement");
+    require(parsed.endorsement().tree().signer_equals().signer().value() == uuidBytes(uuid), "ENDORSEMENT_SIGNER uuid bytes mismatch");
 }
 
 void testRoundTripDestinationEquals() {
     const std::string uuid = "12345678-90ab-cdef-0123-456789abcdef";
     const auto tree = makeDestinationEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "DESTINATION(12345678-90ab-cdef-0123-456789abcdef)", "DESTINATION text mismatch: " + text);
+    require(text == "MESSAGE(DESTINATION(12345678-90ab-cdef-0123-456789abcdef))", "DESTINATION text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_message_destination(), "parsed should have message_destination");
-    require(parsed.message_destination().destination().value() == uuidBytes(uuid), "DESTINATION uuid bytes mismatch");
+    require(parsed.has_message(), "parsed should have message");
+    require(parsed.message().tree().destination().destination().value() == uuidBytes(uuid), "DESTINATION uuid bytes mismatch");
 }
 
 void testRoundTripMessageSourceEquals() {
     const std::string uuid = "fedcba98-7654-3210-fedc-ba9876543210";
     const auto tree = makeMessageSourceEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "SOURCE(fedcba98-7654-3210-fedc-ba9876543210)", "SOURCE text mismatch: " + text);
+    require(text == "MESSAGE(SOURCE(fedcba98-7654-3210-fedc-ba9876543210))", "SOURCE text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
-    require(parsed.has_message_source(), "parsed should have message_source");
-    require(parsed.message_source().source().value() == uuidBytes(uuid), "SOURCE uuid bytes mismatch");
+    require(parsed.has_message(), "parsed should have message");
+    require(parsed.message().tree().source().source().value() == uuidBytes(uuid), "SOURCE uuid bytes mismatch");
 }
 
 void testRoundTripTrue() {
@@ -239,36 +239,36 @@ void testRoundTripAND() {
     const auto tree = makeAnd(makeEndorsementTypeEquals("11111111-1111-1111-1111-111111111111"),
                               makeEndorsementTypeEquals("22222222-2222-2222-2222-222222222222"));
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "AND(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111), "
-                    "ENDORSEMENT_TYPE(22222222-2222-2222-2222-222222222222))",
+    require(text == "AND(ENDORSEMENT(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111)), "
+                    "ENDORSEMENT(ENDORSEMENT_TYPE(22222222-2222-2222-2222-222222222222)))",
             "AND text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_and_(), "parsed should have and_");
-    require(parsed.and_().lhs().has_endorsement_type_equals(), "AND lhs should be ENDORSEMENT_TYPE");
-    require(parsed.and_().rhs().has_endorsement_type_equals(), "AND rhs should be ENDORSEMENT_TYPE");
+    require(parsed.and_().lhs().has_endorsement(), "AND lhs should be ENDORSEMENT");
+    require(parsed.and_().rhs().has_endorsement(), "AND rhs should be ENDORSEMENT");
 }
 
 void testRoundTripOR() {
     const auto tree = makeOr(makeEndorsementSignerEquals("aaaaaaaa-0000-0000-0000-000000000001"),
                                  makeEndorsementTypeEquals("bbbbbbbb-0000-0000-0000-000000000002"));
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "OR(ENDORSEMENT_SIGNER(aaaaaaaa-0000-0000-0000-000000000001), "
-                            "ENDORSEMENT_TYPE(bbbbbbbb-0000-0000-0000-000000000002))",
+    require(text == "OR(ENDORSEMENT(ENDORSEMENT_SIGNER(aaaaaaaa-0000-0000-0000-000000000001)), "
+                            "ENDORSEMENT(ENDORSEMENT_TYPE(bbbbbbbb-0000-0000-0000-000000000002)))",
             "OR text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_or_(), "parsed should have or_");
-    require(parsed.or_().lhs().has_endorsement_signer_equals(), "OR lhs should be ENDORSEMENT_SIGNER");
-    require(parsed.or_().rhs().has_endorsement_type_equals(), "OR rhs should be ENDORSEMENT_TYPE");
+    require(parsed.or_().lhs().has_endorsement(), "OR lhs should be ENDORSEMENT");
+    require(parsed.or_().rhs().has_endorsement(), "OR rhs should be ENDORSEMENT");
 }
 
 void testRoundTripEQ() {
     const auto tree = makeEq(makeEndorsementTypeEquals("11111111-0000-0000-0000-000000000001"),
                              makeEndorsementTypeEquals("22222222-0000-0000-0000-000000000002"));
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "EQ(ENDORSEMENT_TYPE(11111111-0000-0000-0000-000000000001), "
-                    "ENDORSEMENT_TYPE(22222222-0000-0000-0000-000000000002))",
+    require(text == "EQ(ENDORSEMENT(ENDORSEMENT_TYPE(11111111-0000-0000-0000-000000000001)), "
+                    "ENDORSEMENT(ENDORSEMENT_TYPE(22222222-0000-0000-0000-000000000002)))",
             "EQ text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
@@ -285,18 +285,18 @@ void testRoundTripNested() {
     const std::string text = rsp::erd_text::toString(tree);
     const std::string expected =
         "AND("
-        "OR(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111), ENDORSEMENT_SIGNER(22222222-2222-2222-2222-222222222222)), "
-        "ENDORSEMENT_VALUE(cafebabe)"
+        "OR(ENDORSEMENT(ENDORSEMENT_TYPE(11111111-1111-1111-1111-111111111111)), ENDORSEMENT(ENDORSEMENT_SIGNER(22222222-2222-2222-2222-222222222222))), "
+        "ENDORSEMENT(ENDORSEMENT_VALUE(cafebabe))"
         ")";
     require(text == expected, "nested text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_and_(), "root should be AND");
     require(parsed.and_().lhs().has_or_(), "AND lhs should be OR");
-        require(parsed.and_().lhs().or_().lhs().has_endorsement_type_equals(), "OR lhs should be ENDORSEMENT_TYPE");
-    require(parsed.and_().lhs().or_().rhs().has_endorsement_signer_equals(), "OR rhs should be ENDORSEMENT_SIGNER");
-        require(parsed.and_().rhs().has_endorsement_value_equals(), "AND rhs should be ENDORSEMENT_VALUE");
-        require(parsed.and_().rhs().endorsement_value_equals().value() == std::string("\xca\xfe\xba\xbe", 4),
+        require(parsed.and_().lhs().or_().lhs().has_endorsement(), "OR lhs should be ENDORSEMENT");
+    require(parsed.and_().lhs().or_().rhs().has_endorsement(), "OR rhs should be ENDORSEMENT");
+        require(parsed.and_().rhs().has_endorsement(), "AND rhs should be ENDORSEMENT");
+        require(parsed.and_().rhs().endorsement().tree().value_equals().value() == std::string("\xca\xfe\xba\xbe", 4),
             "ENDORSEMENT_VALUE bytes mismatch");
 }
 
@@ -306,8 +306,7 @@ void testEmptyTree() {
 
     const auto parsed = rsp::erd_text::fromString("");
     require(!parsed.has_and_() && !parsed.has_or_() && !parsed.has_equals() &&
-                !parsed.has_endorsement_type_equals() && !parsed.has_endorsement_value_equals() &&
-                !parsed.has_endorsement_signer_equals(),
+                !parsed.has_endorsement() && !parsed.has_message(),
             "empty string should parse to unset tree");
 
     const auto parsedWhitespace = rsp::erd_text::fromString("   \t\n  ");
@@ -329,7 +328,7 @@ void testParseWhitespaceTolerance() {
         "      ENDORSEMENT_SIGNER( 33333333-3333-3333-3333-333333333333 ) ) )";
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_and_(), "should be AND");
-    require(parsed.and_().lhs().has_endorsement_type_equals(), "AND lhs should be ENDORSEMENT_TYPE");
+    require(parsed.and_().lhs().has_endorsement(), "AND lhs should be ENDORSEMENT");
     require(parsed.and_().rhs().has_or_(), "AND rhs should be OR");
 }
 

@@ -994,19 +994,19 @@ bool fromJson(const json& value, rsp::proto::ERDASTAnyOf& message) {
     return true;
 }
 
-json toJson(const rsp::proto::ERDASTEndorsementTypeEquals& message) {
+json toJson(const rsp::proto::ERDASTEndTypeEquals& message) {
     return json{{"type", toJson(message.type())}};
 }
 
-bool fromJson(const json& value, rsp::proto::ERDASTEndorsementTypeEquals& message) {
+bool fromJson(const json& value, rsp::proto::ERDASTEndTypeEquals& message) {
     return value.is_object() && value.contains("type") && fromJson(value.at("type"), *message.mutable_type());
 }
 
-json toJson(const rsp::proto::ERDASTEndorsementValueEquals& message) {
+json toJson(const rsp::proto::ERDASTEndValueEquals& message) {
     return json{{"value", encodeBytes(message.value())}};
 }
 
-bool fromJson(const json& value, rsp::proto::ERDASTEndorsementValueEquals& message) {
+bool fromJson(const json& value, rsp::proto::ERDASTEndValueEquals& message) {
     if (!value.is_object() || !value.contains("value")) return false;
     std::string bytes;
     if (!decodeBytes(value.at("value"), bytes)) return false;
@@ -1014,29 +1014,247 @@ bool fromJson(const json& value, rsp::proto::ERDASTEndorsementValueEquals& messa
     return true;
 }
 
-json toJson(const rsp::proto::ERDASTEndorsementSignerEquals& message) {
+json toJson(const rsp::proto::ERDASTEndSignerEquals& message) {
     return json{{"signer", toJson(message.signer())}};
 }
 
-bool fromJson(const json& value, rsp::proto::ERDASTEndorsementSignerEquals& message) {
+bool fromJson(const json& value, rsp::proto::ERDASTEndSignerEquals& message) {
     return value.is_object() && value.contains("signer") && fromJson(value.at("signer"), *message.mutable_signer());
 }
 
-json toJson(const rsp::proto::ERDASTMessageDestination& message) {
+json toJson(const rsp::proto::ERDASTEndTree& message);
+bool fromJson(const json& value, rsp::proto::ERDASTEndTree& message);
+
+json toJson(const rsp::proto::ERDASTEndEquals& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndEquals& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTEndAnd& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndAnd& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTEndOr& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndOr& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTEndAllOf& message) {
+    json terms = json::array();
+    for (const auto& term : message.terms()) {
+        terms.push_back(toJson(term));
+    }
+    return json{{"terms", std::move(terms)}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndAllOf& message) {
+    if (!value.is_object() || !value.contains("terms") || !value.at("terms").is_array()) return false;
+    for (const auto& term : value.at("terms")) {
+        if (!fromJson(term, *message.add_terms())) return false;
+    }
+    return true;
+}
+
+json toJson(const rsp::proto::ERDASTEndAnyOf& message) {
+    json terms = json::array();
+    for (const auto& term : message.terms()) {
+        terms.push_back(toJson(term));
+    }
+    return json{{"terms", std::move(terms)}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndAnyOf& message) {
+    if (!value.is_object() || !value.contains("terms") || !value.at("terms").is_array()) return false;
+    for (const auto& term : value.at("terms")) {
+        if (!fromJson(term, *message.add_terms())) return false;
+    }
+    return true;
+}
+
+json toJson(const rsp::proto::ERDASTEndTree& message) {
+    json value = json::object();
+    if (message.has_equals()) value["equals"] = toJson(message.equals());
+    else if (message.has_and_()) value["and"] = toJson(message.and_());
+    else if (message.has_or_()) value["or"] = toJson(message.or_());
+    else if (message.has_type_equals()) value["type_equals"] = toJson(message.type_equals());
+    else if (message.has_value_equals()) value["value_equals"] = toJson(message.value_equals());
+    else if (message.has_signer_equals()) value["signer_equals"] = toJson(message.signer_equals());
+    else if (message.has_true_value()) value["true_value"] = json::object();
+    else if (message.has_false_value()) value["false_value"] = json::object();
+    else if (message.has_all_of()) value["all_of"] = toJson(message.all_of());
+    else if (message.has_any_of()) value["any_of"] = toJson(message.any_of());
+    return value;
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndTree& message) {
+    if (!value.is_object()) return false;
+    if (value.contains("equals")) return fromJson(value.at("equals"), *message.mutable_equals());
+    if (value.contains("and")) return fromJson(value.at("and"), *message.mutable_and_());
+    if (value.contains("or")) return fromJson(value.at("or"), *message.mutable_or_());
+    if (value.contains("type_equals")) return fromJson(value.at("type_equals"), *message.mutable_type_equals());
+    if (value.contains("value_equals")) return fromJson(value.at("value_equals"), *message.mutable_value_equals());
+    if (value.contains("signer_equals")) return fromJson(value.at("signer_equals"), *message.mutable_signer_equals());
+    if (value.contains("true_value")) {
+        message.mutable_true_value();
+        return true;
+    }
+    if (value.contains("false_value")) {
+        message.mutable_false_value();
+        return true;
+    }
+    if (value.contains("all_of")) return fromJson(value.at("all_of"), *message.mutable_all_of());
+    if (value.contains("any_of")) return fromJson(value.at("any_of"), *message.mutable_any_of());
+    return false;
+}
+
+json toJson(const rsp::proto::ERDASTEndorsement& message) {
+    return json{{"tree", toJson(message.tree())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTEndorsement& message) {
+    return value.is_object() && value.contains("tree") &&
+           fromJson(value.at("tree"), *message.mutable_tree());
+}
+
+json toJson(const rsp::proto::ERDASTMesDestination& message) {
     return json{{"destination", toJson(message.destination())}};
 }
 
-bool fromJson(const json& value, rsp::proto::ERDASTMessageDestination& message) {
+bool fromJson(const json& value, rsp::proto::ERDASTMesDestination& message) {
     return value.is_object() && value.contains("destination") &&
            fromJson(value.at("destination"), *message.mutable_destination());
 }
 
-json toJson(const rsp::proto::ERDASTMessageSource& message) {
+json toJson(const rsp::proto::ERDASTMesSource& message) {
     return json{{"source", toJson(message.source())}};
 }
 
-bool fromJson(const json& value, rsp::proto::ERDASTMessageSource& message) {
+bool fromJson(const json& value, rsp::proto::ERDASTMesSource& message) {
     return value.is_object() && value.contains("source") && fromJson(value.at("source"), *message.mutable_source());
+}
+
+json toJson(const rsp::proto::ERDASTMessageTree& message);
+bool fromJson(const json& value, rsp::proto::ERDASTMessageTree& message);
+
+json toJson(const rsp::proto::ERDASTMesEquals& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMesEquals& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTMesAnd& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMesAnd& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTMesOr& message) {
+    return json{{"lhs", toJson(message.lhs())}, {"rhs", toJson(message.rhs())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMesOr& message) {
+    return value.is_object() && value.contains("lhs") && value.contains("rhs") &&
+           fromJson(value.at("lhs"), *message.mutable_lhs()) &&
+           fromJson(value.at("rhs"), *message.mutable_rhs());
+}
+
+json toJson(const rsp::proto::ERDASTMesAllOf& message) {
+    json terms = json::array();
+    for (const auto& term : message.terms()) {
+        terms.push_back(toJson(term));
+    }
+    return json{{"terms", std::move(terms)}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMesAllOf& message) {
+    if (!value.is_object() || !value.contains("terms") || !value.at("terms").is_array()) return false;
+    for (const auto& term : value.at("terms")) {
+        if (!fromJson(term, *message.add_terms())) return false;
+    }
+    return true;
+}
+
+json toJson(const rsp::proto::ERDASTMesAnyOf& message) {
+    json terms = json::array();
+    for (const auto& term : message.terms()) {
+        terms.push_back(toJson(term));
+    }
+    return json{{"terms", std::move(terms)}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMesAnyOf& message) {
+    if (!value.is_object() || !value.contains("terms") || !value.at("terms").is_array()) return false;
+    for (const auto& term : value.at("terms")) {
+        if (!fromJson(term, *message.add_terms())) return false;
+    }
+    return true;
+}
+
+json toJson(const rsp::proto::ERDASTMessageTree& message) {
+    json value = json::object();
+    if (message.has_equals()) value["equals"] = toJson(message.equals());
+    else if (message.has_and_()) value["and"] = toJson(message.and_());
+    else if (message.has_or_()) value["or"] = toJson(message.or_());
+    else if (message.has_destination()) value["destination"] = toJson(message.destination());
+    else if (message.has_source()) value["source"] = toJson(message.source());
+    else if (message.has_true_value()) value["true_value"] = json::object();
+    else if (message.has_false_value()) value["false_value"] = json::object();
+    else if (message.has_all_of()) value["all_of"] = toJson(message.all_of());
+    else if (message.has_any_of()) value["any_of"] = toJson(message.any_of());
+    return value;
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMessageTree& message) {
+    if (!value.is_object()) return false;
+    if (value.contains("equals")) return fromJson(value.at("equals"), *message.mutable_equals());
+    if (value.contains("and")) return fromJson(value.at("and"), *message.mutable_and_());
+    if (value.contains("or")) return fromJson(value.at("or"), *message.mutable_or_());
+    if (value.contains("destination")) return fromJson(value.at("destination"), *message.mutable_destination());
+    if (value.contains("source")) return fromJson(value.at("source"), *message.mutable_source());
+    if (value.contains("true_value")) {
+        message.mutable_true_value();
+        return true;
+    }
+    if (value.contains("false_value")) {
+        message.mutable_false_value();
+        return true;
+    }
+    if (value.contains("all_of")) return fromJson(value.at("all_of"), *message.mutable_all_of());
+    if (value.contains("any_of")) return fromJson(value.at("any_of"), *message.mutable_any_of());
+    return false;
+}
+
+json toJson(const rsp::proto::ERDASTMessage& message) {
+    return json{{"tree", toJson(message.tree())}};
+}
+
+bool fromJson(const json& value, rsp::proto::ERDASTMessage& message) {
+    return value.is_object() && value.contains("tree") &&
+           fromJson(value.at("tree"), *message.mutable_tree());
 }
 
 json toJson(const rsp::proto::ERDAbstractSyntaxTree& message) {
@@ -1044,11 +1262,8 @@ json toJson(const rsp::proto::ERDAbstractSyntaxTree& message) {
     if (message.has_equals()) value["equals"] = toJson(message.equals());
     else if (message.has_and_()) value["and"] = toJson(message.and_());
     else if (message.has_or_()) value["or"] = toJson(message.or_());
-    else if (message.has_endorsement_type_equals()) value["endorsement_type_equals"] = toJson(message.endorsement_type_equals());
-    else if (message.has_endorsement_value_equals()) value["endorsement_value_equals"] = toJson(message.endorsement_value_equals());
-    else if (message.has_endorsement_signer_equals()) value["endorsement_signer_equals"] = toJson(message.endorsement_signer_equals());
-    else if (message.has_message_destination()) value["message_destination"] = toJson(message.message_destination());
-    else if (message.has_message_source()) value["message_source"] = toJson(message.message_source());
+    else if (message.has_endorsement()) value["endorsement"] = toJson(message.endorsement());
+    else if (message.has_message()) value["message"] = toJson(message.message());
     else if (message.has_true_value()) value["true_value"] = json::object();
     else if (message.has_false_value()) value["false_value"] = json::object();
     else if (message.has_all_of()) value["all_of"] = toJson(message.all_of());
@@ -1061,11 +1276,8 @@ bool fromJson(const json& value, rsp::proto::ERDAbstractSyntaxTree& message) {
     if (value.contains("equals")) return fromJson(value.at("equals"), *message.mutable_equals());
     if (value.contains("and")) return fromJson(value.at("and"), *message.mutable_and_());
     if (value.contains("or")) return fromJson(value.at("or"), *message.mutable_or_());
-    if (value.contains("endorsement_type_equals")) return fromJson(value.at("endorsement_type_equals"), *message.mutable_endorsement_type_equals());
-    if (value.contains("endorsement_value_equals")) return fromJson(value.at("endorsement_value_equals"), *message.mutable_endorsement_value_equals());
-    if (value.contains("endorsement_signer_equals")) return fromJson(value.at("endorsement_signer_equals"), *message.mutable_endorsement_signer_equals());
-    if (value.contains("message_destination")) return fromJson(value.at("message_destination"), *message.mutable_message_destination());
-    if (value.contains("message_source")) return fromJson(value.at("message_source"), *message.mutable_message_source());
+    if (value.contains("endorsement")) return fromJson(value.at("endorsement"), *message.mutable_endorsement());
+    if (value.contains("message")) return fromJson(value.at("message"), *message.mutable_message());
     if (value.contains("true_value")) {
         message.mutable_true_value();
         return true;
