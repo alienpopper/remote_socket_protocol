@@ -33,7 +33,7 @@ $(BORINGSSL_INCLUDE_HEADER):
 
 $(BORINGSSL_CRYPTO_LIB): $(BORINGSSL_INCLUDE_HEADER)
 	cmake -S $(BORINGSSL_SOURCE_DIR) -B $(BORINGSSL_BUILD_DIR) $(BORINGSSL_CMAKE_FLAGS)
-	cmake --build $(BORINGSSL_BUILD_DIR) --target crypto --parallel
+	cmake --build $(BORINGSSL_BUILD_DIR) --target crypto --parallel 2
 
 $(PROTOBUF_VERSION_STAMP):
 	@if [ -d "$(PROTOBUF_SOURCE_DIR)/.git" ]; then \
@@ -60,6 +60,6 @@ $(NLOHMANN_JSON_INCLUDE_HEADER): $(NLOHMANN_JSON_VERSION_STAMP)
 
 $(PROTOBUF_LITE_LIB): $(PROTOBUF_INCLUDE_HEADER)
 	cmake -S $(PROTOBUF_CMAKE_SOURCE_DIR) -B $(PROTOBUF_BUILD_DIR) $(PROTOBUF_CMAKE_FLAGS)
-	cmake --build $(PROTOBUF_BUILD_DIR) --target libprotobuf protoc --parallel
+	cmake --build $(PROTOBUF_BUILD_DIR) --target libprotobuf protoc --parallel 2
 
 $(PROTOBUF_PROTOC): $(PROTOBUF_LITE_LIB)
