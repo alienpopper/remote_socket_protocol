@@ -42,6 +42,11 @@ protected:
                                                     uint32_t totalAttempts,
                                                     uint32_t retryDelayMs);
 
+    bool registerConnectedSocket(const rsp::proto::RSPMessage& message,
+                                 TCPConnectionResult&& tcpResult,
+                                 const rsp::GUID& socketId,
+                                 bool asyncData, bool shareSocket);
+
     rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
                                                    rsp::proto::SOCKET_STATUS status,
                                                    const std::string& errorMessage = std::string(),

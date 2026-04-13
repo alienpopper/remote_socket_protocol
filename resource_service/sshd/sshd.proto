@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package rsp.proto;
+
+option optimize_for = LITE_RUNTIME;
+
+import "resource_service/bsd_sockets/bsd_sockets.proto";
+
+message ConnectSshd {
+    SocketID socket_number = 2;
+    optional uint32 timeout_ms = 5;
+    optional bool async_data = 8;
+    optional bool use_socket = 9;
+    optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
+}

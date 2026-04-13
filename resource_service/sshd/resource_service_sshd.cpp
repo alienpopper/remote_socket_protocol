@@ -120,15 +120,57 @@ std::shared_ptr<SshdResourceService> SshdResourceService::create(const SshdConfi
 SshdResourceService::SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg)
     : BsdSocketsResourceService(std::move(keyPair)), cfg_(cfg) {}
 
-BsdSocketsResourceService::TCPConnectionResult SshdResourceService::createTCPConnection(
-    const std::string& /*hostPort*/,
-    uint32_t /*totalAttempts*/,
-    uint32_t /*retryDelayMs*/) {
+bool SshdResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
+    if (message.has_connect_sshd()) {
+        return handleConnectSshd(message);
+    }
 
+    // Reject bsd_sockets-specific messages that sshd does not support.
+    if (message.has_connect_tcp_request() || message.has_listen_tcp_request() || message.has_accept_tcp()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
+                                           "UNIMPLEMENTED: rsp_sshd does not support this request"));
+    }
+
+    // Delegate socket_send, socket_recv, socket_close to the parent.
+    return BsdSocketsResourceService::handleNodeSpecificMessage(message);
+}
+
+bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& message) {
+    const auto& request = message.connect_sshd();
+
+    if (!request.has_socket_number()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
+    }
+
+    const auto socketId = fromProtoSocketId(request.socket_number());
+    if (!socketId.has_value()) {
+        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
+    }
+
+    const bool asyncData = request.has_async_data() && request.async_data();
+    const bool shareSocket = request.has_share_socket() && request.share_socket();
+
+    if (shareSocket) {
+        if (asyncData) {
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::INVALID_FLAGS,
+                                               "share_socket cannot be combined with async_data",
+                                               &*socketId));
+        }
+        if (request.has_use_socket() && request.use_socket()) {
+            return send(makeSocketReplyMessage(message,
+                                               rsp::proto::INVALID_FLAGS,
+                                               "share_socket cannot be combined with use_socket",
+                                               &*socketId));
+        }
+    }
+
+    // Create a socketpair and fork sshd -i on the child end.
     int fds[2];
     if (::socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
         log("socketpair failed: " + std::string(strerror(errno)));
-        return {};
+        return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED,
+                                           "socketpair failed", &*socketId));
     }
 
     const pid_t pid = ::fork();
@@ -136,7 +178,8 @@ BsdSocketsResourceService::TCPConnectionResult SshdResourceService::createTCPCon
         log("fork failed: " + std::string(strerror(errno)));
         ::close(fds[0]);
         ::close(fds[1]);
-        return {};
+        return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED,
+                                           "fork failed", &*socketId));
     }
 
     if (pid == 0) {
@@ -151,7 +194,6 @@ BsdSocketsResourceService::TCPConnectionResult SshdResourceService::createTCPCon
         }
 
         // Close all file descriptors inherited from the parent (RM sockets, etc.)
-        // so sshd's privilege-separation fork doesn't inherit them.
         struct rlimit rl{};
         ::getrlimit(RLIMIT_NOFILE, &rl);
         const int maxfd = static_cast<int>(rl.rlim_cur);
@@ -181,12 +223,10 @@ BsdSocketsResourceService::TCPConnectionResult SshdResourceService::createTCPCon
     // Parent: fds[1] belongs to the child; fds[0] is our side.
     ::close(fds[1]);
     log("Spawned sshd -i (pid=" + std::to_string(pid) + ")");
-    return { nullptr, std::make_shared<SshdConnection>(fds[0], pid) };
-}
 
-bool SshdResourceService::handleListenTCPRequest(const rsp::proto::RSPMessage& message) {
-    return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
-                                       "UNIMPLEMENTED: rsp_sshd does not support TCP listen"));
+    TCPConnectionResult result;
+    result.connection = std::make_shared<SshdConnection>(fds[0], pid);
+    return registerConnectedSocket(message, std::move(result), *socketId, asyncData, shareSocket);
 }
 
 }  // namespace rsp::resource_service

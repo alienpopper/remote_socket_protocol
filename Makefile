@@ -40,7 +40,10 @@ PROTOBUF_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/messages.pb.h
 BSD_SOCKETS_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.pb.cc
 BSD_SOCKETS_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.pb.h
 BSD_SOCKETS_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/bsd_sockets/bsd_sockets.pb.o
-PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT)
+SSHD_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb.cc
+SSHD_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb.h
+SSHD_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/sshd/sshd.pb.o
+PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT)
 
 GENERATE_MESSAGES_SCRIPT := scripts/generate_messages.py
 NODEJS_MESSAGES_JS := client/nodejs/messages.js
@@ -590,15 +593,19 @@ test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(P
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
 $(BSD_SOCKETS_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
 
 $(BSD_SOCKETS_GENERATED_HEADER): $(BSD_SOCKETS_GENERATED_SOURCE)
+
+$(SSHD_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(SSHD_GENERATED_HEADER): $(SSHD_GENERATED_SOURCE)
 
 $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
@@ -607,6 +614,10 @@ $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_
 $(BSD_SOCKETS_GENERATED_OBJECT): $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(BSD_SOCKETS_GENERATED_SOURCE) -o $@
+
+$(SSHD_GENERATED_OBJECT): $(SSHD_GENERATED_SOURCE) $(SSHD_GENERATED_HEADER)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SSHD_GENERATED_SOURCE) -o $@
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 

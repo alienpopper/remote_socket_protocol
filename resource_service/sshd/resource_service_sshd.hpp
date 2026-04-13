@@ -27,15 +27,11 @@ class SshdResourceService : public BsdSocketsResourceService {
 public:
     static std::shared_ptr<SshdResourceService> create(const SshdConfig& cfg);
 
-protected:
-    TCPConnectionResult createTCPConnection(const std::string& hostPort,
-                                            uint32_t totalAttempts,
-                                            uint32_t retryDelayMs) override;
-
-    bool handleListenTCPRequest(const rsp::proto::RSPMessage& message) override;
-
 private:
     SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg);
+
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+    bool handleConnectSshd(const rsp::proto::RSPMessage& message);
 
     SshdConfig cfg_;
 };

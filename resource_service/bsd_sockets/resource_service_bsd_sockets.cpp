@@ -157,23 +157,39 @@ bool BsdSocketsResourceService::handleConnectTCPRequest(const rsp::proto::RSPMes
         return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
     }
 
+    return registerConnectedSocket(message, std::move(tcpResult), *socketId,
+                                   request.has_async_data() && request.async_data(),
+                                   request.has_share_socket() && request.share_socket());
+}
+
+bool BsdSocketsResourceService::registerConnectedSocket(
+    const rsp::proto::RSPMessage& message,
+    TCPConnectionResult&& tcpResult,
+    const rsp::GUID& socketId,
+    bool asyncData, bool shareSocket) {
+
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+
     auto socketState = std::make_shared<ManagedSocketState>();
     socketState->transport = tcpResult.transport;
     socketState->connection = tcpResult.connection;
     socketState->requesterNodeId = toProtoNodeId(*requesterNodeId);
-    socketState->socketId = *socketId;
-    socketState->asyncData = request.has_async_data() && request.async_data();
-    socketState->shareSocket = request.has_share_socket() && request.share_socket();
+    socketState->socketId = socketId;
+    socketState->asyncData = asyncData;
+    socketState->shareSocket = shareSocket;
     socketState->traceEnabled = rsp::messageTraceEnabled(message);
     {
         std::lock_guard<std::mutex> lock(socketsMutex_);
-        managedSockets_.emplace(*socketId, socketState);
+        managedSockets_.emplace(socketId, socketState);
     }
 
-    const bool sent = send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
+    const bool sent = send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &socketId));
     if (!sent) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
-        managedSockets_.erase(*socketId);
+        managedSockets_.erase(socketId);
         stopManagedSocket(socketState);
         return false;
     }

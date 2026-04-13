@@ -140,6 +140,7 @@ message PingReply {
 }
 
 import "resource_service/bsd_sockets/bsd_sockets.proto";
+import "resource_service/sshd/sshd.proto";
 
 
 /****Endorsement Server Messages ****/
@@ -361,6 +362,7 @@ message RSPMessage {
           EndorsementChallengeReply endorsement_challenge_reply = 20;
           EndorsementDone endorsement_done = 21;
                     EndorsementNeeded endorsement_needed = 23;
+        ConnectSshd connect_sshd = 25;
   }
     Uuid nonce = 22;
   SignatureBlock signature = 99;
