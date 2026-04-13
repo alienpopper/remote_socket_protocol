@@ -167,14 +167,14 @@ bool ResourceService::sendResourceAdvertisement(ClientConnectionID connectionId)
     return sendOnConnection(connectionId, message);
 }
 
-rsp::transport::ConnectionHandle ResourceService::createTCPConnection(const std::string& hostPort,
+ResourceService::TCPConnectionResult ResourceService::createTCPConnection(const std::string& hostPort,
                                                                        uint32_t totalAttempts,
                                                                        uint32_t retryDelayMs) {
     for (uint32_t attempt = 0; attempt < totalAttempts; ++attempt) {
         auto tcpTransport = std::make_shared<rsp::transport::TcpTransport>();
         auto connection = tcpTransport->connect(hostPort);
         if (connection != nullptr) {
-            return connection;
+            return {tcpTransport, connection};
         }
 
         tcpTransport->stop();
@@ -182,7 +182,7 @@ rsp::transport::ConnectionHandle ResourceService::createTCPConnection(const std:
             std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
         }
     }
-    return nullptr;
+    return {};
 }
 
 bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& message) {
@@ -224,14 +224,15 @@ bool ResourceService::handleConnectTCPRequest(const rsp::proto::RSPMessage& mess
     const uint32_t totalAttempts = request.has_retries() ? std::min(request.retries(), 5u) + 1u : 1u;
     const uint32_t retryDelayMilliseconds = request.has_retry_ms() ? std::min(request.retry_ms(), 5000u) : 0u;
 
-    rsp::transport::ConnectionHandle connection = createTCPConnection(request.host_port(), totalAttempts, retryDelayMilliseconds);
+    auto tcpResult = createTCPConnection(request.host_port(), totalAttempts, retryDelayMilliseconds);
 
-    if (connection == nullptr) {
+    if (tcpResult.connection == nullptr) {
         return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
     }
 
     auto socketState = std::make_shared<ManagedSocketState>();
-    socketState->connection = connection;
+    socketState->transport = tcpResult.transport;
+    socketState->connection = tcpResult.connection;
     socketState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     socketState->socketId = *socketId;
     socketState->asyncData = request.has_async_data() && request.async_data();

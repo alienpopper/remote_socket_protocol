@@ -36,7 +36,12 @@ protected:
 
     virtual bool handleListenTCPRequest(const rsp::proto::RSPMessage& message);
 
-    virtual rsp::transport::ConnectionHandle createTCPConnection(const std::string& hostPort,
+    struct TCPConnectionResult {
+        rsp::transport::TransportHandle transport;
+        rsp::transport::ConnectionHandle connection;
+    };
+
+    virtual TCPConnectionResult createTCPConnection(const std::string& hostPort,
                                                                   uint32_t totalAttempts,
                                                                   uint32_t retryDelayMs);
 
