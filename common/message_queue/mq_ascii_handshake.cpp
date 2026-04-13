@@ -38,21 +38,24 @@ bool receiveMessage(const ConnectionHandle& connection, std::string& message) {
         return false;
     }
 
+    // Read one byte at a time to avoid consuming bytes beyond the \r\n\r\n
+    // terminator that belong to the subsequent protobuf encoding phase.
     message.clear();
-    rsp::Buffer buffer(256);
-    while (message.find(kMessageTerminator) == std::string::npos) {
-        const int bytesRead = connection->recv(buffer);
-        if (bytesRead <= 0) {
+    uint8_t byte = 0;
+    while (message.size() < kMaxHandshakeBytes) {
+        if (!connection->readExact(&byte, 1)) {
             return false;
         }
-
-        message.append(reinterpret_cast<const char*>(buffer.data()), static_cast<size_t>(bytesRead));
-        if (message.size() > kMaxHandshakeBytes) {
-            return false;
+        message += static_cast<char>(byte);
+        const size_t len = message.size();
+        if (len >= 4 &&
+            message[len - 4] == '\r' && message[len - 3] == '\n' &&
+            message[len - 2] == '\r' && message[len - 1] == '\n') {
+            return true;
         }
     }
 
-    return true;
+    return false;
 }
 
 std::string trim(const std::string& value) {
