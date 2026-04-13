@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
         std::cerr << "resource_manager: failed to listen on " << listenEndpoint << '\n';
         return 1;
     }
-    std::cout << "resource_manager: listening on " << listenEndpoint << '\n';
+    std::cout << "resource_manager: listening on " << listenEndpoint << std::endl;
 
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports;
     clientTransports.push_back(transport);

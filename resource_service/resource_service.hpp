@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client/cpp_full/rsp_client.hpp"
+#include "common/message_queue/mq.hpp"
 #include "os/os_socket.hpp"
 
 #include <atomic>
@@ -107,6 +108,7 @@ private:
     mutable std::mutex socketsMutex_;
     std::map<rsp::GUID, std::shared_ptr<ManagedSocketState>> managedSockets_;
     std::map<rsp::GUID, std::shared_ptr<ManagedListenerState>> managedListeningSockets_;
+    std::shared_ptr<rsp::RSPMessageQueue> connectQueue_;
 };
 
 }  // namespace rsp::resource_service

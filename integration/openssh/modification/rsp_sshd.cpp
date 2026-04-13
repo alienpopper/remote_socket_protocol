@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/resource.h>
 
 using nlohmann::json;
 
@@ -149,6 +150,15 @@ protected:
             }
             if (fds[1] != STDIN_FILENO && fds[1] != STDOUT_FILENO) {
                 ::close(fds[1]);
+            }
+
+            // Close all file descriptors inherited from the parent (RM sockets, etc.)
+            // so sshd's privilege-separation fork doesn't inherit them.
+            struct rlimit rl{};
+            ::getrlimit(RLIMIT_NOFILE, &rl);
+            const int maxfd = static_cast<int>(rl.rlim_cur);
+            for (int fd = STDERR_FILENO + 1; fd < maxfd; fd++) {
+                ::close(fd);
             }
 
             if (cfg_.sshdDebug) {

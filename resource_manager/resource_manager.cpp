@@ -125,9 +125,9 @@ ResourceManager::ResourceManager()
         rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
-    handshakeQueue_->setWorkerCount(1);
+    handshakeQueue_->setWorkerCount(4);
     handshakeQueue_->start();
-    authnQueue_->setWorkerCount(1);
+    authnQueue_->setWorkerCount(4);
     authnQueue_->start();
     registerTransportCallbacks();
 }
@@ -163,9 +163,9 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
         rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
-    handshakeQueue_->setWorkerCount(1);
+    handshakeQueue_->setWorkerCount(4);
     handshakeQueue_->start();
-    authnQueue_->setWorkerCount(1);
+    authnQueue_->setWorkerCount(4);
     authnQueue_->start();
     registerTransportCallbacks();
 }

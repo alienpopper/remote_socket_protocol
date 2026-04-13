@@ -30,6 +30,29 @@ std::string readBufferToString(const rsp::Buffer& buffer, uint32_t length) {
     return std::string(reinterpret_cast<const char*>(buffer.data()), length);
 }
 
+// Dedicated queue for handling TCP_CONNECT requests concurrently. Each worker
+// thread calls handleConnectTCPRequest independently, so blocking operations
+// (e.g., fork/exec or retried TCP dials) don't stall the main message loop.
+class ConnectTCPQueue : public rsp::RSPMessageQueue {
+public:
+    using Handler = std::function<bool(const rsp::proto::RSPMessage&)>;
+    explicit ConnectTCPQueue(Handler handler) : handler_(std::move(handler)) {}
+
+protected:
+    void handleMessage(Message message, rsp::MessageQueueSharedState&) override {
+        if (handler_) {
+            handler_(message);
+        }
+    }
+
+    void handleQueueFull(size_t, size_t, const Message&) override {
+        std::cerr << "ResourceService TCP connect queue full — request dropped" << std::endl;
+    }
+
+private:
+    Handler handler_;
+};
+
 }  // namespace
 
 ResourceService::Ptr ResourceService::create() {
@@ -41,10 +64,17 @@ ResourceService::Ptr ResourceService::create(KeyPair keyPair) {
 }
 
 ResourceService::ResourceService(KeyPair keyPair)
-    : rsp::client::full::RSPClient(std::move(keyPair)) {
+    : rsp::client::full::RSPClient(std::move(keyPair)),
+      connectQueue_(std::make_shared<ConnectTCPQueue>(
+          [this](const rsp::proto::RSPMessage& message) { return handleConnectTCPRequest(message); })) {
+    connectQueue_->setWorkerCount(8);
+    connectQueue_->start();
 }
 
 ResourceService::~ResourceService() {
+    if (connectQueue_) {
+        connectQueue_->stop();
+    }
     closeAllManagedSockets();
 }
 
@@ -61,7 +91,9 @@ ResourceService::ClientConnectionID ResourceService::connectToResourceManager(co
 
 bool ResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_connect_tcp_request()) {
-        return handleConnectTCPRequest(message);
+        // Push to dedicated queue so blocking createTCPConnection() runs on a
+        // worker thread rather than stalling the main message dispatch loop.
+        return connectQueue_ != nullptr && connectQueue_->push(message);
     }
 
     if (message.has_listen_tcp_request()) {
