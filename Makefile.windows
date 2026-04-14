@@ -25,6 +25,7 @@ ENDORSEMENT_SERVICE_TARGET = $(BIN_DIR)\endorsement_service.exe
 TRANSPORT_MEMORY_TEST_TARGET = $(BIN_DIR)\transport_memory_test.exe
 ENDORSEMENT_TEXT_TEST_TARGET = $(BIN_DIR)\endorsement_text_test.exe
 MESSAGE_HASH_TEST_TARGET = $(BIN_DIR)\message_hash_test.exe
+RUNTIME_PROTO_TEST_TARGET = $(BIN_DIR)\runtime_proto_test.exe
 RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
 RSPFULLCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_full_static.lib
 RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
@@ -438,6 +439,9 @@ MESSAGE_HASH_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\message_hash_test.obj
 
+RUNTIME_PROTO_TEST_OBJECTS = \
+	$(OBJ_DIR)\runtime_proto_test.obj
+
 CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
@@ -470,7 +474,7 @@ test: test-base-types test-keypair test-endorsement test-endorsement-text test-m
 
 !include third_party\Makefile.windows
 
-CPPFLAGS = $(CPPFLAGS) /I$(BORINGSSL_INCLUDE_DIR) /I$(PROTOBUF_INCLUDE_DIR) /I$(PROTOBUF_GENERATED_DIR)
+CPPFLAGS = $(CPPFLAGS) /I$(BORINGSSL_INCLUDE_DIR) /I$(PROTOBUF_INCLUDE_DIR) /I$(ABSEIL_INCLUDE_DIR) /I$(PROTOBUF_GENERATED_DIR)
 
 dirs:
 	if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
@@ -511,6 +515,9 @@ $(ENDORSEMENT_TEXT_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LI
 
 $(MESSAGE_HASH_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MESSAGE_HASH_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(MESSAGE_HASH_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(MESSAGE_HASH_TEST_TARGET)
+
+$(RUNTIME_PROTO_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RUNTIME_PROTO_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(RUNTIME_PROTO_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RUNTIME_PROTO_TEST_TARGET)
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto $(PROTOBUF_PROTOC)
 	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
@@ -615,6 +622,9 @@ test-endorsement-text: $(ENDORSEMENT_TEXT_TEST_TARGET)
 
 test-message-hash: $(MESSAGE_HASH_TEST_TARGET)
 	$(MESSAGE_HASH_TEST_TARGET)
+
+test-runtime-proto: $(RUNTIME_PROTO_TEST_TARGET)
+	$(RUNTIME_PROTO_TEST_TARGET)
 
 test-mq-signing: $(MQ_SIGNING_TEST_TARGET)
 	$(MQ_SIGNING_TEST_TARGET)
@@ -722,6 +732,9 @@ $(OBJ_DIR)\endorsement_text_test.obj: test\endorsement_text_test.cpp common\endo
 
 $(OBJ_DIR)\message_hash_test.obj: test\message_hash_test.cpp common\message_queue\mq_signing.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\message_hash_test.cpp /Fo$(OBJ_DIR)\message_hash_test.obj
+
+$(OBJ_DIR)\runtime_proto_test.obj: test\runtime_proto_test.cpp $(PROTOBUF_INCLUDE_HEADER) $(BORINGSSL_INCLUDE_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\runtime_proto_test.cpp /Fo$(OBJ_DIR)\runtime_proto_test.obj
 
 $(OBJ_DIR)\base_types_test.obj: test\base_types_test.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c test\base_types_test.cpp /Fo$(OBJ_DIR)\base_types_test.obj

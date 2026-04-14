@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package rsp.proto;
 
-option optimize_for = LITE_RUNTIME;
-
 message Uuid {
   bytes value = 1;
 }

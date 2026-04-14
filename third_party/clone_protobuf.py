@@ -7,7 +7,14 @@ from pathlib import Path
 
 
 REPO_URL = "https://github.com/protocolbuffers/protobuf.git"
-VERSION = "v3.20.3"
+VERSION = "v29.6"
+
+
+def init_submodules(destination: Path) -> None:
+    subprocess.run(
+        ["git", "-C", str(destination), "submodule", "update", "--init", "--depth", "1"],
+        check=True,
+    )
 
 
 def main() -> int:
@@ -29,10 +36,15 @@ def main() -> int:
             check=True,
         )
         subprocess.run(["git", "-C", str(destination), "checkout", "--force", VERSION], check=True)
+        init_submodules(destination)
         print(f"updated protobuf in {destination} to {VERSION}")
         return 0
 
-    subprocess.run(["git", "clone", "--branch", VERSION, "--depth", "1", REPO_URL, str(destination)], check=True)
+    subprocess.run([
+        "git", "clone", "--branch", VERSION, "--depth", "1",
+        "--recurse-submodules", "--shallow-submodules",
+        REPO_URL, str(destination),
+    ], check=True)
     print(f"cloned protobuf {VERSION} into {destination}")
     return 0
 
