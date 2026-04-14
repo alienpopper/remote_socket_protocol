@@ -675,7 +675,7 @@ $(OBJ_DIR)\encoding.obj: common\encoding\encoding.cpp common\encoding\encoding.h
 $(OBJ_DIR)\protobuf_encoding.obj: common\encoding\protobuf\protobuf_encoding.cpp common\encoding\protobuf\protobuf_encoding.hpp common\encoding\encoding.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\encoding\protobuf\protobuf_encoding.cpp /Fo$(OBJ_DIR)\protobuf_encoding.obj
 
-$(OBJ_DIR)\json_encoding.obj: common\encoding\json\json_encoding.cpp common\encoding\json\json_encoding.hpp common\encoding\encoding.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(NLOHMANN_JSON_INCLUDE_HEADER)
+$(OBJ_DIR)\json_encoding.obj: common\encoding\json\json_encoding.cpp common\encoding\json\json_encoding.hpp common\encoding\encoding.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\encoding\json\json_encoding.cpp /Fo$(OBJ_DIR)\json_encoding.obj
 
 $(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\base_types.hpp common\keypair.hpp $(PROTOBUF_GENERATED_HEADER)

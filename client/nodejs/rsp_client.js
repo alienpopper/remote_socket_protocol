@@ -73,11 +73,11 @@ function encodeNodeIdForField(nodeId) {
         bytes.writeBigUInt64BE(parsed.high, 0);
         bytes.writeBigUInt64BE(parsed.low, 8);
     }
-    return bytes.toString('hex');
+    return bytes.toString('base64');
 }
 
-function decodeNodeIdField(hexValue) {
-    const bytes = Buffer.from(hexValue, 'hex');
+function decodeNodeIdField(b64Value) {
+    const bytes = Buffer.from(b64Value, 'base64');
     if (bytes.length !== 16) {
         throw new Error('NodeId field must be 16 bytes');
     }
@@ -95,15 +95,15 @@ function encodeNodeIdForSigner(nodeId) {
     const bytes = Buffer.alloc(16);
     bytes.writeBigUInt64BE(parsed.high, 0);
     bytes.writeBigUInt64BE(parsed.low, 8);
-    return bytes.toString('hex');
+    return bytes.toString('base64');
 }
 
-function decodeSignerNodeId(hexValue) {
-    return guidFromBytes(Buffer.from(hexValue, 'hex'));
+function decodeSignerNodeId(b64Value) {
+    return guidFromBytes(Buffer.from(b64Value, 'base64'));
 }
 
-function randomUuidHex() {
-    return crypto.randomBytes(16).toString('hex');
+function randomUuidB64() {
+    return crypto.randomBytes(16).toString('base64');
 }
 
 function publicKeyPemToDer(publicKeyPem) {
@@ -131,7 +131,7 @@ function signRSPMessage(privateKeyPem, localNodeId, message) {
     return {
         signer: {value: encodeNodeIdForSigner(localNodeId)},
         algorithm: P256_ALGORITHM,
-        signature: signer.sign(privateKeyPem).toString('hex'),
+        signature: signer.sign(privateKeyPem).toString('base64'),
     };
 }
 
@@ -146,7 +146,7 @@ function verifyRSPMessageSignature(publicKeyPem, message, signatureBlock) {
     const verifier = crypto.createVerify('sha256');
     verifier.update(digest);
     verifier.end();
-    return verifier.verify(publicKeyPem, Buffer.from(signatureBlock.signature, 'hex'));
+    return verifier.verify(publicKeyPem, Buffer.from(signatureBlock.signature, 'base64'));
 }
 
 function encodeVarintUnsigned(value) {
@@ -178,8 +178,8 @@ function encodeLengthDelimitedField(fieldNumber, payload) {
     ]);
 }
 
-function serializeUuidLike(hexValue) {
-    return encodeLengthDelimitedField(1, Buffer.from(hexValue, 'hex'));
+function serializeUuidLike(b64Value) {
+    return encodeLengthDelimitedField(1, Buffer.from(b64Value, 'base64'));
 }
 
 function serializeDateTimeMessage(millisecondsSinceEpoch) {
@@ -194,7 +194,7 @@ function serializeUnsignedEndorsement(endorsement) {
         encodeLengthDelimitedField(1, serializeUuidLike(endorsement.subject.value)),
         encodeLengthDelimitedField(2, serializeUuidLike(endorsement.endorsement_service.value)),
         encodeLengthDelimitedField(3, serializeUuidLike(endorsement.endorsement_type.value)),
-        encodeLengthDelimitedField(4, Buffer.from(endorsement.endorsement_value || '', 'hex')),
+        encodeLengthDelimitedField(4, Buffer.from(endorsement.endorsement_value || '', 'base64')),
         encodeLengthDelimitedField(5, serializeDateTimeMessage(endorsement.valid_until.milliseconds_since_epoch)),
     ]);
 }
@@ -205,7 +205,7 @@ function signEndorsement(privateKeyPem, localNodeId, endorsement) {
     const signer = crypto.createSign('sha256');
     signer.update(unsignedBytes);
     signer.end();
-    return signer.sign(privateKeyPem).toString('hex');
+    return signer.sign(privateKeyPem).toString('base64');
 }
 
 // --- Transport utilities ---
@@ -500,7 +500,7 @@ class RSPClient extends EventEmitter {
     // --- Identity exchange ---
 
     async _performInitialIdentityExchange() {
-        const localChallengeNonce = randomUuidHex();
+        const localChallengeNonce = randomUuidB64();
         await this._sendRawMessage({challenge_request: {nonce: {value: localChallengeNonce}}});
 
         let peerChallengeReceived = false;
@@ -512,7 +512,7 @@ class RSPClient extends EventEmitter {
             if (hasField(message, 'challenge_request')) {
                 const nonceHex = message.challenge_request?.nonce?.value;
                 if (message.destination || message.signature || peerChallengeReceived ||
-                    !nonceHex || nonceHex.length !== 32) {
+                    !nonceHex) {
                     throw new Error('received an invalid challenge request during authentication');
                 }
                 const identityMessage = {
@@ -520,7 +520,7 @@ class RSPClient extends EventEmitter {
                         nonce: {value: nonceHex},
                         public_key: {
                             algorithm: P256_ALGORITHM,
-                            public_key: Buffer.from(this._publicKeyPem, 'utf8').toString('hex'),
+                            public_key: Buffer.from(this._publicKeyPem, 'utf8').toString('base64'),
                         },
                     },
                 };
@@ -531,7 +531,7 @@ class RSPClient extends EventEmitter {
             }
 
             if (hasField(message, 'identity')) {
-                const peerPublicKeyPem = Buffer.from(message.identity.public_key.public_key, 'hex').toString('utf8');
+                const peerPublicKeyPem = Buffer.from(message.identity.public_key.public_key, 'base64').toString('utf8');
                 if (message.identity?.nonce?.value !== localChallengeNonce ||
                     !verifyRSPMessageSignature(peerPublicKeyPem, message, message.signature)) {
                     throw new Error('received an invalid identity response during authentication');
@@ -553,7 +553,7 @@ class RSPClient extends EventEmitter {
             identity: {
                 public_key: {
                     algorithm: P256_ALGORITHM,
-                    public_key: Buffer.from(this._publicKeyPem, 'utf8').toString('hex'),
+                    public_key: Buffer.from(this._publicKeyPem, 'utf8').toString('base64'),
                 },
             },
         };
@@ -748,7 +748,7 @@ class RSPClient extends EventEmitter {
             const keys = Object.keys(message || {}).join(',');
             if (hasField(message, 'socket_send')) {
                 const socketHex = message.socket_send?.socket_number?.value || 'none';
-                const bytes = message.socket_send?.data ? Buffer.from(message.socket_send.data, 'hex').length : 0;
+                const bytes = message.socket_send?.data ? Buffer.from(message.socket_send.data, 'base64').length : 0;
                 trace(`send_raw keys=${keys} socket_send.socket=${socketHex} bytes=${bytes}`);
             }
         }
@@ -836,11 +836,11 @@ class RSPClient extends EventEmitter {
     // --- Ping ---
 
     async ping(nodeId, timeoutMs = DEFAULT_TIMEOUT_MS) {
-        const pingNonce = randomUuidHex();
+        const pingNonce = randomUuidB64();
         const sequence = this._pingSequence++;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            nonce: {value: randomUuidHex()},
+            nonce: {value: randomUuidB64()},
             ping_request: {
                 nonce: {value: pingNonce},
                 sequence,
@@ -869,7 +869,7 @@ class RSPClient extends EventEmitter {
             asyncData = false, shareSocket = false, useSocket = false,
         } = options;
 
-        const socketId = randomUuidHex();
+        const socketId = randomUuidB64();
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
             connect_tcp_request: {
@@ -921,7 +921,7 @@ class RSPClient extends EventEmitter {
             shareChildSockets = false, childrenUseSocket = false, childrenAsyncData = false,
         } = options;
 
-        const socketId = randomUuidHex();
+        const socketId = randomUuidB64();
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
             listen_tcp_request: {
@@ -1016,11 +1016,11 @@ class RSPClient extends EventEmitter {
             return false;
         }
 
-        const dataHex = Buffer.isBuffer(data) ? data.toString('hex') : Buffer.from(data).toString('hex');
-        trace(`socketSend socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataHex, 'hex').length}`);
+        const dataB64 = Buffer.isBuffer(data) ? data.toString('base64') : Buffer.from(data).toString('base64');
+        trace(`socketSend socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_send: {socket_number: {value: socketId}, data: dataHex},
+            socket_send: {socket_number: {value: socketId}, data: dataB64},
         };
         try {
             await this._sendSignedMessage(request);
@@ -1081,7 +1081,7 @@ class RSPClient extends EventEmitter {
     async socketRecv(socketId, maxBytes = 4096, waitMs = 0) {
         const reply = await this.socketRecvEx(socketId, maxBytes, waitMs);
         if (!reply || (reply.error !== SOCKET_DATA && reply.error !== SUCCESS)) return null;
-        return reply.data ? Buffer.from(reply.data, 'hex') : Buffer.alloc(0);
+        return reply.data ? Buffer.from(reply.data, 'base64') : Buffer.alloc(0);
     }
 
     async socketClose(socketId) {
@@ -1184,11 +1184,11 @@ class RSPClient extends EventEmitter {
             trace(`sendSocketData route-miss socket=${socketId}`);
             return false;
         }
-        const dataHex = Buffer.isBuffer(data) ? data.toString('hex') : Buffer.from(data).toString('hex');
-        trace(`sendSocketData socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataHex, 'hex').length}`);
+        const dataB64 = Buffer.isBuffer(data) ? data.toString('base64') : Buffer.from(data).toString('base64');
+        trace(`sendSocketData socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_send: {socket_number: {value: socketId}, data: dataHex},
+            socket_send: {socket_number: {value: socketId}, data: dataB64},
         };
         try {
             await this._sendSignedMessage(request);
@@ -1206,15 +1206,15 @@ class RSPClient extends EventEmitter {
         const pendingKey = encodeNodeIdForField(nodeId);
         if (this._pendingEndorsements.has(pendingKey)) return null;
 
-        const endorsementValueHex = Buffer.isBuffer(endorsementValue)
-            ? endorsementValue.toString('hex')
-            : Buffer.from(endorsementValue).toString('hex');
+        const endorsementValueB64 = Buffer.isBuffer(endorsementValue)
+            ? endorsementValue.toString('base64')
+            : Buffer.from(endorsementValue).toString('base64');
 
         const requested = {
             subject: {value: encodeNodeIdForSigner(this.nodeId)},
             endorsement_service: {value: encodeNodeIdForSigner(this.nodeId)},
             endorsement_type: {value: normalizeGuid(endorsementType)},
-            endorsement_value: endorsementValueHex,
+            endorsement_value: endorsementValueB64,
             valid_until: {milliseconds_since_epoch: Date.now() + 86400000},
         };
         requested.signature = signEndorsement(this._privateKeyPem, this.nodeId, requested);

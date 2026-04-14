@@ -242,15 +242,12 @@ function isPlainObject(value) {
 
 function normalizeBytes(value, path) {
     if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
-        return Buffer.from(value).toString("hex");
+        return Buffer.from(value).toString("base64");
     }
     if (typeof value !== "string") {
-        fail(path, "expected bytes as a hex string, Buffer, or Uint8Array");
+        fail(path, "expected bytes as a base64 string, Buffer, or Uint8Array");
     }
-    if ((value.length % 2) !== 0 || !/^[0-9a-fA-F]*$/.test(value)) {
-        fail(path, "expected an even-length hex string");
-    }
-    return value.toLowerCase();
+    return value;
 }
 
 function normalizeBoolean(value, path) {
@@ -269,6 +266,9 @@ function normalizeString(value, path) {
 
 function normalizeInteger(value, path, minimum, maximum) {
     let numericValue = value;
+    if (typeof numericValue === "string") {
+        numericValue = Number(numericValue);
+    }
     if (typeof numericValue === "bigint") {
         if (numericValue < BigInt(minimum) || numericValue > BigInt(maximum)) {
             fail(path, `expected an integer in range [${minimum}, ${maximum}]`);
@@ -493,7 +493,7 @@ function hashScalar(field, value, hasher) {
         hasher.feedBytes(Buffer.from(value, "utf8"));
         return;
     case "bytes":
-        hasher.feedBytes(Buffer.from(value, "hex"));
+        hasher.feedBytes(Buffer.from(value, "base64"));
         return;
     case "uint32":
     case "fixed32":
@@ -685,7 +685,7 @@ def _hash_scalar(field: dict, value: Any, hasher: _MessageHasher) -> None:
     elif t == "string":
         hasher.feed_bytes(value.encode("utf-8"))
     elif t == "bytes":
-        hasher.feed_bytes(bytes.fromhex(value) if isinstance(value, str) else bytes(value))
+        hasher.feed_bytes(base64.b64decode(value) if isinstance(value, str) else bytes(value))
     elif t in ("uint32", "fixed32"):
         hasher.feed_uint32(int(value))
     elif t in ("int32", "sint32", "sfixed32"):
@@ -751,6 +751,7 @@ def generate_py(enums, messages, output_path):
         "",
         '"""RSP message schema and canonical hash functions for Python clients."""',
         "",
+        "import base64",
         "import hashlib",
         "import struct",
         "import sys",

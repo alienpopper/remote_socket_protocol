@@ -1,6 +1,7 @@
 """Async Python RSP client — mirrors client/nodejs/rsp_client.js."""
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -59,12 +60,12 @@ def _encode_node_id_for_field(node_id: str) -> str:
         data = struct.pack("<QQ", high, low)
     else:
         data = struct.pack(">QQ", high, low)
-    return data.hex()
+    return base64.b64encode(data).decode("ascii")
 
 
-def _decode_node_id_field(hex_value: str) -> str:
+def _decode_node_id_field(b64_value: str) -> str:
     """Decode native-endian node id field back to standard UUID."""
-    b = bytes.fromhex(hex_value)
+    b = base64.b64decode(b64_value)
     if sys.byteorder == "little":
         high, low = struct.unpack("<QQ", b)
     else:
@@ -78,11 +79,11 @@ def _encode_node_id_for_signer(node_id: str) -> str:
     normalized = _normalize_guid(node_id)
     high = int(normalized[:16], 16)
     low = int(normalized[16:], 16)
-    return struct.pack(">QQ", high, low).hex()
+    return base64.b64encode(struct.pack(">QQ", high, low)).decode("ascii")
 
 
-def _decode_signer_node_id(hex_value: str) -> str:
-    return _guid_from_bytes(bytes.fromhex(hex_value))
+def _decode_signer_node_id(b64_value: str) -> str:
+    return _guid_from_bytes(base64.b64decode(b64_value))
 
 
 def _random_uuid_hex() -> str:
@@ -108,7 +109,7 @@ def _sign_rsp_message(private_key, local_node_id: str, message: dict) -> dict:
     return {
         "signer": {"value": _encode_node_id_for_signer(local_node_id)},
         "algorithm": P256_ALGORITHM,
-        "signature": sig_bytes.hex(),
+        "signature": base64.b64encode(sig_bytes).decode("ascii"),
     }
 
 
@@ -121,7 +122,7 @@ def _verify_rsp_message_signature(public_key, message: dict, signature_block: di
         if signer_node_id != expected_node_id:
             return False
         digest = _messages.hash_rsp_message(message)
-        sig_bytes = bytes.fromhex(signature_block["signature"])
+        sig_bytes = base64.b64decode(signature_block["signature"])
         public_key.verify(sig_bytes, digest, ec.ECDSA(hashes.SHA256()))
         return True
     except Exception:
@@ -132,7 +133,7 @@ def _sign_endorsement(private_key, local_node_id: str, endorsement: dict) -> str
     _unused = local_node_id
     unsigned_bytes = _serialize_unsigned_endorsement(endorsement)
     sig_bytes = private_key.sign(unsigned_bytes, ec.ECDSA(hashes.SHA256()))
-    return sig_bytes.hex()
+    return base64.b64encode(sig_bytes).decode("ascii")
 
 
 def _encode_varint_unsigned(value: int) -> bytes:
@@ -159,8 +160,8 @@ def _encode_length_delimited_field(field_number: int, payload: bytes) -> bytes:
     return _encode_tag(field_number, 2) + _encode_varint_unsigned(len(payload)) + payload
 
 
-def _serialize_uuid_like(hex_value: str) -> bytes:
-    return _encode_length_delimited_field(1, bytes.fromhex(hex_value))
+def _serialize_uuid_like(b64_value: str) -> bytes:
+    return _encode_length_delimited_field(1, base64.b64decode(b64_value))
 
 
 def _serialize_date_time_message(milliseconds_since_epoch: int) -> bytes:
@@ -172,7 +173,7 @@ def _serialize_unsigned_endorsement(endorsement: dict) -> bytes:
         _encode_length_delimited_field(1, _serialize_uuid_like(endorsement["subject"]["value"])),
         _encode_length_delimited_field(2, _serialize_uuid_like(endorsement["endorsement_service"]["value"])),
         _encode_length_delimited_field(3, _serialize_uuid_like(endorsement["endorsement_type"]["value"])),
-        _encode_length_delimited_field(4, bytes.fromhex(endorsement.get("endorsement_value") or "")),
+        _encode_length_delimited_field(4, base64.b64decode(endorsement.get("endorsement_value") or "")),
         _encode_length_delimited_field(
             5,
             _serialize_date_time_message(int(endorsement["valid_until"]["milliseconds_since_epoch"])),
@@ -188,8 +189,8 @@ def _public_key_pem_bytes(public_key) -> bytes:
     )
 
 
-def _load_public_key_from_hex(hex_pem: str):
-    pem_bytes = bytes.fromhex(hex_pem)
+def _load_public_key_from_b64(b64_pem: str):
+    pem_bytes = base64.b64decode(b64_pem)
     return serialization.load_pem_public_key(pem_bytes)
 
 
@@ -354,13 +355,13 @@ class RSPClient:
                 if (message.get("destination") or message.get("signature") or
                         peer_challenge_received or not nonce_hex or len(nonce_hex) != 32):
                     raise ConnectionError("received an invalid challenge request during authentication")
-                pub_pem_hex = _public_key_pem_bytes(self._public_key).hex()
+                pub_pem_b64 = base64.b64encode(_public_key_pem_bytes(self._public_key)).decode("ascii")
                 identity_message = {
                     "identity": {
                         "nonce": {"value": nonce_hex},
                         "public_key": {
                             "algorithm": P256_ALGORITHM,
-                            "public_key": pub_pem_hex,
+                            "public_key": pub_pem_b64,
                         },
                     },
                 }
@@ -372,10 +373,10 @@ class RSPClient:
                 continue
 
             if _has_field(message, "identity"):
-                peer_public_key_hex = (
+                peer_public_key_b64 = (
                     message.get("identity", {}).get("public_key", {}).get("public_key", "")
                 )
-                peer_public_key = _load_public_key_from_hex(peer_public_key_hex)
+                peer_public_key = _load_public_key_from_b64(peer_public_key_b64)
                 nonce_in_identity = (
                     (message.get("identity") or {}).get("nonce", {}).get("value")
                 )
@@ -391,13 +392,13 @@ class RSPClient:
             raise ConnectionError("received an unexpected message during authentication")
 
     async def _send_identity_to(self, node_id: str) -> None:
-        pub_pem_hex = _public_key_pem_bytes(self._public_key).hex()
+        pub_pem_b64 = base64.b64encode(_public_key_pem_bytes(self._public_key)).decode("ascii")
         identity_message = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
             "identity": {
                 "public_key": {
                     "algorithm": P256_ALGORITHM,
-                    "public_key": pub_pem_hex,
+                    "public_key": pub_pem_b64,
                 },
             },
         }
@@ -809,10 +810,10 @@ class RSPClient:
         node_id = self._socket_routes.get(lookup_socket_id) or self._socket_routes.get(socket_id)
         if not node_id:
             return False
-        data_hex = data.hex() if isinstance(data, (bytes, bytearray)) else bytes(data).hex()
+        data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_send": {"socket_number": {"value": socket_id}, "data": data_hex},
+            "socket_send": {"socket_number": {"value": socket_id}, "data": data_b64},
         }
         try:
             await self._send_signed_message(request)
@@ -866,8 +867,8 @@ class RSPClient:
         reply = await self.socket_recv_ex(socket_id, max_bytes, wait_ms)
         if not reply or reply.get("error") not in (SOCKET_DATA, SUCCESS):
             return None
-        data_hex = reply.get("data") or ""
-        return bytes.fromhex(data_hex) if data_hex else b""
+        data_b64 = reply.get("data") or ""
+        return base64.b64decode(data_b64) if data_b64 else b""
 
     async def socket_close(self, socket_id: str) -> bool:
         node_id = self._socket_routes.get(socket_id)
@@ -944,10 +945,10 @@ class RSPClient:
         node_id = self._socket_routes.get(socket_id)
         if not node_id:
             return False
-        data_hex = data.hex() if isinstance(data, (bytes, bytearray)) else bytes(data).hex()
+        data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_send": {"socket_number": {"value": socket_id}, "data": data_hex},
+            "socket_send": {"socket_number": {"value": socket_id}, "data": data_b64},
         }
         try:
             await self._send_signed_message(request)
@@ -965,16 +966,16 @@ class RSPClient:
             return None
 
         if isinstance(endorsement_value, (bytes, bytearray)):
-            endorsement_value_hex = endorsement_value.hex()
+            endorsement_value_b64 = base64.b64encode(endorsement_value).decode("ascii")
         else:
-            endorsement_value_hex = bytes(endorsement_value).hex()
+            endorsement_value_b64 = base64.b64encode(bytes(endorsement_value)).decode("ascii")
 
         import time as _time
         requested = {
             "subject": {"value": _encode_node_id_for_signer(self.node_id)},
             "endorsement_service": {"value": _encode_node_id_for_signer(node_id)},
             "endorsement_type": {"value": _normalize_guid(endorsement_type)},
-            "endorsement_value": endorsement_value_hex,
+            "endorsement_value": endorsement_value_b64,
             "valid_until": {"milliseconds_since_epoch": int(_time.time() * 1000) + 86400000},
         }
         requested["signature"] = _sign_endorsement(self._private_key, self.node_id, requested)
