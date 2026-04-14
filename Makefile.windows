@@ -528,7 +528,7 @@ $(TRANSCODING_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto $(PROTOBUF_PROTOC)
 	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=. --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto
+	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
@@ -642,8 +642,8 @@ test-mq-signing: $(MQ_SIGNING_TEST_TARGET)
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
 
-generate-messages: messages.proto $(GENERATE_MESSAGES_SCRIPT)
-	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+generate-messages: messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto $(GENERATE_MESSAGES_SCRIPT)
+	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 $(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj

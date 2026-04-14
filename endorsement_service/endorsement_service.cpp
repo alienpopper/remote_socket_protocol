@@ -3,6 +3,7 @@
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
 #include "common/message_queue/mq_signing.hpp"
+#include "common/service_message.hpp"
 
 #include <cstring>
 
@@ -52,7 +53,7 @@ bool EndorsementService::handleNodeSpecificMessage(const rsp::proto::RSPMessage&
         return true;
     }
 
-    if (message.has_begin_endorsement_request()) {
+    if (rsp::hasServiceMessage<rsp::proto::BeginEndorsementRequest>(message)) {
         return handleBeginEndorsementRequest(message);
     }
 
@@ -66,29 +67,38 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
         *reply.mutable_destination() = toProtoNodeId(*sourceNodeId);
     }
 
-    auto* done = reply.mutable_endorsement_done();
-    done->set_status(rsp::proto::ENDORSEMENT_FAILED);
+    rsp::proto::EndorsementDone done;
+    done.set_status(rsp::proto::ENDORSEMENT_FAILED);
 
     try {
         if (!sourceNodeId.has_value()) {
+            rsp::packServiceMessage(reply, done);
             return send(reply);
         }
 
         const auto cachedIdentity = identityCache().get(*sourceNodeId);
         if (!cachedIdentity.has_value()) {
-            done->set_status(rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY);
+            done.set_status(rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY);
+            rsp::packServiceMessage(reply, done);
             return send(reply);
         }
 
-        const auto& request = message.begin_endorsement_request();
+        rsp::proto::BeginEndorsementRequest request;
+        if (!rsp::unpackServiceMessage(message, &request)) {
+            rsp::packServiceMessage(reply, done);
+            return send(reply);
+        }
+
         if (!request.has_requested_values()) {
-            done->set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            done.set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            rsp::packServiceMessage(reply, done);
             return send(reply);
         }
 
         const rsp::KeyPair requesterPublicKey = rsp::KeyPair::fromPublicKey(cachedIdentity->public_key());
         if (requesterPublicKey.nodeID() != *sourceNodeId) {
-            done->set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            done.set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            rsp::packServiceMessage(reply, done);
             return send(reply);
         }
 
@@ -96,7 +106,8 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
         if (requestedValues.subject() != *sourceNodeId ||
             requestedValues.endorsementService() != *sourceNodeId ||
             !requestedValues.verifySignature(requesterPublicKey)) {
-            done->set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            done.set_status(rsp::proto::ENDORSEMENT_INVALID_SIGNATURE);
+            rsp::packServiceMessage(reply, done);
             return send(reply);
         }
 
@@ -109,12 +120,13 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
             requestedValues.endorsementValue(),
             validUntil);
 
-        done->set_status(rsp::proto::ENDORSEMENT_SUCCESS);
-        *done->mutable_new_endorsement() = issuedEndorsement.toProto();
+        done.set_status(rsp::proto::ENDORSEMENT_SUCCESS);
+        *done.mutable_new_endorsement() = issuedEndorsement.toProto();
     } catch (const std::exception&) {
-        done->set_status(rsp::proto::ENDORSEMENT_FAILED);
+        done.set_status(rsp::proto::ENDORSEMENT_FAILED);
     }
 
+    rsp::packServiceMessage(reply, done);
     return send(reply);
 }
 

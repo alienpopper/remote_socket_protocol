@@ -2,8 +2,14 @@ syntax = "proto3";
 
 package rsp.proto;
 
+import "google/protobuf/any.proto";
+
 message Uuid {
   bytes value = 1;
+}
+
+message SocketID {
+    bytes value = 1; //uuid
 }
 
 message NodeId {
@@ -20,6 +26,31 @@ message DateTime {
 
 message OptionalBool {
     bool value = 1;
+}
+
+enum SOCKET_STATUS {
+  SUCCESS = 0;
+    CONNECT_REFUSED = 1;
+    CONNECT_TIMEOUT = 2;
+    SOCKET_CLOSED = 3;
+    SOCKET_DATA = 4;
+    SOCKET_ERROR = 5; //error reported from the underlying OS socket
+    NEW_CONNECTION = 6;
+    ASYNC_SOCKET = 7; //synchronous operation attempted on an async socket
+    NODEID_MISMATCH = 9;
+    INVALID_FLAGS = 10;
+    SOCKET_IN_USE = 11;
+    TIMED_OUT = 12;
+}
+
+message SocketReply {
+    SocketID socket_id = 1;
+    SOCKET_STATUS error = 2;
+    optional string message = 3;
+    optional string new_socket_remote_address = 4;
+    optional SocketID new_socket_id = 5;  //RS chosen if async, client chosen if blocking
+    optional int32 socket_error_code = 6; //error code reported from the underlying OS socket
+    optional bytes data = 7;
 }
 
 enum SIGNATURE_ALGORITHMS {
@@ -110,8 +141,15 @@ message ResourceRecord{
     }
 }
 
+message ServiceSchema {
+    string proto_file_name = 1;
+    bytes proto_file_descriptor_set = 2; // Self-contained FileDescriptorSet
+    repeated string accepted_type_urls = 3;
+}
+
 message ResourceAdvertisement{
     repeated ResourceRecord records = 1;
+    repeated ServiceSchema schemas = 2;
 }
 
 message ResourceQuery{
@@ -143,9 +181,6 @@ message PingReply {
     DateTime time_sent = 3;
     DateTime time_replied = 4;
 }
-
-import "resource_service/bsd_sockets/bsd_sockets.proto";
-import "resource_service/sshd/sshd.proto";
 
 
 /****Endorsement Server Messages ****/
@@ -346,29 +381,25 @@ message RSPMessage {
   optional NodeId destination = 1;  
     optional NodeId source = 2;
     OptionalBool trace = 24;
-  oneof submessage {
+
+  // Core messages the RM understands at compile time
+  oneof core_message {
       ChallengeRequest challenge_request = 3;
       Identity identity = 4;
       RouteUpdate route = 5;
       Error error = 6;
       PingRequest ping_request = 7;
       PingReply ping_reply = 8;
-      ConnectTCPRequest connect_tcp_request = 9;
-        SocketReply socket_reply = 10;
-        SocketSend socket_send = 11;
-        SocketRecv socket_recv = 12;
-        SocketClose socket_close = 13;
-        ListenTCPRequest listen_tcp_request = 14;
-        AcceptTCP accept_tcp = 15;
-        ResourceAdvertisement resource_advertisement = 16;
-        ResourceQuery resource_query = 17;
-          BeginEndorsementRequest begin_endorsement_request = 18;
-          EndorsementChallenge endorsement_challenge = 19;
-          EndorsementChallengeReply endorsement_challenge_reply = 20;
-          EndorsementDone endorsement_done = 21;
-                    EndorsementNeeded endorsement_needed = 23;
-        ConnectSshd connect_sshd = 25;
+      ResourceAdvertisement resource_advertisement = 16;
+      ResourceQuery resource_query = 17;
+      EndorsementNeeded endorsement_needed = 23;
   }
+
+  // Service-specific payload — opaque to RM at compile time.
+  // The RM validates structure by looking up the destination node's
+  // registered ServiceSchema.
+  google.protobuf.Any service_message = 200;
+
     Uuid nonce = 22;
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong

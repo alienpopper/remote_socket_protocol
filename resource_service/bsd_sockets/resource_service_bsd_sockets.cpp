@@ -1,7 +1,10 @@
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include "common/message_queue/mq_signing.hpp"
+#include "common/service_message.hpp"
 #include "common/transport/transport_tcp.hpp"
+
+#include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 
 #include <algorithm>
 #include <chrono>
@@ -87,27 +90,27 @@ rsp::proto::ResourceAdvertisement BsdSocketsResourceService::buildResourceAdvert
 }
 
 bool BsdSocketsResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
-    if (message.has_connect_tcp_request()) {
+    if (rsp::hasServiceMessage<rsp::proto::ConnectTCPRequest>(message)) {
         return connectQueue_ != nullptr && connectQueue_->push(message);
     }
 
-    if (message.has_listen_tcp_request()) {
+    if (rsp::hasServiceMessage<rsp::proto::ListenTCPRequest>(message)) {
         return handleListenTCPRequest(message);
     }
 
-    if (message.has_accept_tcp()) {
+    if (rsp::hasServiceMessage<rsp::proto::AcceptTCP>(message)) {
         return handleAcceptTCP(message);
     }
 
-    if (message.has_socket_send()) {
+    if (rsp::hasServiceMessage<rsp::proto::SocketSend>(message)) {
         return handleSocketSend(message);
     }
 
-    if (message.has_socket_recv()) {
+    if (rsp::hasServiceMessage<rsp::proto::SocketRecv>(message)) {
         return handleSocketRecv(message);
     }
 
-    if (message.has_socket_close()) {
+    if (rsp::hasServiceMessage<rsp::proto::SocketClose>(message)) {
         return handleSocketClose(message);
     }
 
@@ -139,7 +142,11 @@ bool BsdSocketsResourceService::handleConnectTCPRequest(const rsp::proto::RSPMes
         return false;
     }
 
-    const auto& request = message.connect_tcp_request();
+    rsp::proto::ConnectTCPRequest request;
+    if (!rsp::unpackServiceMessage(message, &request)) {
+        return false;
+    }
+
     if (!request.has_socket_number()) {
         return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
     }
@@ -230,7 +237,11 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
         return false;
     }
 
-    const auto& request = message.listen_tcp_request();
+    rsp::proto::ListenTCPRequest request;
+    if (!rsp::unpackServiceMessage(message, &request)) {
+        return false;
+    }
+
     if (!request.has_socket_number()) {
         return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
     }
@@ -313,7 +324,11 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
 }
 
 bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& message) {
-    const auto& request = message.accept_tcp();
+    rsp::proto::AcceptTCP request;
+    if (!rsp::unpackServiceMessage(message, &request)) {
+        return false;
+    }
+
     const auto listenSocketId = fromProtoSocketId(request.listen_socket_number());
     if (!listenSocketId.has_value()) {
         return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid listen socket id"));
@@ -405,7 +420,11 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
     }
 
     auto reply = makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*listenSocketId);
-    *reply.mutable_socket_reply()->mutable_new_socket_id() = toProtoSocketId(*childSocketId);
+    // Unpack, add child socket id, repack
+    rsp::proto::SocketReply socketReply;
+    rsp::unpackServiceMessage(reply, &socketReply);
+    *socketReply.mutable_new_socket_id() = toProtoSocketId(*childSocketId);
+    rsp::packServiceMessage(reply, socketReply);
     const bool sent = send(reply);
     if (!sent) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
@@ -425,7 +444,13 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
 
 bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& message) {
     const bool trace = rsp::messageTraceEnabled(message);
-    const auto socketId = fromProtoSocketId(message.socket_send().socket_number());
+
+    rsp::proto::SocketSend sendMsg;
+    if (!rsp::unpackServiceMessage(message, &sendMsg)) {
+        return false;
+    }
+
+    const auto socketId = fromProtoSocketId(sendMsg.socket_number());
     if (!socketId.has_value()) {
         if (trace) {
             std::cerr << "[resource_service] socket_send invalid socket id" << std::endl;
@@ -457,7 +482,7 @@ bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& m
 
     const bool effectiveTrace = trace || (socketState != nullptr && socketState->traceEnabled);
 
-    const std::string& data = message.socket_send().data();
+    const std::string& data = sendMsg.data();
     if (effectiveTrace) {
         std::cerr << "[resource_service] socket_send id=" << socketId->toString()
                   << " bytes=" << data.size() << std::endl;
@@ -479,7 +504,12 @@ bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& m
 }
 
 bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& message) {
-    const auto socketId = fromProtoSocketId(message.socket_recv().socket_number());
+    rsp::proto::SocketRecv recvMsg;
+    if (!rsp::unpackServiceMessage(message, &recvMsg)) {
+        return false;
+    }
+
+    const auto socketId = fromProtoSocketId(recvMsg.socket_number());
     if (!socketId.has_value()) {
         return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
     }
@@ -505,8 +535,8 @@ bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& m
                                            "socket_recv is ignored when async_data is enabled"));
     }
 
-    const uint32_t maxBytes = message.socket_recv().has_max_bytes() && message.socket_recv().max_bytes() > 0
-                                  ? message.socket_recv().max_bytes()
+    const uint32_t maxBytes = recvMsg.has_max_bytes() && recvMsg.max_bytes() > 0
+                                  ? recvMsg.max_bytes()
                                   : 4096u;
     rsp::Buffer buffer(maxBytes);
     const int bytesRead = socketState == nullptr || socketState->connection == nullptr ? -1 : socketState->connection->recv(buffer);
@@ -519,12 +549,20 @@ bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& m
     }
 
     auto reply = makeSocketReplyMessage(message, rsp::proto::SOCKET_DATA);
-    reply.mutable_socket_reply()->set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
+    rsp::proto::SocketReply sr;
+    rsp::unpackServiceMessage(reply, &sr);
+    sr.set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
+    rsp::packServiceMessage(reply, sr);
     return send(reply);
 }
 
 bool BsdSocketsResourceService::handleSocketClose(const rsp::proto::RSPMessage& message) {
-    const auto socketId = fromProtoSocketId(message.socket_close().socket_number());
+    rsp::proto::SocketClose closeMsg;
+    if (!rsp::unpackServiceMessage(message, &closeMsg)) {
+        return false;
+    }
+
+    const auto socketId = fromProtoSocketId(closeMsg.socket_number());
     if (!socketId.has_value()) {
         return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
     }
@@ -614,7 +652,12 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
                                         std::string(),
                                         &listenerState->socketId,
                                         listenerState->traceEnabled);
-    *reply.mutable_socket_reply()->mutable_new_socket_id() = toProtoSocketId(socketState->socketId);
+    {
+        rsp::proto::SocketReply sr;
+        rsp::unpackServiceMessage(reply, &sr);
+        *sr.mutable_new_socket_id() = toProtoSocketId(socketState->socketId);
+        rsp::packServiceMessage(reply, sr);
+    }
     if (!send(reply)) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
         managedSockets_.erase(socketState->socketId);
@@ -682,7 +725,12 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
                                             std::string(),
                                             &socketState->socketId,
                                             socketState->traceEnabled);
-        reply.mutable_socket_reply()->set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
+        {
+            rsp::proto::SocketReply sr;
+            rsp::unpackServiceMessage(reply, &sr);
+            sr.set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
+            rsp::packServiceMessage(reply, sr);
+        }
         if (socketState->traceEnabled) {
             std::cerr << "[resource_service] async_read_loop send SOCKET_DATA id="
                       << socketState->socketId.toString() << " bytes=" << bytesRead << std::endl;
@@ -732,18 +780,25 @@ rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const r
     const rsp::GUID* effectiveSocketId = socketId;
     std::optional<rsp::GUID> derivedSocketId;
     if (effectiveSocketId == nullptr) {
-        if (request.has_connect_tcp_request() && request.connect_tcp_request().has_socket_number()) {
-            derivedSocketId = fromProtoSocketId(request.connect_tcp_request().socket_number());
-        } else if (request.has_listen_tcp_request() && request.listen_tcp_request().has_socket_number()) {
-            derivedSocketId = fromProtoSocketId(request.listen_tcp_request().socket_number());
-        } else if (request.has_accept_tcp()) {
-            derivedSocketId = fromProtoSocketId(request.accept_tcp().listen_socket_number());
-        } else if (request.has_socket_send()) {
-            derivedSocketId = fromProtoSocketId(request.socket_send().socket_number());
-        } else if (request.has_socket_recv()) {
-            derivedSocketId = fromProtoSocketId(request.socket_recv().socket_number());
-        } else if (request.has_socket_close()) {
-            derivedSocketId = fromProtoSocketId(request.socket_close().socket_number());
+        rsp::proto::ConnectTCPRequest connectReq;
+        rsp::proto::ListenTCPRequest listenReq;
+        rsp::proto::AcceptTCP acceptReq;
+        rsp::proto::SocketSend sendReq;
+        rsp::proto::SocketRecv recvReq;
+        rsp::proto::SocketClose closeReq;
+
+        if (rsp::unpackServiceMessage(request, &connectReq) && connectReq.has_socket_number()) {
+            derivedSocketId = fromProtoSocketId(connectReq.socket_number());
+        } else if (rsp::unpackServiceMessage(request, &listenReq) && listenReq.has_socket_number()) {
+            derivedSocketId = fromProtoSocketId(listenReq.socket_number());
+        } else if (rsp::unpackServiceMessage(request, &acceptReq)) {
+            derivedSocketId = fromProtoSocketId(acceptReq.listen_socket_number());
+        } else if (rsp::unpackServiceMessage(request, &sendReq)) {
+            derivedSocketId = fromProtoSocketId(sendReq.socket_number());
+        } else if (rsp::unpackServiceMessage(request, &recvReq)) {
+            derivedSocketId = fromProtoSocketId(recvReq.socket_number());
+        } else if (rsp::unpackServiceMessage(request, &closeReq)) {
+            derivedSocketId = fromProtoSocketId(closeReq.socket_number());
         }
 
         if (derivedSocketId.has_value()) {
@@ -771,16 +826,19 @@ rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const r
     if (traceEnabled) {
         reply.mutable_trace()->set_value(true);
     }
+
+    rsp::proto::SocketReply socketReply;
     if (socketId != nullptr) {
-        *reply.mutable_socket_reply()->mutable_socket_id() = toProtoSocketId(*socketId);
+        *socketReply.mutable_socket_id() = toProtoSocketId(*socketId);
     }
-    reply.mutable_socket_reply()->set_error(status);
+    socketReply.set_error(status);
     if (!errorMessage.empty()) {
-        reply.mutable_socket_reply()->set_message(errorMessage);
+        socketReply.set_message(errorMessage);
     }
     if (socketId != nullptr) {
-        *reply.mutable_socket_reply()->mutable_new_socket_id() = toProtoSocketId(*socketId);
+        *socketReply.mutable_new_socket_id() = toProtoSocketId(*socketId);
     }
+    rsp::packServiceMessage(reply, socketReply);
 
     return reply;
 }

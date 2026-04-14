@@ -211,6 +211,32 @@ def parse_proto(proto_path):
     return enums, messages
 
 
+def parse_protos(proto_paths):
+    """Parse multiple proto files and merge their schemas."""
+    combined_text = ""
+    import os
+    seen = set()
+    for proto_path in proto_paths:
+        abs_path = os.path.abspath(proto_path)
+        if abs_path in seen:
+            continue
+        seen.add(abs_path)
+        with open(proto_path, "r", encoding="utf-8") as f:
+            combined_text += "\n" + f.read()
+        base_dir = os.path.dirname(proto_path) or "."
+        for m in re.finditer(r'import\s+"([^"]+)"\s*;', combined_text):
+            import_path = os.path.join(base_dir, m.group(1))
+            abs_import = os.path.abspath(import_path)
+            if abs_import not in seen and os.path.isfile(import_path):
+                seen.add(abs_import)
+                with open(import_path, "r", encoding="utf-8") as f2:
+                    combined_text += "\n" + f2.read()
+    combined_text = strip_comments(combined_text)
+    enums = parse_enums(combined_text)
+    messages = parse_messages(combined_text, enums)
+    return enums, messages
+
+
 # ---------------------------------------------------------------------------
 # JS output
 # ---------------------------------------------------------------------------
@@ -518,6 +544,27 @@ function hashScalar(field, value, hasher) {
     }
 }
 
+function hashAny(value, hasher) {
+    // Hash google.protobuf.Any by its type_url string, then hash the inner message fields.
+    const typeUrl = value["@type"] || "";
+    hasher.feedBytes(Buffer.from(typeUrl, "utf8"));
+    const slash = typeUrl.lastIndexOf("/");
+    const fullName = slash >= 0 ? typeUrl.substring(slash + 1) : typeUrl;
+    // Strip package prefix to get the simple type name for schema lookup
+    const dot = fullName.lastIndexOf(".");
+    const typeName = dot >= 0 ? fullName.substring(dot + 1) : fullName;
+    const definition = MESSAGE_TYPES[typeName];
+    if (!definition) {
+        fail(typeUrl, "cannot hash unknown Any type");
+    }
+    // Build a copy without @type for hashing as a regular message
+    const inner = {};
+    for (const key of Object.keys(value)) {
+        if (key !== "@type") inner[key] = value[key];
+    }
+    hashMessageObject(typeName, inner, hasher);
+}
+
 function hashFieldValue(field, value, hasher) {
     switch (field.kind) {
     case "scalar":
@@ -527,6 +574,10 @@ function hashFieldValue(field, value, hasher) {
         hasher.feedUint32(value >>> 0);
         return;
     case "message":
+        if (field.type === "Any") {
+            hashAny(value, hasher);
+            return;
+        }
         hashMessageObject(field.type, value, hasher);
         return;
     default:
@@ -799,12 +850,12 @@ def generate_py(enums, messages, output_path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--proto", required=True, help="Path to messages.proto")
+    parser.add_argument("--proto", required=True, nargs="+", help="Path(s) to .proto files")
     parser.add_argument("--nodejs", required=True, help="Output path for messages.js")
     parser.add_argument("--python", required=True, help="Output path for messages.py")
     args = parser.parse_args()
 
-    enums, messages = parse_proto(args.proto)
+    enums, messages = parse_protos(args.proto)
 
     generate_js(enums, messages, args.nodejs)
     print(f"Generated {args.nodejs}", file=sys.stderr)

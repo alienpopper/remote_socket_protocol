@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rsp.proto;
 
-import "resource_service/bsd_sockets/bsd_sockets.proto";
+import "messages.proto";
 
 message ConnectSshd {
     SocketID socket_number = 2;

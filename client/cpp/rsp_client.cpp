@@ -4,6 +4,9 @@
 #include "common/endorsement/endorsement.hpp"
 #include "common/message_queue/mq_signing.hpp"
 #include "common/ping_trace.hpp"
+#include "common/service_message.hpp"
+
+#include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 
 #include <chrono>
 #include <cstring>
@@ -132,12 +135,12 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
-    if (message.has_endorsement_done()) {
+    if (rsp::hasServiceMessage<rsp::proto::EndorsementDone>(message)) {
         handleEndorsementDone(message);
         return true;
     }
 
-    if (message.has_socket_reply()) {
+    if (rsp::hasServiceMessage<rsp::proto::SocketReply>(message)) {
         handleSocketReply(message);
         return true;
     }
@@ -307,7 +310,9 @@ bool RSPClient::sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
                                                    const rsp::proto::Endorsement& requestedMessage) {
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(nodeId);
-    *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
+    rsp::proto::BeginEndorsementRequest beginReq;
+    *beginReq.mutable_requested_values() = requestedMessage;
+    rsp::packServiceMessage(request, beginReq);
     return messageClient_ != nullptr && messageClient_->send(request);
 }
 
@@ -353,24 +358,26 @@ std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeI
     const rsp::GUID socketId;
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(nodeId);
-    request.mutable_connect_tcp_request()->set_host_port(hostPort);
-    *request.mutable_connect_tcp_request()->mutable_socket_number() = toProtoSocketId(socketId);
-    request.mutable_connect_tcp_request()->set_use_socket(useSocket);
+    rsp::proto::ConnectTCPRequest connectReq;
+    connectReq.set_host_port(hostPort);
+    *connectReq.mutable_socket_number() = toProtoSocketId(socketId);
+    connectReq.set_use_socket(useSocket);
     if (timeoutMilliseconds > 0) {
-        request.mutable_connect_tcp_request()->set_timeout_ms(timeoutMilliseconds);
+        connectReq.set_timeout_ms(timeoutMilliseconds);
     }
     if (retries > 0) {
-        request.mutable_connect_tcp_request()->set_retries(retries);
+        connectReq.set_retries(retries);
     }
     if (retryMilliseconds > 0) {
-        request.mutable_connect_tcp_request()->set_retry_ms(retryMilliseconds);
+        connectReq.set_retry_ms(retryMilliseconds);
     }
     if (asyncData) {
-        request.mutable_connect_tcp_request()->set_async_data(true);
+        connectReq.set_async_data(true);
     }
     if (shareSocket) {
-        request.mutable_connect_tcp_request()->set_share_socket(true);
+        connectReq.set_share_socket(true);
     }
+    rsp::packServiceMessage(request, connectReq);
 
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -440,26 +447,28 @@ std::optional<rsp::proto::SocketReply> RSPClient::listenTCPEx(rsp::NodeID nodeId
     const rsp::GUID socketId;
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(nodeId);
-    request.mutable_listen_tcp_request()->set_host_port(hostPort);
-    *request.mutable_listen_tcp_request()->mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::proto::ListenTCPRequest listenReq;
+    listenReq.set_host_port(hostPort);
+    *listenReq.mutable_socket_number() = toProtoSocketId(socketId);
     if (timeoutMilliseconds > 0) {
-        request.mutable_listen_tcp_request()->set_timeout_ms(timeoutMilliseconds);
+        listenReq.set_timeout_ms(timeoutMilliseconds);
     }
     if (asyncAccept) {
-        request.mutable_listen_tcp_request()->set_async_accept(true);
+        listenReq.set_async_accept(true);
     }
     if (shareListeningSocket) {
-        request.mutable_listen_tcp_request()->set_share_listening_socket(true);
+        listenReq.set_share_listening_socket(true);
     }
     if (shareChildSockets) {
-        request.mutable_listen_tcp_request()->set_share_child_sockets(true);
+        listenReq.set_share_child_sockets(true);
     }
     if (childrenUseSocket) {
-        request.mutable_listen_tcp_request()->set_children_use_socket(true);
+        listenReq.set_children_use_socket(true);
     }
     if (childrenAsyncData) {
-        request.mutable_listen_tcp_request()->set_children_async_data(true);
+        listenReq.set_children_async_data(true);
     }
+    rsp::packServiceMessage(request, listenReq);
 
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -571,22 +580,24 @@ std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& l
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    *request.mutable_accept_tcp()->mutable_listen_socket_number() = toProtoSocketId(listenSocketId);
+    rsp::proto::AcceptTCP acceptReq;
+    *acceptReq.mutable_listen_socket_number() = toProtoSocketId(listenSocketId);
     if (newSocketId.has_value()) {
-        *request.mutable_accept_tcp()->mutable_new_socket_number() = toProtoSocketId(*newSocketId);
+        *acceptReq.mutable_new_socket_number() = toProtoSocketId(*newSocketId);
     }
     if (timeoutMilliseconds > 0) {
-        request.mutable_accept_tcp()->set_timeout_ms(timeoutMilliseconds);
+        acceptReq.set_timeout_ms(timeoutMilliseconds);
     }
     if (shareChildSocket) {
-        request.mutable_accept_tcp()->set_share_child_socket(true);
+        acceptReq.set_share_child_socket(true);
     }
     if (childUseSocket) {
-        request.mutable_accept_tcp()->set_child_use_socket(true);
+        acceptReq.set_child_use_socket(true);
     }
     if (childAsyncData) {
-        request.mutable_accept_tcp()->set_child_async_data(true);
+        acceptReq.set_child_async_data(true);
     }
+    rsp::packServiceMessage(request, acceptReq);
 
     if (!messageClient_->send(request)) {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -755,8 +766,10 @@ bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    *request.mutable_socket_send()->mutable_socket_number() = toProtoSocketId(socketId);
-    request.mutable_socket_send()->set_data(data);
+    rsp::proto::SocketSend sendReq;
+    *sendReq.mutable_socket_number() = toProtoSocketId(socketId);
+    sendReq.set_data(data);
+    rsp::packServiceMessage(request, sendReq);
 
     if (!messageClient_->send(request)) {
         return false;
@@ -802,11 +815,13 @@ std::optional<rsp::proto::SocketReply> RSPClient::socketRecvEx(const rsp::GUID& 
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    *request.mutable_socket_recv()->mutable_socket_number() = toProtoSocketId(socketId);
-    request.mutable_socket_recv()->set_max_bytes(maxBytes);
+    rsp::proto::SocketRecv recvReq;
+    *recvReq.mutable_socket_number() = toProtoSocketId(socketId);
+    recvReq.set_max_bytes(maxBytes);
     if (waitMilliseconds > 0) {
-        request.mutable_socket_recv()->set_wait_ms(waitMilliseconds);
+        recvReq.set_wait_ms(waitMilliseconds);
     }
+    rsp::packServiceMessage(request, recvReq);
 
     if (!messageClient_->send(request)) {
         return std::nullopt;
@@ -857,7 +872,9 @@ bool RSPClient::socketClose(const rsp::GUID& socketId) {
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    *request.mutable_socket_close()->mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::proto::SocketClose closeReq;
+    *closeReq.mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::packServiceMessage(request, closeReq);
 
     if (!messageClient_->send(request)) {
         socketRoutes_.erase(socketId);
@@ -1005,13 +1022,16 @@ void RSPClient::handleEndorsementDone(const rsp::proto::RSPMessage& message) {
     }
 
     iterator->second.completed = true;
-    iterator->second.reply = message.endorsement_done();
+    rsp::proto::EndorsementDone done;
+    rsp::unpackServiceMessage(message, &done);
+    iterator->second.reply = done;
     stateChanged_.notify_all();
 }
 
 void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
     std::shared_ptr<NativeSocketBridgeState> nativeSocketBridge;
-    const rsp::proto::SocketReply socketReply = message.socket_reply();
+    rsp::proto::SocketReply socketReply;
+    rsp::unpackServiceMessage(message, &socketReply);
 
     {
         std::lock_guard<std::mutex> lock(stateMutex_);

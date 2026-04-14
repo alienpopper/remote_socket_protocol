@@ -219,6 +219,29 @@ def _has_field(obj: Any, key: str) -> bool:
     )
 
 
+SERVICE_MESSAGE_TYPE_PREFIX = "type.rsp/rsp.proto."
+
+
+def _pack_service_message(type_name: str, fields: dict) -> dict:
+    return {"@type": SERVICE_MESSAGE_TYPE_PREFIX + type_name, **fields}
+
+
+def _service_message_type_name(msg: dict) -> str | None:
+    if not _has_field(msg, "service_message") or not msg["service_message"].get("@type"):
+        return None
+    type_url = msg["service_message"]["@type"]
+    slash = type_url.rfind("/")
+    return type_url[slash + 1:] if slash >= 0 else type_url
+
+
+def _unpack_service_message(msg: dict) -> dict | None:
+    if not _has_field(msg, "service_message"):
+        return None
+    copy = dict(msg["service_message"])
+    copy.pop("@type", None)
+    return copy
+
+
 # ---------------------------------------------------------------------------
 # RSPClient
 # ---------------------------------------------------------------------------
@@ -427,10 +450,14 @@ class RSPClient:
 
         if _has_field(msg, "ping_reply"):
             self._handle_ping_reply(msg)
-        elif _has_field(msg, "socket_reply"):
-            self._handle_socket_reply(msg, msg["socket_reply"])
-        elif _has_field(msg, "endorsement_done"):
-            self._handle_endorsement_done(msg)
+        elif _has_field(msg, "service_message"):
+            type_name = _service_message_type_name(msg)
+            if type_name == "rsp.proto.SocketReply":
+                self._handle_socket_reply(msg, _unpack_service_message(msg))
+            elif type_name == "rsp.proto.EndorsementDone":
+                self._handle_endorsement_done(msg)
+        elif _has_field(msg, "endorsement_needed"):
+            pass  # endorsement_needed not yet handled
         elif _has_field(msg, "resource_advertisement"):
             self._pending_resource_advertisements.append(msg["resource_advertisement"])
 
@@ -508,7 +535,7 @@ class RSPClient:
             return
         self._pending_endorsements.pop(pending_key, None)
         if not fut.done():
-            fut.set_result(msg["endorsement_done"])
+            fut.set_result(_unpack_service_message(msg))
 
     def _decode_source_node_id(self, msg: dict) -> str | None:
         source_value = (msg.get("source") or {}).get("value")
@@ -630,14 +657,10 @@ class RSPClient:
         async_data: bool = False, share_socket: bool = False, use_socket: bool = False,
     ) -> dict | None:
         socket_id = _random_uuid_hex()
-        request: dict = {
-            "destination": {"value": _encode_node_id_for_field(node_id)},
-            "connect_tcp_request": {
-                "host_port": host_port,
-                "socket_number": {"value": socket_id},
-            },
+        tcp: dict = {
+            "host_port": host_port,
+            "socket_number": {"value": socket_id},
         }
-        tcp = request["connect_tcp_request"]
         if use_socket:
             tcp["use_socket"] = True
         if timeout_ms > 0:
@@ -650,6 +673,11 @@ class RSPClient:
             tcp["async_data"] = True
         if share_socket:
             tcp["share_socket"] = True
+
+        request: dict = {
+            "destination": {"value": _encode_node_id_for_field(node_id)},
+            "service_message": _pack_service_message("ConnectTCPRequest", tcp),
+        }
 
         wait_s = (timeout_ms / 1000.0 + 1.0) if timeout_ms > 0 else DEFAULT_TIMEOUT_S
 
@@ -694,14 +722,10 @@ class RSPClient:
         children_use_socket: bool = False, children_async_data: bool = False,
     ) -> dict | None:
         socket_id = _random_uuid_hex()
-        request: dict = {
-            "destination": {"value": _encode_node_id_for_field(node_id)},
-            "listen_tcp_request": {
-                "host_port": host_port,
-                "socket_number": {"value": socket_id},
-            },
+        tcp: dict = {
+            "host_port": host_port,
+            "socket_number": {"value": socket_id},
         }
-        tcp = request["listen_tcp_request"]
         if timeout_ms > 0:
             tcp["timeout_ms"] = timeout_ms
         if async_accept:
@@ -714,6 +738,11 @@ class RSPClient:
             tcp["children_use_socket"] = True
         if children_async_data:
             tcp["children_async_data"] = True
+
+        request: dict = {
+            "destination": {"value": _encode_node_id_for_field(node_id)},
+            "service_message": _pack_service_message("ListenTCPRequest", tcp),
+        }
 
         wait_s = (timeout_ms / 1000.0 + 1.0) if timeout_ms > 0 else DEFAULT_TIMEOUT_S
 
@@ -763,9 +792,9 @@ class RSPClient:
 
         request: dict = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "accept_tcp": {"listen_socket_number": {"value": listen_socket_id}},
+            "service_message": _pack_service_message("AcceptTCP", {"listen_socket_number": {"value": listen_socket_id}}),
         }
-        tcp = request["accept_tcp"]
+        tcp = request["service_message"]
         if new_socket_id:
             tcp["new_socket_number"] = {"value": _normalize_guid(new_socket_id)}
         if timeout_ms > 0:
@@ -813,7 +842,7 @@ class RSPClient:
         data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_send": {"socket_number": {"value": socket_id}, "data": data_b64},
+            "service_message": _pack_service_message("SocketSend", {"socket_number": {"value": socket_id}, "data": data_b64}),
         }
         try:
             await self._send_signed_message(request)
@@ -847,10 +876,10 @@ class RSPClient:
             return None
         request: dict = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_recv": {"socket_number": {"value": socket_id}, "max_bytes": max_bytes},
+            "service_message": _pack_service_message("SocketRecv", {"socket_number": {"value": socket_id}, "max_bytes": max_bytes}),
         }
         if wait_ms > 0:
-            request["socket_recv"]["wait_ms"] = wait_ms
+            request["service_message"]["wait_ms"] = wait_ms
         try:
             await self._send_signed_message(request)
         except Exception:
@@ -876,7 +905,7 @@ class RSPClient:
             return False
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_close": {"socket_number": {"value": socket_id}},
+            "service_message": _pack_service_message("SocketClose", {"socket_number": {"value": socket_id}}),
         }
         try:
             await self._send_signed_message(request)
@@ -948,7 +977,7 @@ class RSPClient:
         data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "socket_send": {"socket_number": {"value": socket_id}, "data": data_b64},
+            "service_message": _pack_service_message("SocketSend", {"socket_number": {"value": socket_id}, "data": data_b64}),
         }
         try:
             await self._send_signed_message(request)
@@ -1011,7 +1040,7 @@ class RSPClient:
 
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "begin_endorsement_request": {"requested_values": requested},
+            "service_message": _pack_service_message("BeginEndorsementRequest", {"requested_values": requested}),
         }
         try:
             await self._send_signed_message(request)

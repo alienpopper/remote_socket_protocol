@@ -4,6 +4,7 @@
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
 #include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/service_message.hpp"
 #include "endorsement_service/endorsement_service.hpp"
 
 #include "common/transport/transport_memory.hpp"
@@ -359,7 +360,9 @@ void testClientRequestsNetworkAccessEndorsement() {
         rsp::proto::RSPMessage request;
         *request.mutable_source() = toProtoNodeId(clientNodeId);
         *request.mutable_destination() = toProtoNodeId(esNodeId);
-        *request.mutable_begin_endorsement_request()->mutable_requested_values() = requestedMessage;
+        rsp::proto::BeginEndorsementRequest beginReq;
+        *beginReq.mutable_requested_values() = requestedMessage;
+        rsp::packServiceMessage(request, beginReq);
 
         require(client->send(request), "raw client should send the unsigned-identity endorsement request");
         require(waitForCondition([&client]() { return client->pendingMessageCount() == 1; }),
@@ -367,8 +370,10 @@ void testClientRequestsNetworkAccessEndorsement() {
 
         rsp::proto::RSPMessage reply;
         require(client->tryDequeueMessage(reply), "raw client should expose the endorsement reply");
-        require(reply.has_endorsement_done(), "endorsement service should respond with an endorsement result");
-        require(reply.endorsement_done().status() == rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY,
+        require(rsp::hasServiceMessage<rsp::proto::EndorsementDone>(reply), "endorsement service should respond with an endorsement result");
+        rsp::proto::EndorsementDone doneMsg;
+        rsp::unpackServiceMessage(reply, &doneMsg);
+        require(doneMsg.status() == rsp::proto::ENDORSEMENT_UNKNOWN_IDENTITY,
             "endorsement service should reject requests whose identity is not yet cached");
         require(!es->identityCache().contains(clientNodeId),
             "endorsement service should not populate the identity cache from a begin request alone");

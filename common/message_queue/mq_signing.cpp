@@ -1,5 +1,10 @@
 #include "common/message_queue/mq_signing.hpp"
 
+#include <google/protobuf/any.pb.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/descriptor_database.h>
+#include <google/protobuf/dynamic_message.h>
+#include <google/protobuf/message.h>
 #include <openssl/sha.h>
 
 #include <array>
@@ -74,12 +79,100 @@ public:
     }
 };
 
-void hashNodeId(MessageHasher& hasher, const rsp::proto::NodeId& message) {
-    hasher.tag(1);
-    hasher.feedBytes(message.value());
+// Generic reflection-based hash: iterates fields sorted by number, matching the
+// canonical hash produced by the hand-written functions and the JS/Python
+// schema-based hash.  Used for service_message (google.protobuf.Any) payloads so
+// that the RM can verify signatures without compile-time knowledge of service types.
+void hashMessageReflective(MessageHasher& hasher, const google::protobuf::Message& message) {
+    const auto* descriptor = message.GetDescriptor();
+    const auto* reflection = message.GetReflection();
+    if (descriptor == nullptr || reflection == nullptr) return;
+
+    // Collect fields sorted by number (Descriptor::field() returns in declaration order
+    // which SHOULD be by number, but sort to be safe).
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    fields.reserve(static_cast<size_t>(descriptor->field_count()));
+    for (int i = 0; i < descriptor->field_count(); i++) {
+        fields.push_back(descriptor->field(i));
+    }
+    std::sort(fields.begin(), fields.end(),
+              [](const auto* a, const auto* b) { return a->number() < b->number(); });
+
+    for (const auto* field : fields) {
+        if (field->is_repeated()) {
+            const int count = reflection->FieldSize(message, field);
+            hasher.tag(static_cast<uint32_t>(field->number()));
+            hasher.feedUint32(static_cast<uint32_t>(count));
+            for (int i = 0; i < count; i++) {
+                switch (field->cpp_type()) {
+                case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:
+                    hashMessageReflective(hasher, reflection->GetRepeatedMessage(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
+                    hasher.feedBytes(reflection->GetRepeatedString(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
+                    hasher.feedUint32(reflection->GetRepeatedUInt32(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
+                    hasher.feedInt32(reflection->GetRepeatedInt32(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
+                    hasher.feedUint64(reflection->GetRepeatedUInt64(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
+                    hasher.feedUint64(static_cast<uint64_t>(reflection->GetRepeatedInt64(message, field, i)));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
+                    hasher.feedBool(reflection->GetRepeatedBool(message, field, i));
+                    break;
+                case google::protobuf::FieldDescriptor::CPPTYPE_ENUM:
+                    hasher.feedUint32(static_cast<uint32_t>(reflection->GetRepeatedEnumValue(message, field, i)));
+                    break;
+                default:
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if (field->has_presence() && !reflection->HasField(message, field)) {
+            continue;
+        }
+
+        hasher.tag(static_cast<uint32_t>(field->number()));
+        switch (field->cpp_type()) {
+        case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:
+            hashMessageReflective(hasher, reflection->GetMessage(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
+            hasher.feedBytes(reflection->GetString(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
+            hasher.feedUint32(reflection->GetUInt32(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
+            hasher.feedInt32(reflection->GetInt32(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
+            hasher.feedUint64(reflection->GetUInt64(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
+            hasher.feedUint64(static_cast<uint64_t>(reflection->GetInt64(message, field)));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
+            hasher.feedBool(reflection->GetBool(message, field));
+            break;
+        case google::protobuf::FieldDescriptor::CPPTYPE_ENUM:
+            hasher.feedUint32(static_cast<uint32_t>(reflection->GetEnumValue(message, field)));
+            break;
+        default:
+            break;
+        }
+    }
 }
 
-void hashSocketId(MessageHasher& hasher, const rsp::proto::SocketID& message) {
+void hashNodeId(MessageHasher& hasher, const rsp::proto::NodeId& message) {
     hasher.tag(1);
     hasher.feedBytes(message.value());
 }
@@ -263,6 +356,19 @@ void hashResourceAdvertisement(MessageHasher& hasher, const rsp::proto::Resource
     for (int index = 0; index < message.records_size(); ++index) {
         hashResourceRecord(hasher, message.records(index));
     }
+    if (message.schemas_size() > 0) {
+        hasher.tag(2);
+        hasher.feedUint32(static_cast<uint32_t>(message.schemas_size()));
+        for (int index = 0; index < message.schemas_size(); ++index) {
+            const auto& schema = message.schemas(index);
+            hasher.feedBytes(schema.proto_file_name());
+            hasher.feedBytes(schema.proto_file_descriptor_set());
+            hasher.feedUint32(static_cast<uint32_t>(schema.accepted_type_urls_size()));
+            for (int urlIndex = 0; urlIndex < schema.accepted_type_urls_size(); ++urlIndex) {
+                hasher.feedBytes(schema.accepted_type_urls(urlIndex));
+            }
+        }
+    }
 }
 
 void hashResourceQuery(MessageHasher& hasher, const rsp::proto::ResourceQuery& message) {
@@ -270,217 +376,6 @@ void hashResourceQuery(MessageHasher& hasher, const rsp::proto::ResourceQuery& m
     hasher.feedBytes(message.query());
     hasher.tag(2);
     hasher.feedUint32(message.max_records());
-}
-
-void hashSocketReply(MessageHasher& hasher, const rsp::proto::SocketReply& message) {
-    if (message.has_socket_id()) {
-        hasher.tag(1);
-        hashSocketId(hasher, message.socket_id());
-    }
-    hasher.tag(2);
-    hasher.feedUint32(static_cast<uint32_t>(message.error()));
-    if (message.has_message()) {
-        hasher.tag(3);
-        hasher.feedBytes(message.message());
-    }
-    if (message.has_new_socket_remote_address()) {
-        hasher.tag(4);
-        hasher.feedBytes(message.new_socket_remote_address());
-    }
-    if (message.has_new_socket_id()) {
-        hasher.tag(5);
-        hashSocketId(hasher, message.new_socket_id());
-    }
-    if (message.has_socket_error_code()) {
-        hasher.tag(6);
-        hasher.feedInt32(message.socket_error_code());
-    }
-    if (message.has_data()) {
-        hasher.tag(7);
-        hasher.feedBytes(message.data());
-    }
-}
-
-void hashConnectTcpRequest(MessageHasher& hasher, const rsp::proto::ConnectTCPRequest& message) {
-    hasher.tag(1);
-    hasher.feedBytes(message.host_port());
-    if (message.has_socket_number()) {
-        hasher.tag(2);
-        hashSocketId(hasher, message.socket_number());
-    }
-    if (message.has_reuse_addr()) {
-        hasher.tag(3);
-        hasher.feedBool(message.reuse_addr());
-    }
-    if (message.has_source_port()) {
-        hasher.tag(4);
-        hasher.feedUint32(message.source_port());
-    }
-    if (message.has_timeout_ms()) {
-        hasher.tag(5);
-        hasher.feedUint32(message.timeout_ms());
-    }
-    if (message.has_retries()) {
-        hasher.tag(6);
-        hasher.feedUint32(message.retries());
-    }
-    if (message.has_retry_ms()) {
-        hasher.tag(7);
-        hasher.feedUint32(message.retry_ms());
-    }
-    if (message.has_async_data()) {
-        hasher.tag(8);
-        hasher.feedBool(message.async_data());
-    }
-    if (message.has_use_socket()) {
-        hasher.tag(9);
-        hasher.feedBool(message.use_socket());
-    }
-    if (message.has_share_socket()) {
-        hasher.tag(10);
-        hasher.feedBool(message.share_socket());
-    }
-}
-
-void hashListenTcpRequest(MessageHasher& hasher, const rsp::proto::ListenTCPRequest& message) {
-    hasher.tag(1);
-    hasher.feedBytes(message.host_port());
-    if (message.has_socket_number()) {
-        hasher.tag(2);
-        hashSocketId(hasher, message.socket_number());
-    }
-    if (message.has_reuse_addr()) {
-        hasher.tag(3);
-        hasher.feedBool(message.reuse_addr());
-    }
-    if (message.has_timeout_ms()) {
-        hasher.tag(4);
-        hasher.feedUint32(message.timeout_ms());
-    }
-    if (message.has_async_accept()) {
-        hasher.tag(5);
-        hasher.feedBool(message.async_accept());
-    }
-    if (message.has_share_listening_socket()) {
-        hasher.tag(6);
-        hasher.feedBool(message.share_listening_socket());
-    }
-    if (message.has_share_child_sockets()) {
-        hasher.tag(7);
-        hasher.feedBool(message.share_child_sockets());
-    }
-    if (message.has_children_use_socket()) {
-        hasher.tag(8);
-        hasher.feedBool(message.children_use_socket());
-    }
-    if (message.has_children_async_data()) {
-        hasher.tag(9);
-        hasher.feedBool(message.children_async_data());
-    }
-}
-
-void hashAcceptTcp(MessageHasher& hasher, const rsp::proto::AcceptTCP& message) {
-    if (message.has_listen_socket_number()) {
-        hasher.tag(1);
-        hashSocketId(hasher, message.listen_socket_number());
-    }
-    if (message.has_new_socket_number()) {
-        hasher.tag(2);
-        hashSocketId(hasher, message.new_socket_number());
-    }
-    if (message.has_timeout_ms()) {
-        hasher.tag(3);
-        hasher.feedUint32(message.timeout_ms());
-    }
-    if (message.has_share_child_socket()) {
-        hasher.tag(4);
-        hasher.feedBool(message.share_child_socket());
-    }
-    if (message.has_child_use_socket()) {
-        hasher.tag(5);
-        hasher.feedBool(message.child_use_socket());
-    }
-    if (message.has_child_async_data()) {
-        hasher.tag(6);
-        hasher.feedBool(message.child_async_data());
-    }
-}
-
-void hashSocketSend(MessageHasher& hasher, const rsp::proto::SocketSend& message) {
-    if (message.has_socket_number()) {
-        hasher.tag(1);
-        hashSocketId(hasher, message.socket_number());
-    }
-    hasher.tag(2);
-    hasher.feedBytes(message.data());
-    hasher.tag(3);
-    hasher.feedUint64(message.index());
-}
-
-void hashSocketRecv(MessageHasher& hasher, const rsp::proto::SocketRecv& message) {
-    if (message.has_socket_number()) {
-        hasher.tag(1);
-        hashSocketId(hasher, message.socket_number());
-    }
-    if (message.has_max_bytes()) {
-        hasher.tag(2);
-        hasher.feedUint32(message.max_bytes());
-    }
-    hasher.tag(3);
-    hasher.feedUint64(message.index());
-    if (message.has_wait_ms()) {
-        hasher.tag(4);
-        hasher.feedUint32(message.wait_ms());
-    }
-}
-
-void hashSocketClose(MessageHasher& hasher, const rsp::proto::SocketClose& message) {
-    if (message.has_socket_number()) {
-        hasher.tag(1);
-        hashSocketId(hasher, message.socket_number());
-    }
-}
-
-void hashBeginEndorsementRequest(MessageHasher& hasher, const rsp::proto::BeginEndorsementRequest& message) {
-    if (message.has_requested_values()) {
-        hasher.tag(1);
-        hashEndorsement(hasher, message.requested_values());
-    }
-    if (message.has_auth_data()) {
-        hasher.tag(2);
-        hasher.feedBytes(message.auth_data());
-    }
-}
-
-void hashEndorsementChallenge(MessageHasher& hasher, const rsp::proto::EndorsementChallenge& message) {
-    if (message.has_stage()) {
-        hasher.tag(1);
-        hasher.feedUint32(message.stage());
-    }
-    if (message.has_challenge()) {
-        hasher.tag(2);
-        hasher.feedBytes(message.challenge());
-    }
-}
-
-void hashEndorsementChallengeReply(MessageHasher& hasher, const rsp::proto::EndorsementChallengeReply& message) {
-    if (message.has_stage()) {
-        hasher.tag(1);
-        hasher.feedUint32(message.stage());
-    }
-    if (message.has_challenge_reply()) {
-        hasher.tag(2);
-        hasher.feedBytes(message.challenge_reply());
-    }
-}
-
-void hashEndorsementDone(MessageHasher& hasher, const rsp::proto::EndorsementDone& message) {
-    hasher.tag(1);
-    hasher.feedUint32(static_cast<uint32_t>(message.status()));
-    if (message.has_new_endorsement()) {
-        hasher.tag(2);
-        hashEndorsement(hasher, message.new_endorsement());
-    }
 }
 
 void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementNeeded& message) {
@@ -514,7 +409,7 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hasher.feedBool(message.trace().value());
     }
 
-    switch (message.submessage_case()) {
+    switch (message.core_message_case()) {
     case rsp::proto::RSPMessage::kChallengeRequest:
         hasher.tag(3);
         hashChallengeRequest(hasher, message.challenge_request());
@@ -539,34 +434,6 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hasher.tag(8);
         hashPingReply(hasher, message.ping_reply());
         break;
-    case rsp::proto::RSPMessage::kConnectTcpRequest:
-        hasher.tag(9);
-        hashConnectTcpRequest(hasher, message.connect_tcp_request());
-        break;
-    case rsp::proto::RSPMessage::kSocketReply:
-        hasher.tag(10);
-        hashSocketReply(hasher, message.socket_reply());
-        break;
-    case rsp::proto::RSPMessage::kSocketSend:
-        hasher.tag(11);
-        hashSocketSend(hasher, message.socket_send());
-        break;
-    case rsp::proto::RSPMessage::kSocketRecv:
-        hasher.tag(12);
-        hashSocketRecv(hasher, message.socket_recv());
-        break;
-    case rsp::proto::RSPMessage::kSocketClose:
-        hasher.tag(13);
-        hashSocketClose(hasher, message.socket_close());
-        break;
-    case rsp::proto::RSPMessage::kListenTcpRequest:
-        hasher.tag(14);
-        hashListenTcpRequest(hasher, message.listen_tcp_request());
-        break;
-    case rsp::proto::RSPMessage::kAcceptTcp:
-        hasher.tag(15);
-        hashAcceptTcp(hasher, message.accept_tcp());
-        break;
     case rsp::proto::RSPMessage::kResourceAdvertisement:
         hasher.tag(16);
         hashResourceAdvertisement(hasher, message.resource_advertisement());
@@ -575,28 +442,40 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hasher.tag(17);
         hashResourceQuery(hasher, message.resource_query());
         break;
-    case rsp::proto::RSPMessage::kBeginEndorsementRequest:
-        hasher.tag(18);
-        hashBeginEndorsementRequest(hasher, message.begin_endorsement_request());
-        break;
-    case rsp::proto::RSPMessage::kEndorsementChallenge:
-        hasher.tag(19);
-        hashEndorsementChallenge(hasher, message.endorsement_challenge());
-        break;
-    case rsp::proto::RSPMessage::kEndorsementChallengeReply:
-        hasher.tag(20);
-        hashEndorsementChallengeReply(hasher, message.endorsement_challenge_reply());
-        break;
-    case rsp::proto::RSPMessage::kEndorsementDone:
-        hasher.tag(21);
-        hashEndorsementDone(hasher, message.endorsement_done());
-        break;
     case rsp::proto::RSPMessage::kEndorsementNeeded:
         hasher.tag(23);
         hashEndorsementNeeded(hasher, message.endorsement_needed());
         break;
-    case rsp::proto::RSPMessage::SUBMESSAGE_NOT_SET:
+    case rsp::proto::RSPMessage::CORE_MESSAGE_NOT_SET:
         break;
+    }
+
+    // Service-specific payload (google.protobuf.Any): hash type_url then hash
+    // the inner message field-by-field using reflection so the result matches
+    // the canonical hash the JS/Python clients produce from their JSON schemas.
+    if (message.has_service_message()) {
+        hasher.tag(200);
+        const auto& any = message.service_message();
+        hasher.feedBytes(any.type_url());
+
+        // Resolve the concrete message type from the linked-in descriptor pool
+        const std::string& typeUrl = any.type_url();
+        const auto slashPos = typeUrl.rfind('/');
+        const std::string fullName = slashPos != std::string::npos
+                                         ? typeUrl.substr(slashPos + 1)
+                                         : typeUrl;
+        const auto* descriptor = google::protobuf::DescriptorPool::generated_pool()
+                                     ->FindMessageTypeByName(fullName);
+        if (descriptor != nullptr) {
+            const auto* prototype = google::protobuf::MessageFactory::generated_factory()
+                                        ->GetPrototype(descriptor);
+            if (prototype != nullptr) {
+                std::unique_ptr<google::protobuf::Message> inner(prototype->New());
+                if (any.UnpackTo(inner.get())) {
+                    hashMessageReflective(hasher, *inner);
+                }
+            }
+        }
     }
 
     if (message.has_nonce()) {

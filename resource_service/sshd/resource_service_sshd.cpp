@@ -16,8 +16,12 @@
 
 #include "common/keypair.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/service_message.hpp"
 #include "common/transport/transport.hpp"
 #include "third_party/json/single_include/nlohmann/json.hpp"
+
+#include "resource_service/bsd_sockets/bsd_sockets.pb.h"
+#include "resource_service/sshd/sshd.pb.h"
 
 #include <atomic>
 #include <chrono>
@@ -131,12 +135,14 @@ rsp::proto::ResourceAdvertisement SshdResourceService::buildResourceAdvertisemen
 }
 
 bool SshdResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
-    if (message.has_connect_sshd()) {
+    if (rsp::hasServiceMessage<rsp::proto::ConnectSshd>(message)) {
         return handleConnectSshd(message);
     }
 
     // Reject bsd_sockets-specific messages that sshd does not support.
-    if (message.has_connect_tcp_request() || message.has_listen_tcp_request() || message.has_accept_tcp()) {
+    if (rsp::hasServiceMessage<rsp::proto::ConnectTCPRequest>(message) ||
+        rsp::hasServiceMessage<rsp::proto::ListenTCPRequest>(message) ||
+        rsp::hasServiceMessage<rsp::proto::AcceptTCP>(message)) {
         return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
                                            "UNIMPLEMENTED: rsp_sshd does not support this request"));
     }
@@ -146,7 +152,10 @@ bool SshdResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage
 }
 
 bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& message) {
-    const auto& request = message.connect_sshd();
+    rsp::proto::ConnectSshd request;
+    if (!rsp::unpackServiceMessage(message, &request)) {
+        return false;
+    }
 
     if (!request.has_socket_number()) {
         return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));

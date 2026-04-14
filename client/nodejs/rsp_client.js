@@ -119,6 +119,26 @@ function hasField(object, key) {
     return object && Object.prototype.hasOwnProperty.call(object, key) && object[key] !== undefined && object[key] !== null;
 }
 
+const SERVICE_MESSAGE_TYPE_PREFIX = 'type.rsp/rsp.proto.';
+
+function packServiceMessage(typeName, fields) {
+    return {'@type': SERVICE_MESSAGE_TYPE_PREFIX + typeName, ...fields};
+}
+
+function serviceMessageTypeName(msg) {
+    if (!hasField(msg, 'service_message') || !msg.service_message['@type']) return null;
+    const typeUrl = msg.service_message['@type'];
+    const slash = typeUrl.lastIndexOf('/');
+    return slash >= 0 ? typeUrl.substring(slash + 1) : typeUrl;
+}
+
+function unpackServiceMessage(msg) {
+    if (!hasField(msg, 'service_message')) return null;
+    const copy = {...msg.service_message};
+    delete copy['@type'];
+    return copy;
+}
+
 // --- Signing ---
 // All signing uses the canonical hash from messages.js — never raw protobuf bytes.
 // Signing raw protobuf would require a protobuf dependency in clients, which is a bug.
@@ -603,10 +623,15 @@ class RSPClient extends EventEmitter {
 
         if (hasField(msg, 'ping_reply')) {
             this._handlePingReply(msg);
-        } else if (hasField(msg, 'socket_reply')) {
-            this._handleSocketReply(msg, msg.socket_reply);
-        } else if (hasField(msg, 'endorsement_done')) {
-            this._handleEndorsementDone(msg);
+        } else if (hasField(msg, 'service_message')) {
+            const typeName = serviceMessageTypeName(msg);
+            if (typeName === 'rsp.proto.SocketReply') {
+                this._handleSocketReply(msg, unpackServiceMessage(msg));
+            } else if (typeName === 'rsp.proto.EndorsementDone') {
+                this._handleEndorsementDone(msg);
+            } else {
+                trace(`unhandled service_message type=${typeName}`);
+            }
         } else if (hasField(msg, 'endorsement_needed')) {
             trace('received endorsement_needed');
             this.emit('endorsement_needed', msg.endorsement_needed);
@@ -707,7 +732,7 @@ class RSPClient extends EventEmitter {
         if (!pending) return;
         clearTimeout(pending.timer);
         this._pendingEndorsements.delete(pendingKey);
-        pending.resolve(msg.endorsement_done);
+        pending.resolve(unpackServiceMessage(msg));
     }
 
     _senderNodeIdFromMessage(msg) {
@@ -746,9 +771,11 @@ class RSPClient extends EventEmitter {
         await this._ensureConnectedForSend();
         if (TRACE) {
             const keys = Object.keys(message || {}).join(',');
-            if (hasField(message, 'socket_send')) {
-                const socketHex = message.socket_send?.socket_number?.value || 'none';
-                const bytes = message.socket_send?.data ? Buffer.from(message.socket_send.data, 'base64').length : 0;
+            const svcType = serviceMessageTypeName(message);
+            if (svcType === 'rsp.proto.SocketSend') {
+                const sm = unpackServiceMessage(message);
+                const socketHex = sm?.socket_number?.value || 'none';
+                const bytes = sm?.data ? Buffer.from(sm.data, 'base64').length : 0;
                 trace(`send_raw keys=${keys} socket_send.socket=${socketHex} bytes=${bytes}`);
             }
         }
@@ -870,19 +897,20 @@ class RSPClient extends EventEmitter {
         } = options;
 
         const socketId = randomUuidB64();
+        const connectFields = {
+            host_port: hostPort,
+            socket_number: {value: socketId},
+        };
+        if (useSocket) connectFields.use_socket = true;
+        if (timeoutMs > 0) connectFields.timeout_ms = timeoutMs;
+        if (retries > 0) connectFields.retries = retries;
+        if (retryMs > 0) connectFields.retry_ms = retryMs;
+        if (asyncData) connectFields.async_data = true;
+        if (shareSocket) connectFields.share_socket = true;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            connect_tcp_request: {
-                host_port: hostPort,
-                socket_number: {value: socketId},
-            },
+            service_message: packServiceMessage('ConnectTCPRequest', connectFields),
         };
-        if (useSocket) request.connect_tcp_request.use_socket = true;
-        if (timeoutMs > 0) request.connect_tcp_request.timeout_ms = timeoutMs;
-        if (retries > 0) request.connect_tcp_request.retries = retries;
-        if (retryMs > 0) request.connect_tcp_request.retry_ms = retryMs;
-        if (asyncData) request.connect_tcp_request.async_data = true;
-        if (shareSocket) request.connect_tcp_request.share_socket = true;
 
         const waitMs = timeoutMs > 0 ? timeoutMs + 1000 : DEFAULT_TIMEOUT_MS;
         const reply = await new Promise((resolve, reject) => {
@@ -922,19 +950,20 @@ class RSPClient extends EventEmitter {
         } = options;
 
         const socketId = randomUuidB64();
+        const listenFields = {
+            host_port: hostPort,
+            socket_number: {value: socketId},
+        };
+        if (timeoutMs > 0) listenFields.timeout_ms = timeoutMs;
+        if (asyncAccept) listenFields.async_accept = true;
+        if (shareListeningSocket) listenFields.share_listening_socket = true;
+        if (shareChildSockets) listenFields.share_child_sockets = true;
+        if (childrenUseSocket) listenFields.children_use_socket = true;
+        if (childrenAsyncData) listenFields.children_async_data = true;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            listen_tcp_request: {
-                host_port: hostPort,
-                socket_number: {value: socketId},
-            },
+            service_message: packServiceMessage('ListenTCPRequest', listenFields),
         };
-        if (timeoutMs > 0) request.listen_tcp_request.timeout_ms = timeoutMs;
-        if (asyncAccept) request.listen_tcp_request.async_accept = true;
-        if (shareListeningSocket) request.listen_tcp_request.share_listening_socket = true;
-        if (shareChildSockets) request.listen_tcp_request.share_child_sockets = true;
-        if (childrenUseSocket) request.listen_tcp_request.children_use_socket = true;
-        if (childrenAsyncData) request.listen_tcp_request.children_async_data = true;
 
         const waitMs = timeoutMs > 0 ? timeoutMs + 1000 : DEFAULT_TIMEOUT_MS;
         const reply = await new Promise((resolve, reject) => {
@@ -976,15 +1005,16 @@ class RSPClient extends EventEmitter {
         const nodeId = this._socketRoutes.get(listenSocketId);
         if (!nodeId) return null;
 
+        const acceptFields = {listen_socket_number: {value: listenSocketId}};
+        if (newSocketId) acceptFields.new_socket_number = {value: normalizeGuid(newSocketId)};
+        if (timeoutMs > 0) acceptFields.timeout_ms = timeoutMs;
+        if (shareChildSocket) acceptFields.share_child_socket = true;
+        if (childUseSocket) acceptFields.child_use_socket = true;
+        if (childAsyncData) acceptFields.child_async_data = true;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            accept_tcp: {listen_socket_number: {value: listenSocketId}},
+            service_message: packServiceMessage('AcceptTCP', acceptFields),
         };
-        if (newSocketId) request.accept_tcp.new_socket_number = {value: normalizeGuid(newSocketId)};
-        if (timeoutMs > 0) request.accept_tcp.timeout_ms = timeoutMs;
-        if (shareChildSocket) request.accept_tcp.share_child_socket = true;
-        if (childUseSocket) request.accept_tcp.child_use_socket = true;
-        if (childAsyncData) request.accept_tcp.child_async_data = true;
 
         try { await this._sendSignedMessage(request); } catch { return null; }
 
@@ -1020,7 +1050,7 @@ class RSPClient extends EventEmitter {
         trace(`socketSend socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_send: {socket_number: {value: socketId}, data: dataB64},
+            service_message: packServiceMessage('SocketSend', {socket_number: {value: socketId}, data: dataB64}),
         };
         try {
             await this._sendSignedMessage(request);
@@ -1066,11 +1096,12 @@ class RSPClient extends EventEmitter {
         const nodeId = this._socketRoutes.get(socketId);
         if (!nodeId) return null;
 
+        const recvFields = {socket_number: {value: socketId}, max_bytes: maxBytes};
+        if (waitMs > 0) recvFields.wait_ms = waitMs;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_recv: {socket_number: {value: socketId}, max_bytes: maxBytes},
+            service_message: packServiceMessage('SocketRecv', recvFields),
         };
-        if (waitMs > 0) request.socket_recv.wait_ms = waitMs;
 
         try { await this._sendSignedMessage(request); } catch { return null; }
 
@@ -1093,7 +1124,7 @@ class RSPClient extends EventEmitter {
 
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_close: {socket_number: {value: socketId}},
+            service_message: packServiceMessage('SocketClose', {socket_number: {value: socketId}}),
         };
         try {
             await this._sendSignedMessage(request);
@@ -1252,7 +1283,7 @@ class RSPClient extends EventEmitter {
             this._pendingEndorsements.set(pendingKey, {resolve, reject, timer});
             const request = {
                 destination: {value: encodeNodeIdForField(nodeId)},
-                begin_endorsement_request: {requested_values: requested},
+                service_message: packServiceMessage('BeginEndorsementRequest', {requested_values: requested}),
             };
             this._sendSignedMessage(request).catch((err) => {
                 clearTimeout(timer);

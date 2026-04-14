@@ -1,6 +1,7 @@
 #include "common/encoding/json/json_encoding.hpp"
 
 #include "common/message_queue/mq_signing.hpp"
+#include "common/service_message.hpp"
 
 #include <google/protobuf/util/json_util.h>
 
@@ -58,19 +59,11 @@ std::string messageKind(const rsp::proto::RSPMessage& message) {
     if (message.has_ping_reply()) return "ping_reply";
     if (message.has_identity()) return "identity";
     if (message.has_challenge_request()) return "challenge_request";
-    if (message.has_connect_tcp_request()) return "connect_tcp_request";
-    if (message.has_listen_tcp_request()) return "listen_tcp_request";
-    if (message.has_accept_tcp()) return "accept_tcp";
-    if (message.has_socket_send()) return "socket_send";
-    if (message.has_socket_recv()) return "socket_recv";
-    if (message.has_socket_close()) return "socket_close";
-    if (message.has_socket_reply()) return "socket_reply";
-    if (message.has_begin_endorsement_request()) return "begin_endorsement_request";
-    if (message.has_endorsement_done()) return "endorsement_done";
     if (message.has_endorsement_needed()) return "endorsement_needed";
     if (message.has_resource_query()) return "resource_query";
     if (message.has_resource_advertisement()) return "resource_advertisement";
     if (message.has_error()) return "error";
+    if (message.has_service_message()) return rsp::typeNameFromUrl(message.service_message().type_url());
     return "unknown";
 }
 
@@ -162,4 +155,5 @@ bool JsonEncoding::writeMessage(const rsp::proto::RSPMessage& message) {
     return true;
 }
 
-}  // namespace rsp::encoding::json
+}  // namespace rsp::encoding::json
+

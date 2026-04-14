@@ -1,4 +1,7 @@
 #include "common/message_queue/mq_signing.hpp"
+#include "common/service_message.hpp"
+
+#include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -137,10 +140,11 @@ static void test_socket_send_field_order() {
     auto mk = [](const std::string& data, uint64_t index) {
         rsp::proto::RSPMessage msg;
         msg.mutable_source()->set_value(std::string(16, '\x01'));
-        auto* s = msg.mutable_socket_send();
-        s->mutable_socket_number()->set_value(std::string(16, '\x01'));
-        s->set_data(data);
-        s->set_index(index);
+        rsp::proto::SocketSend s;
+        s.mutable_socket_number()->set_value(std::string(16, '\x01'));
+        s.set_data(data);
+        s.set_index(index);
+        rsp::packServiceMessage(msg, s);
         return msg;
     };
     const auto h_a = computeMessageHash(mk("hello", 1));
@@ -157,9 +161,10 @@ static void test_connect_tcp_request() {
     auto mk = [](const std::string& host) {
         rsp::proto::RSPMessage msg;
         msg.mutable_source()->set_value(std::string(16, '\x01'));
-        auto* c = msg.mutable_connect_tcp_request();
-        c->set_host_port(host);
-        c->mutable_socket_number()->set_value(std::string(16, '\x02'));
+        rsp::proto::ConnectTCPRequest c;
+        c.set_host_port(host);
+        c.mutable_socket_number()->set_value(std::string(16, '\x02'));
+        rsp::packServiceMessage(msg, c);
         return msg;
     };
     CHECK(computeMessageHash(mk("127.0.0.1:8080")) !=
@@ -185,9 +190,10 @@ static void test_endorsement_challenge() {
     auto mk = [](uint32_t stage, const std::string& challenge) {
         rsp::proto::RSPMessage msg;
         msg.mutable_source()->set_value(std::string(16, '\x01'));
-        auto* ec = msg.mutable_endorsement_challenge();
-        ec->set_stage(stage);
-        ec->set_challenge(challenge);
+        rsp::proto::EndorsementChallenge ec;
+        ec.set_stage(stage);
+        ec.set_challenge(challenge);
+        rsp::packServiceMessage(msg, ec);
         return msg;
     };
     CHECK(computeMessageHash(mk(1, "abc")) != computeMessageHash(mk(2, "abc")));

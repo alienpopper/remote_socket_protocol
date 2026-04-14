@@ -438,8 +438,8 @@ SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
 .PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-python-http-server test-openssh-stress generate-messages rsp-sshd rsp-ssh
 
-$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto $(GENERATE_MESSAGES_SCRIPT)
-	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(GENERATE_MESSAGES_SCRIPT)
+	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 generate-messages: $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 
@@ -623,7 +623,7 @@ test: test-base-types test-keypair test-endorsement test-message-hash test-messa
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
