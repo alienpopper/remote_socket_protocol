@@ -27,6 +27,7 @@ ENDORSEMENT_TEXT_TEST_TARGET = $(BIN_DIR)\endorsement_text_test.exe
 MESSAGE_HASH_TEST_TARGET = $(BIN_DIR)\message_hash_test.exe
 RUNTIME_PROTO_TEST_TARGET = $(BIN_DIR)\runtime_proto_test.exe
 TRANSCODING_TEST_TARGET = $(BIN_DIR)\transcoding_test.exe
+SIGNING_BENCHMARK_TARGET = $(BIN_DIR)\signing_benchmark.exe
 RSPCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_static.lib
 RSPFULLCLIENT_STATIC_TARGET = $(LIB_DIR)\rspclient_full_static.lib
 RSPCLIENT_IMPORT_LIB = $(LIB_DIR)\rspclient.lib
@@ -134,6 +135,17 @@ MQ_SIGNING_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
 	$(OBJ_DIR)\mq_signing_test.obj
+
+SIGNING_BENCHMARK_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\node.obj \
+	$(OBJ_DIR)\keypair.obj \
+	$(OBJ_DIR)\mq.obj \
+	$(OBJ_DIR)\mq_signing.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\signing_benchmark.obj
 
 MQ_AUTHN_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
@@ -561,6 +573,9 @@ $(MQ_AUTHN_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_
 $(MQ_SIGNING_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_SIGNING_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(MQ_SIGNING_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(MQ_SIGNING_TEST_TARGET)
 
+$(SIGNING_BENCHMARK_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(SIGNING_BENCHMARK_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(SIGNING_BENCHMARK_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(SIGNING_BENCHMARK_TARGET)
+
 $(MQ_AUTHZ_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_AUTHZ_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(MQ_AUTHZ_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(MQ_AUTHZ_TEST_TARGET)
 
@@ -638,6 +653,9 @@ test-transcoding: $(TRANSCODING_TEST_TARGET)
 
 test-mq-signing: $(MQ_SIGNING_TEST_TARGET)
 	$(MQ_SIGNING_TEST_TARGET)
+
+benchmark-signing: $(SIGNING_BENCHMARK_TARGET)
+	$(SIGNING_BENCHMARK_TARGET)
 
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
@@ -793,6 +811,9 @@ $(OBJ_DIR)\endorsement_service_main.obj: endorsement_service\endorsement_service
 
 $(OBJ_DIR)\endorsement_service_test.obj: test\endorsement_service_test.cpp client\cpp\rsp_client.hpp endorsement_service\endorsement_service.hpp resource_manager\resource_manager.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\endorsement_service_test.cpp /Fo$(OBJ_DIR)\endorsement_service_test.obj
+
+$(OBJ_DIR)\signing_benchmark.obj: test\signing_benchmark.cpp common\message_queue\mq_signing.hpp common\keypair.hpp common\service_message.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(BORINGSSL_INCLUDE_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\signing_benchmark.cpp /Fo$(OBJ_DIR)\signing_benchmark.obj
 
 $(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\transport_memory_test.cpp /Fo$(OBJ_DIR)\transport_memory_test.obj
