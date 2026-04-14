@@ -404,4 +404,6 @@ message RSPMessage {
   SignatureBlock signature = 99;
   //endorsements are valid even if the signature is wrong
   repeated Endorsement endorsements = 100; 
+  //identities are valid even if the signature is wrong
+  repeated Identity identities = 101;
 }

@@ -411,7 +411,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     rsp::proto::RSPMessage identityMessage;
     *identityMessage.mutable_source() = toProtoNodeId(clientNodeId);
     *identityMessage.mutable_destination() = toProtoNodeId(esNodeId);
-    *identityMessage.mutable_identity()->mutable_public_key() = clientPublicKey;
+    *identityMessage.add_identities()->mutable_public_key() = clientPublicKey;
 
     require(client->send(identityMessage),
             "full client should be able to send an identity message through the resource manager");

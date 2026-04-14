@@ -302,7 +302,7 @@ std::optional<rsp::proto::EndorsementDone> RSPClient::beginEndorsementRequest(
 bool RSPClient::sendIdentity(rsp::NodeID nodeId) {
     rsp::proto::RSPMessage identityMessage;
     *identityMessage.mutable_destination() = toProtoNodeId(nodeId);
-    *identityMessage.mutable_identity()->mutable_public_key() = keyPair().publicKey();
+    *identityMessage.add_identities()->mutable_public_key() = keyPair().publicKey();
     return messageClient_ != nullptr && messageClient_->send(identityMessage);
 }
 

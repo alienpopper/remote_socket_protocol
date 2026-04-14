@@ -488,6 +488,12 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
     for (int index = 0; index < message.endorsements_size(); ++index) {
         hashEndorsement(hasher, message.endorsements(index));
     }
+
+    hasher.tag(101);
+    hasher.feedUint32(static_cast<uint32_t>(message.identities_size()));
+    for (int index = 0; index < message.identities_size(); ++index) {
+        hashIdentity(hasher, message.identities(index));
+    }
 }
 
 }  // namespace

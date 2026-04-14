@@ -418,12 +418,12 @@ class RSPClient:
         pub_pem_b64 = base64.b64encode(_public_key_pem_bytes(self._public_key)).decode("ascii")
         identity_message = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "identity": {
+            "identities": [{
                 "public_key": {
                     "algorithm": P256_ALGORITHM,
                     "public_key": pub_pem_b64,
                 },
-            },
+            }],
         }
         identity_message["signature"] = _sign_rsp_message(self._private_key, self.node_id, identity_message)
         await self._send_raw_message(identity_message)
@@ -447,6 +447,10 @@ class RSPClient:
         if isinstance(msg.get("endorsements"), list):
             for endorsement in msg["endorsements"]:
                 self._cache_endorsement(endorsement)
+
+        if isinstance(msg.get("identities"), list):
+            for identity in msg["identities"]:
+                self._cache_identity(identity)
 
         if _has_field(msg, "ping_reply"):
             self._handle_ping_reply(msg)
@@ -554,6 +558,17 @@ class RSPClient:
         try:
             subject = _decode_node_id_field(subject_hex)
             self._endorsement_cache[f"{subject}:{type_hex}"] = endorsement
+        except Exception:
+            pass
+
+    def _cache_identity(self, identity: dict) -> None:
+        pub_key_b64 = (identity.get("public_key") or {}).get("public_key")
+        if not pub_key_b64:
+            return
+        try:
+            pub_key = _load_public_key_from_b64(pub_key_b64)
+            node_id = _node_id_from_public_key(pub_key)
+            self._identity_cache[node_id] = pub_key
         except Exception:
             pass
 

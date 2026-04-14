@@ -49,7 +49,7 @@ EndorsementService::EndorsementService(KeyPair keyPair)
 }
 
 bool EndorsementService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
-    if (message.has_identity()) {
+    if (message.has_identity() || message.identities_size() > 0) {
         return true;
     }
 

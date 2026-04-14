@@ -577,7 +577,7 @@ void ResourceManager::handleAuthorizationFailure(rsp::proto::RSPMessage message)
 void ResourceManager::cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity) {
     rsp::proto::RSPMessage message;
     *message.mutable_source() = toProtoNodeId(peerNodeId);
-    *message.mutable_identity() = identity;
+    *message.add_identities() = identity;
     observeMessage(message);
 }
 

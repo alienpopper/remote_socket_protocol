@@ -570,12 +570,12 @@ class RSPClient extends EventEmitter {
     async _sendIdentityTo(nodeId) {
         const identityMessage = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            identity: {
+            identities: [{
                 public_key: {
                     algorithm: P256_ALGORITHM,
                     public_key: Buffer.from(this._publicKeyPem, 'utf8').toString('base64'),
                 },
-            },
+            }],
         };
         identityMessage.signature = signRSPMessage(this._privateKeyPem, this.nodeId, identityMessage);
         await this._sendRawMessage(identityMessage);
@@ -618,6 +618,12 @@ class RSPClient extends EventEmitter {
         if (Array.isArray(msg.endorsements)) {
             for (const endorsement of msg.endorsements) {
                 this._cacheEndorsement(endorsement);
+            }
+        }
+
+        if (Array.isArray(msg.identities)) {
+            for (const identity of msg.identities) {
+                this._cacheIdentity(msg, identity);
             }
         }
 
@@ -762,6 +768,17 @@ class RSPClient extends EventEmitter {
             this._endorsementCache.set(`${subject}:${typeHex}`, endorsement);
         } catch {
             // ignore malformed endorsements
+        }
+    }
+
+    _cacheIdentity(msg, identity) {
+        if (!identity?.public_key?.public_key) return;
+        try {
+            const pem = Buffer.from(identity.public_key.public_key, 'base64').toString('utf8');
+            const nodeId = nodeIdFromPublicKeyPem(pem);
+            this._identityCache.set(nodeId, pem);
+        } catch {
+            // ignore malformed identities
         }
     }
 

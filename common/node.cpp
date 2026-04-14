@@ -94,12 +94,22 @@ IdentityCache::IdentityCache(NodeID localNodeId, SendMessageCallback sendMessage
 }
 
 bool IdentityCache::observeMessage(const rsp::proto::RSPMessage& message) {
-    if (!message.has_identity()) {
-        return false;
+    bool cached = false;
+    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
+
+    if (message.has_identity()) {
+        if (cacheIdentity(message.identity(), sourceNodeId)) {
+            cached = true;
+        }
     }
 
-    const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
-    return cacheIdentity(message.identity(), sourceNodeId);
+    for (int i = 0; i < message.identities_size(); ++i) {
+        if (cacheIdentity(message.identities(i), sourceNodeId)) {
+            cached = true;
+        }
+    }
+
+    return cached;
 }
 
 bool IdentityCache::sendChallengeRequest(const rsp::NodeID& nodeId) const {
