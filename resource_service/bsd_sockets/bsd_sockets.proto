@@ -7,7 +7,7 @@ import "messages.proto";
 
 message ConnectTCPRequest {
     string host_port = 1;
-    SocketID socket_number = 2;
+    StreamID stream_id = 2;
     optional bool reuse_addr = 3;
     optional uint32 source_port = 4;
     optional uint32 timeout_ms = 5;
@@ -20,7 +20,7 @@ message ConnectTCPRequest {
 
 message ListenTCPRequest {
     string host_port = 1;
-    SocketID socket_number = 2;
+    StreamID stream_id = 2;
     optional bool reuse_addr = 3;
     optional uint32 timeout_ms = 4;
     optional bool async_accept = 5;
@@ -31,27 +31,10 @@ message ListenTCPRequest {
 }
 
 message AcceptTCP {
-    SocketID listen_socket_number = 1;
-    optional SocketID new_socket_number = 2;  //if not provided, RS will choose one
+    StreamID listen_stream_id = 1;
+    optional StreamID new_stream_id = 2;  //if not provided, RS will choose one
     optional uint32 timeout_ms = 3;
     optional bool share_child_socket = 4;
     optional bool child_use_socket = 5;
   optional bool child_async_data = 6;
-}
-
-message SocketSend { 
-   SocketID socket_number = 1;
-   uint64 index = 3; //incrementing for out-of-order and missing
-   bytes data = 2;
-}
-
-message SocketRecv {
-    SocketID socket_number = 1;
-    uint64 index = 3; //incrementing for out-of-order and missing
-    optional uint32 max_bytes = 2;
-    optional uint32 wait_ms = 4; //wait up to ms for max_bytes
-}
-
-message SocketClose {
-    SocketID socket_number = 1;
 }

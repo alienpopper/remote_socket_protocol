@@ -188,7 +188,7 @@ protected:
 
     // Override: TCP listen is not supported by rsp_sshd.
     bool handleListenTCPRequest(const rsp::proto::RSPMessage& message) override {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR,
                                            "UNIMPLEMENTED: rsp_sshd does not support TCP listen"));
     }
 

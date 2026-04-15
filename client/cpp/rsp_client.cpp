@@ -63,7 +63,7 @@ void recordNodeInputEnqueueEvent(const rsp::proto::RSPMessage& message, const rs
     }
 }
 
-bool socketRepliesMatch(const rsp::proto::SocketReply& left, const rsp::proto::SocketReply& right) {
+bool streamRepliesMatch(const rsp::proto::StreamReply& left, const rsp::proto::StreamReply& right) {
     return left.SerializeAsString() == right.SerializeAsString();
 }
 
@@ -83,10 +83,10 @@ bool sendAllToSocket(rsp::os::SocketHandle socketHandle, const uint8_t* data, st
     return true;
 }
 
-void removeBufferedReply(std::deque<rsp::proto::SocketReply>& pendingReplies,
-                         const rsp::proto::SocketReply& reply) {
+void removeBufferedReply(std::deque<rsp::proto::StreamReply>& pendingReplies,
+                         const rsp::proto::StreamReply& reply) {
     for (auto iterator = pendingReplies.begin(); iterator != pendingReplies.end(); ++iterator) {
-        if (socketRepliesMatch(*iterator, reply)) {
+        if (streamRepliesMatch(*iterator, reply)) {
             pendingReplies.erase(iterator);
             return;
         }
@@ -140,8 +140,8 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
-    if (rsp::hasServiceMessage<rsp::proto::SocketReply>(message)) {
-        handleSocketReply(message);
+    if (rsp::hasServiceMessage<rsp::proto::StreamReply>(message)) {
+        handleStreamReply(message);
         return true;
     }
 
@@ -347,7 +347,7 @@ bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uin
     return messageClient_->send(request);
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
+std::optional<rsp::proto::StreamReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
                                                                   const std::string& hostPort,
                                                                   uint32_t timeoutMilliseconds,
                                                                   uint32_t retries,
@@ -360,7 +360,7 @@ std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeI
     *request.mutable_destination() = toProtoNodeId(nodeId);
     rsp::proto::ConnectTCPRequest connectReq;
     connectReq.set_host_port(hostPort);
-    *connectReq.mutable_socket_number() = toProtoSocketId(socketId);
+    *connectReq.mutable_stream_id() = toProtoStreamId(socketId);
     connectReq.set_use_socket(useSocket);
     if (timeoutMilliseconds > 0) {
         connectReq.set_timeout_ms(timeoutMilliseconds);
@@ -404,10 +404,10 @@ std::optional<rsp::proto::SocketReply> RSPClient::connectTCPEx(rsp::NodeID nodeI
     auto reply = iterator->second.reply;
     pendingConnects_.erase(iterator);
     if (reply.has_value() && reply->error() == rsp::proto::SUCCESS) {
-        if (!reply->has_socket_id()) {
-            *reply->mutable_socket_id() = toProtoSocketId(socketId);
+        if (!reply->has_stream_id()) {
+            *reply->mutable_stream_id() = toProtoStreamId(socketId);
         }
-        socketRoutes_[socketId] = nodeId;
+        streamRoutes_[socketId] = nodeId;
     }
 
     return reply;
@@ -429,14 +429,14 @@ std::optional<rsp::GUID> RSPClient::connectTCP(rsp::NodeID nodeId,
                                        asyncData,
                                        shareSocket,
                                        useSocket);
-    if (!reply.has_value() || reply->error() != rsp::proto::SUCCESS || !reply->has_socket_id()) {
+    if (!reply.has_value() || reply->error() != rsp::proto::SUCCESS || !reply->has_stream_id()) {
         return std::nullopt;
     }
 
-    return fromProtoSocketId(reply->socket_id());
+    return fromProtoStreamId(reply->stream_id());
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::listenTCPEx(rsp::NodeID nodeId,
+std::optional<rsp::proto::StreamReply> RSPClient::listenTCPEx(rsp::NodeID nodeId,
                                                               const std::string& hostPort,
                                                               uint32_t timeoutMilliseconds,
                                                               bool asyncAccept,
@@ -449,7 +449,7 @@ std::optional<rsp::proto::SocketReply> RSPClient::listenTCPEx(rsp::NodeID nodeId
     *request.mutable_destination() = toProtoNodeId(nodeId);
     rsp::proto::ListenTCPRequest listenReq;
     listenReq.set_host_port(hostPort);
-    *listenReq.mutable_socket_number() = toProtoSocketId(socketId);
+    *listenReq.mutable_stream_id() = toProtoStreamId(socketId);
     if (timeoutMilliseconds > 0) {
         listenReq.set_timeout_ms(timeoutMilliseconds);
     }
@@ -495,10 +495,10 @@ std::optional<rsp::proto::SocketReply> RSPClient::listenTCPEx(rsp::NodeID nodeId
     auto reply = iterator->second.reply;
     pendingListens_.erase(iterator);
     if (reply.has_value() && reply->error() == rsp::proto::SUCCESS) {
-        if (!reply->has_socket_id()) {
-            *reply->mutable_socket_id() = toProtoSocketId(socketId);
+        if (!reply->has_stream_id()) {
+            *reply->mutable_stream_id() = toProtoStreamId(socketId);
         }
-        socketRoutes_[socketId] = nodeId;
+        streamRoutes_[socketId] = nodeId;
     }
 
     return reply;
@@ -520,11 +520,11 @@ std::optional<rsp::GUID> RSPClient::listenTCP(rsp::NodeID nodeId,
                                    shareChildSockets,
                                    childrenUseSocket,
                                    childrenAsyncData);
-    if (!reply.has_value() || reply->error() != rsp::proto::SUCCESS || !reply->has_socket_id()) {
+    if (!reply.has_value() || reply->error() != rsp::proto::SUCCESS || !reply->has_stream_id()) {
         return std::nullopt;
     }
 
-    return fromProtoSocketId(reply->socket_id());
+    return fromProtoStreamId(reply->stream_id());
 }
 
 std::optional<rsp::os::SocketHandle> RSPClient::listenTCPSocket(rsp::NodeID nodeId,
@@ -538,7 +538,7 @@ std::optional<rsp::os::SocketHandle> RSPClient::listenTCPSocket(rsp::NodeID node
     rsp::os::SocketHandle listenerSocket = rsp::os::invalidSocket();
     std::string localEndpoint;
     if (!rsp::os::createLocalListenerSocket(listenerSocket, localEndpoint)) {
-        socketClose(*listenSocketId);
+        streamClose(*listenSocketId);
         return std::nullopt;
     }
 
@@ -560,7 +560,7 @@ std::optional<rsp::os::SocketHandle> RSPClient::listenTCPSocket(rsp::NodeID node
     return listenerSocket;
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& listenSocketId,
+std::optional<rsp::proto::StreamReply> RSPClient::acceptTCPEx(const rsp::GUID& listenSocketId,
                                                               const std::optional<rsp::GUID>& newSocketId,
                                                               uint32_t timeoutMilliseconds,
                                                               bool shareChildSocket,
@@ -569,21 +569,21 @@ std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& l
     rsp::NodeID destination;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        const auto iterator = socketRoutes_.find(listenSocketId);
-        if (iterator == socketRoutes_.end()) {
+        const auto iterator = streamRoutes_.find(listenSocketId);
+        if (iterator == streamRoutes_.end()) {
             return std::nullopt;
         }
 
         destination = iterator->second;
-        awaitedSocketReplies_.insert(listenSocketId);
+        awaitedStreamReplies_.insert(listenSocketId);
     }
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
     rsp::proto::AcceptTCP acceptReq;
-    *acceptReq.mutable_listen_socket_number() = toProtoSocketId(listenSocketId);
+    *acceptReq.mutable_listen_stream_id() = toProtoStreamId(listenSocketId);
     if (newSocketId.has_value()) {
-        *acceptReq.mutable_new_socket_number() = toProtoSocketId(*newSocketId);
+        *acceptReq.mutable_new_stream_id() = toProtoStreamId(*newSocketId);
     }
     if (timeoutMilliseconds > 0) {
         acceptReq.set_timeout_ms(timeoutMilliseconds);
@@ -601,18 +601,18 @@ std::optional<rsp::proto::SocketReply> RSPClient::acceptTCPEx(const rsp::GUID& l
 
     if (!messageClient_->send(request)) {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        awaitedSocketReplies_.erase(listenSocketId);
+        awaitedStreamReplies_.erase(listenSocketId);
         return std::nullopt;
     }
 
-    auto reply = waitForSocketReply(listenSocketId);
+    auto reply = waitForStreamReply(listenSocketId);
     if (reply.has_value() &&
         (reply->error() == rsp::proto::SUCCESS || reply->error() == rsp::proto::NEW_CONNECTION) &&
-        reply->has_new_socket_id()) {
-        const auto acceptedSocketId = fromProtoSocketId(reply->new_socket_id());
+        reply->has_new_stream_id()) {
+        const auto acceptedSocketId = fromProtoStreamId(reply->new_stream_id());
         if (acceptedSocketId.has_value()) {
             std::lock_guard<std::mutex> lock(stateMutex_);
-            socketRoutes_[*acceptedSocketId] = destination;
+            streamRoutes_[*acceptedSocketId] = destination;
         }
     }
 
@@ -633,11 +633,11 @@ std::optional<rsp::GUID> RSPClient::acceptTCP(const rsp::GUID& listenSocketId,
                                    childAsyncData);
     if (!reply.has_value() ||
         (reply->error() != rsp::proto::SUCCESS && reply->error() != rsp::proto::NEW_CONNECTION) ||
-        !reply->has_new_socket_id()) {
+        !reply->has_new_stream_id()) {
         return std::nullopt;
     }
 
-    return fromProtoSocketId(reply->new_socket_id());
+    return fromProtoStreamId(reply->new_stream_id());
 }
 
 std::optional<rsp::os::SocketHandle> RSPClient::acceptTCPSocket(const rsp::GUID& listenSocketId,
@@ -661,8 +661,8 @@ std::optional<rsp::os::SocketHandle> RSPClient::acceptTCPSocket(const rsp::GUID&
         return std::nullopt;
     }
 
-    const auto bridgeState = attachNativeSocketBridge(*socketId, bridgeSocket);
-    startNativeSocketBridgeWorker(*socketId, bridgeState);
+    const auto bridgeState = attachNativeStreamBridge(*socketId, bridgeSocket);
+    startNativeStreamBridgeWorker(*socketId, bridgeState);
 
     return applicationSocket;
 }
@@ -692,34 +692,34 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nod
         return std::nullopt;
     }
 
-    const auto bridgeState = attachNativeSocketBridge(*socketId, bridgeSocket);
-    startNativeSocketBridgeWorker(*socketId, bridgeState);
+    const auto bridgeState = attachNativeStreamBridge(*socketId, bridgeSocket);
+    startNativeStreamBridgeWorker(*socketId, bridgeState);
 
     return applicationSocket;
 }
 
-std::shared_ptr<RSPClient::NativeSocketBridgeState> RSPClient::attachNativeSocketBridge(
+std::shared_ptr<RSPClient::NativeStreamBridgeState> RSPClient::attachNativeStreamBridge(
     const rsp::GUID& socketId,
     rsp::os::SocketHandle bridgeSocket) {
-    auto bridgeState = std::make_shared<NativeSocketBridgeState>();
+    auto bridgeState = std::make_shared<NativeStreamBridgeState>();
     bridgeState->bridgeSocket = bridgeSocket;
 
-    std::deque<rsp::proto::SocketReply> bufferedReplies;
+    std::deque<rsp::proto::StreamReply> bufferedReplies;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        nativeSocketBridges_[socketId] = bridgeState;
-        const auto queuedReplies = socketReplyQueues_.find(socketId);
-        if (queuedReplies != socketReplyQueues_.end()) {
+        nativeStreamBridges_[socketId] = bridgeState;
+        const auto queuedReplies = streamReplyQueues_.find(socketId);
+        if (queuedReplies != streamReplyQueues_.end()) {
             bufferedReplies = std::move(queuedReplies->second);
-            socketReplyQueues_.erase(queuedReplies);
+            streamReplyQueues_.erase(queuedReplies);
             for (const auto& reply : bufferedReplies) {
-                removeBufferedReply(pendingSocketReplies_, reply);
+                removeBufferedReply(pendingStreamReplies_, reply);
             }
         }
     }
 
     for (const auto& reply : bufferedReplies) {
-        if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
+        if (reply.error() == rsp::proto::STREAM_DATA && reply.has_data()) {
             if (!sendAllToSocket(bridgeState->bridgeSocket,
                                  reinterpret_cast<const uint8_t*>(reply.data().data()),
                                  reply.data().size())) {
@@ -740,34 +740,34 @@ std::shared_ptr<RSPClient::NativeSocketBridgeState> RSPClient::attachNativeSocke
     return bridgeState;
 }
 
-void RSPClient::startNativeSocketBridgeWorker(const rsp::GUID& socketId,
-                                              const std::shared_ptr<NativeSocketBridgeState>& bridgeState) {
+void RSPClient::startNativeStreamBridgeWorker(const rsp::GUID& socketId,
+                                              const std::shared_ptr<NativeStreamBridgeState>& bridgeState) {
     bridgeState->worker = std::thread([weakSelf = weak_from_this(), socketId, bridgeState]() {
         if (const auto self = weakSelf.lock()) {
-            self->runNativeSocketBridge(socketId, bridgeState);
+            self->runNativeStreamBridge(socketId, bridgeState);
         } else {
             rsp::os::closeSocket(bridgeState->bridgeSocket);
         }
     });
 }
 
-bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
+bool RSPClient::streamSend(const rsp::GUID& socketId, const std::string& data) {
     rsp::NodeID destination;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        const auto iterator = socketRoutes_.find(socketId);
-        if (iterator == socketRoutes_.end()) {
+        const auto iterator = streamRoutes_.find(socketId);
+        if (iterator == streamRoutes_.end()) {
             return false;
         }
 
         destination = iterator->second;
-        awaitedSocketReplies_.insert(socketId);
+        awaitedStreamReplies_.insert(socketId);
     }
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    rsp::proto::SocketSend sendReq;
-    *sendReq.mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::proto::StreamSend sendReq;
+    *sendReq.mutable_stream_id() = toProtoStreamId(socketId);
     sendReq.set_data(data);
     rsp::packServiceMessage(request, sendReq);
 
@@ -775,7 +775,7 @@ bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
         return false;
     }
 
-    const auto reply = waitForSocketReply(socketId);
+    const auto reply = waitForStreamReply(socketId);
     if (!reply.has_value()) {
         return false;
     }
@@ -783,40 +783,40 @@ bool RSPClient::socketSend(const rsp::GUID& socketId, const std::string& data) {
     return reply->error() == rsp::proto::SUCCESS;
 }
 
-std::optional<std::string> RSPClient::socketRecv(const rsp::GUID& socketId,
+std::optional<std::string> RSPClient::streamRecv(const rsp::GUID& socketId,
                                                  uint32_t maxBytes,
                                                  uint32_t waitMilliseconds) {
-    const auto reply = socketRecvEx(socketId, maxBytes, waitMilliseconds);
+    const auto reply = streamRecvEx(socketId, maxBytes, waitMilliseconds);
     if (!reply.has_value()) {
         return std::nullopt;
     }
 
-    if (reply->error() != rsp::proto::SOCKET_DATA && reply->error() != rsp::proto::SUCCESS) {
+    if (reply->error() != rsp::proto::STREAM_DATA && reply->error() != rsp::proto::SUCCESS) {
         return std::nullopt;
     }
 
     return reply->has_data() ? std::optional<std::string>(reply->data()) : std::optional<std::string>(std::string());
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::socketRecvEx(const rsp::GUID& socketId,
+std::optional<rsp::proto::StreamReply> RSPClient::streamRecvEx(const rsp::GUID& socketId,
                                                                   uint32_t maxBytes,
                                                                   uint32_t waitMilliseconds) {
     rsp::NodeID destination;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        const auto iterator = socketRoutes_.find(socketId);
-        if (iterator == socketRoutes_.end()) {
+        const auto iterator = streamRoutes_.find(socketId);
+        if (iterator == streamRoutes_.end()) {
             return std::nullopt;
         }
 
         destination = iterator->second;
-        awaitedSocketReplies_.insert(socketId);
+        awaitedStreamReplies_.insert(socketId);
     }
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    rsp::proto::SocketRecv recvReq;
-    *recvReq.mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::proto::StreamRecv recvReq;
+    *recvReq.mutable_stream_id() = toProtoStreamId(socketId);
     recvReq.set_max_bytes(maxBytes);
     if (waitMilliseconds > 0) {
         recvReq.set_wait_ms(waitMilliseconds);
@@ -827,98 +827,98 @@ std::optional<rsp::proto::SocketReply> RSPClient::socketRecvEx(const rsp::GUID& 
         return std::nullopt;
     }
 
-    return waitForSocketReply(socketId);
+    return waitForStreamReply(socketId);
 }
 
-std::optional<rsp::proto::SocketReply> RSPClient::waitForSocketReply(const rsp::GUID& socketId) {
+std::optional<rsp::proto::StreamReply> RSPClient::waitForStreamReply(const rsp::GUID& socketId) {
     std::unique_lock<std::mutex> lock(stateMutex_);
     const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this, &socketId]() {
-        const auto iterator = socketReplyQueues_.find(socketId);
-        return stopping_ || (iterator != socketReplyQueues_.end() && !iterator->second.empty());
+        const auto iterator = streamReplyQueues_.find(socketId);
+        return stopping_ || (iterator != streamReplyQueues_.end() && !iterator->second.empty());
     });
-    const auto iterator = socketReplyQueues_.find(socketId);
-    if (!replied || stopping_ || iterator == socketReplyQueues_.end() || iterator->second.empty()) {
-        awaitedSocketReplies_.erase(socketId);
+    const auto iterator = streamReplyQueues_.find(socketId);
+    if (!replied || stopping_ || iterator == streamReplyQueues_.end() || iterator->second.empty()) {
+        awaitedStreamReplies_.erase(socketId);
         return std::nullopt;
     }
 
-    const rsp::proto::SocketReply reply = iterator->second.front();
+    const rsp::proto::StreamReply reply = iterator->second.front();
     iterator->second.pop_front();
-    awaitedSocketReplies_.erase(socketId);
-    for (auto globalIterator = pendingSocketReplies_.begin(); globalIterator != pendingSocketReplies_.end(); ++globalIterator) {
-        if (socketRepliesMatch(*globalIterator, reply)) {
-            pendingSocketReplies_.erase(globalIterator);
+    awaitedStreamReplies_.erase(socketId);
+    for (auto globalIterator = pendingStreamReplies_.begin(); globalIterator != pendingStreamReplies_.end(); ++globalIterator) {
+        if (streamRepliesMatch(*globalIterator, reply)) {
+            pendingStreamReplies_.erase(globalIterator);
             break;
         }
     }
     if (iterator->second.empty()) {
-        socketReplyQueues_.erase(iterator);
+        streamReplyQueues_.erase(iterator);
     }
     return reply;
 }
 
-bool RSPClient::socketClose(const rsp::GUID& socketId) {
+bool RSPClient::streamClose(const rsp::GUID& socketId) {
     rsp::NodeID destination;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        const auto iterator = socketRoutes_.find(socketId);
-        if (iterator == socketRoutes_.end()) {
+        const auto iterator = streamRoutes_.find(socketId);
+        if (iterator == streamRoutes_.end()) {
             return false;
         }
 
         destination = iterator->second;
-        awaitedSocketReplies_.insert(socketId);
+        awaitedStreamReplies_.insert(socketId);
     }
 
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(destination);
-    rsp::proto::SocketClose closeReq;
-    *closeReq.mutable_socket_number() = toProtoSocketId(socketId);
+    rsp::proto::StreamClose closeReq;
+    *closeReq.mutable_stream_id() = toProtoStreamId(socketId);
     rsp::packServiceMessage(request, closeReq);
 
     if (!messageClient_->send(request)) {
-        socketRoutes_.erase(socketId);
+        streamRoutes_.erase(socketId);
         return true;
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (std::chrono::steady_clock::now() < deadline) {
-        const auto reply = waitForSocketReply(socketId);
+        const auto reply = waitForStreamReply(socketId);
         if (!reply.has_value()) {
-            socketRoutes_.erase(socketId);
+            streamRoutes_.erase(socketId);
             return true;
         }
 
-        if (reply->error() == rsp::proto::SUCCESS || reply->error() == rsp::proto::SOCKET_CLOSED) {
-            socketRoutes_.erase(socketId);
+        if (reply->error() == rsp::proto::SUCCESS || reply->error() == rsp::proto::STREAM_CLOSED) {
+            streamRoutes_.erase(socketId);
             return true;
         }
 
-        if (reply->error() != rsp::proto::SOCKET_DATA &&
-            reply->error() != rsp::proto::ASYNC_SOCKET &&
+        if (reply->error() != rsp::proto::STREAM_DATA &&
+            reply->error() != rsp::proto::ASYNC_STREAM &&
             reply->error() != rsp::proto::NEW_CONNECTION) {
             return false;
         }
     }
 
-    socketRoutes_.erase(socketId);
+    streamRoutes_.erase(socketId);
     return true;
 }
 
-bool RSPClient::tryDequeueSocketReply(rsp::proto::SocketReply& reply) {
+bool RSPClient::tryDequeueStreamReply(rsp::proto::StreamReply& reply) {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    if (pendingSocketReplies_.empty()) {
+    if (pendingStreamReplies_.empty()) {
         return false;
     }
 
-    reply = pendingSocketReplies_.front();
-    pendingSocketReplies_.pop_front();
+    reply = pendingStreamReplies_.front();
+    pendingStreamReplies_.pop_front();
     return true;
 }
 
-std::size_t RSPClient::pendingSocketReplyCount() const {
+std::size_t RSPClient::pendingStreamReplyCount() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    return pendingSocketReplies_.size();
+    return pendingStreamReplies_.size();
 }
 
 bool RSPClient::tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement) {
@@ -937,9 +937,9 @@ std::size_t RSPClient::pendingResourceAdvertisementCount() const {
     return pendingResourceAdvertisements_.size();
 }
 
-void RSPClient::registerSocketRoute(const rsp::GUID& socketId, rsp::NodeID nodeId) {
+void RSPClient::registerStreamRoute(const rsp::GUID& socketId, rsp::NodeID nodeId) {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    socketRoutes_[socketId] = nodeId;
+    streamRoutes_[socketId] = nodeId;
 }
 
 void RSPClient::receiveLoop() {
@@ -1028,15 +1028,15 @@ void RSPClient::handleEndorsementDone(const rsp::proto::RSPMessage& message) {
     stateChanged_.notify_all();
 }
 
-void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
-    std::shared_ptr<NativeSocketBridgeState> nativeSocketBridge;
-    rsp::proto::SocketReply socketReply;
+void RSPClient::handleStreamReply(const rsp::proto::RSPMessage& message) {
+    std::shared_ptr<NativeStreamBridgeState> nativeSocketBridge;
+    rsp::proto::StreamReply socketReply;
     rsp::unpackServiceMessage(message, &socketReply);
 
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        const auto replySocketId = socketReply.has_socket_id()
-                                       ? fromProtoSocketId(socketReply.socket_id())
+        const auto replySocketId = socketReply.has_stream_id()
+                                       ? fromProtoStreamId(socketReply.stream_id())
                                        : std::optional<rsp::GUID>();
         if (replySocketId.has_value()) {
             const auto pendingIterator = pendingConnects_.find(*replySocketId);
@@ -1046,8 +1046,8 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
                     (status == rsp::proto::SUCCESS ||
                      status == rsp::proto::CONNECT_REFUSED ||
                      status == rsp::proto::CONNECT_TIMEOUT ||
-                     status == rsp::proto::SOCKET_ERROR ||
-                     status == rsp::proto::SOCKET_IN_USE ||
+                     status == rsp::proto::STREAM_ERROR ||
+                     status == rsp::proto::STREAM_IN_USE ||
                      status == rsp::proto::INVALID_FLAGS)) {
                     pendingIterator->second.completed = true;
                     pendingIterator->second.reply = socketReply;
@@ -1061,8 +1061,8 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
                 const auto status = socketReply.error();
                 if (!pendingListenIterator->second.completed &&
                     (status == rsp::proto::SUCCESS ||
-                     status == rsp::proto::SOCKET_ERROR ||
-                     status == rsp::proto::SOCKET_IN_USE ||
+                     status == rsp::proto::STREAM_ERROR ||
+                     status == rsp::proto::STREAM_IN_USE ||
                      status == rsp::proto::INVALID_FLAGS)) {
                     pendingListenIterator->second.completed = true;
                     pendingListenIterator->second.reply = socketReply;
@@ -1071,37 +1071,37 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
                 }
             }
 
-            if (socketReply.has_new_socket_id()) {
-                const auto newSocketId = fromProtoSocketId(socketReply.new_socket_id());
+            if (socketReply.has_new_stream_id()) {
+                const auto newSocketId = fromProtoStreamId(socketReply.new_stream_id());
                 const auto sourceNodeId = rsp::senderNodeIdFromMessage(message);
                 if (newSocketId.has_value() && sourceNodeId.has_value()) {
-                    socketRoutes_[*newSocketId] = *sourceNodeId;
+                    streamRoutes_[*newSocketId] = *sourceNodeId;
                 }
             }
 
-            const auto bridgeIterator = nativeSocketBridges_.find(*replySocketId);
-            const auto awaitedIterator = awaitedSocketReplies_.find(*replySocketId);
-            const bool isSocketData = socketReply.error() == rsp::proto::SOCKET_DATA;
+            const auto bridgeIterator = nativeStreamBridges_.find(*replySocketId);
+            const auto awaitedIterator = awaitedStreamReplies_.find(*replySocketId);
+            const bool isSocketData = socketReply.error() == rsp::proto::STREAM_DATA;
             const bool isDataOrClose = isSocketData ||
-                                       socketReply.error() == rsp::proto::SOCKET_CLOSED ||
-                                       socketReply.error() == rsp::proto::SOCKET_ERROR;
-            // SOCKET_DATA must always reach the bridge immediately even while we are
+                                       socketReply.error() == rsp::proto::STREAM_CLOSED ||
+                                       socketReply.error() == rsp::proto::STREAM_ERROR;
+            // STREAM_DATA must always reach the bridge immediately even while we are
             // awaiting a SUCCESS reply to a SOCKET_SEND; otherwise the bridge worker
-            // blocks in socketSend() and never drains the incoming data, causing a
+            // blocks in streamSend() and never drains the incoming data, causing a
             // deadlock during full-duplex streams (e.g. SSH handshake).
-            // SOCKET_CLOSED/SOCKET_ERROR also go to the bridge, but only when there is
+            // STREAM_CLOSED/STREAM_ERROR also go to the bridge, but only when there is
             // no pending waiter; if a waiter exists we let the error wake it instead.
-            if (bridgeIterator != nativeSocketBridges_.end() && isDataOrClose &&
-                (isSocketData || awaitedIterator == awaitedSocketReplies_.end())) {
+            if (bridgeIterator != nativeStreamBridges_.end() && isDataOrClose &&
+                (isSocketData || awaitedIterator == awaitedStreamReplies_.end())) {
                 nativeSocketBridge = bridgeIterator->second;
                 if (!isSocketData) {
                     nativeSocketBridge->remoteClosed.store(true);
                     nativeSocketBridge->stopping.store(true);
                 }
             } else {
-                socketReplyQueues_[*replySocketId].push_back(socketReply);
-                if (awaitedIterator != awaitedSocketReplies_.end()) {
-                    awaitedSocketReplies_.erase(awaitedIterator);
+                streamReplyQueues_[*replySocketId].push_back(socketReply);
+                if (awaitedIterator != awaitedStreamReplies_.end()) {
+                    awaitedStreamReplies_.erase(awaitedIterator);
                     stateChanged_.notify_all();
                     return;
                 }
@@ -1109,7 +1109,7 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
         }
 
         if (nativeSocketBridge == nullptr) {
-            pendingSocketReplies_.push_back(socketReply);
+            pendingStreamReplies_.push_back(socketReply);
         }
         stateChanged_.notify_all();
     }
@@ -1118,7 +1118,7 @@ void RSPClient::handleSocketReply(const rsp::proto::RSPMessage& message) {
         return;
     }
 
-    if (socketReply.error() == rsp::proto::SOCKET_DATA && socketReply.has_data()) {
+    if (socketReply.error() == rsp::proto::STREAM_DATA && socketReply.has_data()) {
         if (!sendAllToSocket(nativeSocketBridge->bridgeSocket,
                              reinterpret_cast<const uint8_t*>(socketReply.data().data()),
                              socketReply.data().size())) {
@@ -1137,8 +1137,8 @@ void RSPClient::handleResourceAdvertisement(const rsp::proto::RSPMessage& messag
     stateChanged_.notify_all();
 }
 
-void RSPClient::runNativeSocketBridge(const rsp::GUID& socketId,
-                                      const std::shared_ptr<NativeSocketBridgeState>& bridgeState) {
+void RSPClient::runNativeStreamBridge(const rsp::GUID& socketId,
+                                      const std::shared_ptr<NativeStreamBridgeState>& bridgeState) {
     std::vector<uint8_t> buffer(4096);
     while (!bridgeState->stopping.load()) {
         const int bytesRead = rsp::os::recvSocket(bridgeState->bridgeSocket,
@@ -1149,7 +1149,7 @@ void RSPClient::runNativeSocketBridge(const rsp::GUID& socketId,
         }
 
         const std::string payload(reinterpret_cast<const char*>(buffer.data()), static_cast<std::size_t>(bytesRead));
-        if (!socketSend(socketId, payload)) {
+        if (!streamSend(socketId, payload)) {
             break;
         }
     }
@@ -1157,7 +1157,7 @@ void RSPClient::runNativeSocketBridge(const rsp::GUID& socketId,
     bridgeState->stopping.store(true);
     rsp::os::closeSocket(bridgeState->bridgeSocket);
     if (!bridgeState->remoteClosed.load()) {
-        socketClose(socketId);
+        streamClose(socketId);
     }
 
 }
@@ -1178,40 +1178,40 @@ void RSPClient::runNativeListenSocketBridge(const std::shared_ptr<NativeListenBr
         }
 
         if ((reply->error() != rsp::proto::SUCCESS && reply->error() != rsp::proto::NEW_CONNECTION) ||
-            !reply->has_new_socket_id()) {
-            if (reply->error() == rsp::proto::SOCKET_CLOSED) {
+            !reply->has_new_stream_id()) {
+            if (reply->error() == rsp::proto::STREAM_CLOSED) {
                 break;
             }
 
             continue;
         }
 
-        const auto socketId = fromProtoSocketId(reply->new_socket_id());
+        const auto socketId = fromProtoStreamId(reply->new_stream_id());
         if (!socketId.has_value()) {
             continue;
         }
 
         const auto bridgeSocket = rsp::os::connectLocalListenerSocket(bridgeState->localEndpoint);
         if (!rsp::os::isValidSocket(bridgeSocket)) {
-            socketClose(*socketId);
+            streamClose(*socketId);
             break;
         }
 
-        const auto socketBridge = attachNativeSocketBridge(*socketId, bridgeSocket);
-        startNativeSocketBridgeWorker(*socketId, socketBridge);
+        const auto socketBridge = attachNativeStreamBridge(*socketId, bridgeSocket);
+        startNativeStreamBridgeWorker(*socketId, socketBridge);
     }
 
-    socketClose(bridgeState->listenSocketId);
+    streamClose(bridgeState->listenSocketId);
 }
 
 void RSPClient::stopNativeSocketBridges() {
-    std::vector<std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges;
+    std::vector<std::shared_ptr<NativeStreamBridgeState>> nativeSocketBridges;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        for (auto& [_, bridgeState] : nativeSocketBridges_) {
+        for (auto& [_, bridgeState] : nativeStreamBridges_) {
             nativeSocketBridges.push_back(bridgeState);
         }
-        nativeSocketBridges_.clear();
+        nativeStreamBridges_.clear();
     }
 
     for (auto& bridgeState : nativeSocketBridges) {
@@ -1246,14 +1246,14 @@ void RSPClient::stopNativeListenBridges() {
 }
 
 void RSPClient::stopNativeSocketBridgesForNode(const rsp::NodeID& nodeId) {
-    std::map<rsp::GUID, std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges;
+    std::map<rsp::GUID, std::shared_ptr<NativeStreamBridgeState>> nativeSocketBridges;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        for (auto iterator = nativeSocketBridges_.begin(); iterator != nativeSocketBridges_.end();) {
-            const auto routeIterator = socketRoutes_.find(iterator->first);
-            if (routeIterator != socketRoutes_.end() && routeIterator->second == nodeId) {
+        for (auto iterator = nativeStreamBridges_.begin(); iterator != nativeStreamBridges_.end();) {
+            const auto routeIterator = streamRoutes_.find(iterator->first);
+            if (routeIterator != streamRoutes_.end() && routeIterator->second == nodeId) {
                 nativeSocketBridges.emplace(iterator->first, iterator->second);
-                iterator = nativeSocketBridges_.erase(iterator);
+                iterator = nativeStreamBridges_.erase(iterator);
                 continue;
             }
 
@@ -1301,8 +1301,8 @@ rsp::proto::NodeId RSPClient::toProtoNodeId(const rsp::NodeID& nodeId) {
     return ::rsp::client::toProtoNodeId(nodeId);
 }
 
-rsp::proto::SocketID RSPClient::toProtoSocketId(const rsp::GUID& socketId) {
-    rsp::proto::SocketID protoSocketId;
+rsp::proto::StreamID RSPClient::toProtoStreamId(const rsp::GUID& socketId) {
+    rsp::proto::StreamID protoSocketId;
     std::string value(16, '\0');
     const uint64_t high = socketId.high();
     const uint64_t low = socketId.low();
@@ -1312,7 +1312,7 @@ rsp::proto::SocketID RSPClient::toProtoSocketId(const rsp::GUID& socketId) {
     return protoSocketId;
 }
 
-std::optional<rsp::GUID> RSPClient::fromProtoSocketId(const rsp::proto::SocketID& socketId) {
+std::optional<rsp::GUID> RSPClient::fromProtoStreamId(const rsp::proto::StreamID& socketId) {
     if (socketId.value().size() != 16) {
         return std::nullopt;
     }

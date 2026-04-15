@@ -8,7 +8,7 @@ message Uuid {
   bytes value = 1;
 }
 
-message SocketID {
+message StreamID {
     bytes value = 1; //uuid
 }
 
@@ -28,29 +28,46 @@ message OptionalBool {
     bool value = 1;
 }
 
-enum SOCKET_STATUS {
+enum STREAM_STATUS {
   SUCCESS = 0;
     CONNECT_REFUSED = 1;
     CONNECT_TIMEOUT = 2;
-    SOCKET_CLOSED = 3;
-    SOCKET_DATA = 4;
-    SOCKET_ERROR = 5; //error reported from the underlying OS socket
+    STREAM_CLOSED = 3;
+    STREAM_DATA = 4;
+    STREAM_ERROR = 5; //error reported from the underlying OS socket
     NEW_CONNECTION = 6;
-    ASYNC_SOCKET = 7; //synchronous operation attempted on an async socket
+    ASYNC_STREAM = 7; //synchronous operation attempted on an async stream
     NODEID_MISMATCH = 9;
     INVALID_FLAGS = 10;
-    SOCKET_IN_USE = 11;
+    STREAM_IN_USE = 11;
     TIMED_OUT = 12;
 }
 
-message SocketReply {
-    SocketID socket_id = 1;
-    SOCKET_STATUS error = 2;
+message StreamReply {
+    StreamID stream_id = 1;
+    STREAM_STATUS error = 2;
     optional string message = 3;
-    optional string new_socket_remote_address = 4;
-    optional SocketID new_socket_id = 5;  //RS chosen if async, client chosen if blocking
-    optional int32 socket_error_code = 6; //error code reported from the underlying OS socket
+    optional string new_stream_remote_address = 4;
+    optional StreamID new_stream_id = 5;  //RS chosen if async, client chosen if blocking
+    optional int32 stream_error_code = 6; //error code reported from the underlying OS socket
     optional bytes data = 7;
+}
+
+message StreamSend {
+   StreamID stream_id = 1;
+   uint64 index = 3; //incrementing for out-of-order and missing
+   bytes data = 2;
+}
+
+message StreamRecv {
+    StreamID stream_id = 1;
+    uint64 index = 3; //incrementing for out-of-order and missing
+    optional uint32 max_bytes = 2;
+    optional uint32 wait_ms = 4; //wait up to ms for max_bytes
+}
+
+message StreamClose {
+    StreamID stream_id = 1;
 }
 
 enum SIGNATURE_ALGORITHMS {

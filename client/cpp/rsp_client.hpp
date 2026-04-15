@@ -56,7 +56,7 @@ public:
                                       const std::string& query = std::string(),
                                       uint32_t maxRecords = 0);
 
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> connectTCPEx(rsp::NodeID nodeId,
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> connectTCPEx(rsp::NodeID nodeId,
                                                                          const std::string& hostPort,
                                                                          uint32_t timeoutMilliseconds = 0,
                                                                          uint32_t retries = 0,
@@ -72,7 +72,7 @@ public:
                                                       bool asyncData = false,
                                                       bool shareSocket = false,
                                                       bool useSocket = false);
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> listenTCPEx(rsp::NodeID nodeId,
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> listenTCPEx(rsp::NodeID nodeId,
                                                                      const std::string& hostPort,
                                                                      uint32_t timeoutMilliseconds = 0,
                                                                      bool asyncAccept = false,
@@ -91,7 +91,7 @@ public:
     RSPCLIENT_API std::optional<rsp::os::SocketHandle> listenTCPSocket(rsp::NodeID nodeId,
                                                                        const std::string& hostPort,
                                                                        uint32_t timeoutMilliseconds = 0);
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> acceptTCPEx(const rsp::GUID& listenSocketId,
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> acceptTCPEx(const rsp::GUID& listenSocketId,
                                                                      const std::optional<rsp::GUID>& newSocketId = std::nullopt,
                                                                      uint32_t timeoutMilliseconds = 0,
                                                                      bool shareChildSocket = false,
@@ -111,19 +111,19 @@ public:
                                                                         uint32_t timeoutMilliseconds = 0,
                                                                         uint32_t retries = 0,
                                                                         uint32_t retryMilliseconds = 0);
-    RSPCLIENT_API bool socketSend(const rsp::GUID& socketId, const std::string& data);
-    RSPCLIENT_API std::optional<rsp::proto::SocketReply> socketRecvEx(const rsp::GUID& socketId,
+    RSPCLIENT_API bool streamSend(const rsp::GUID& socketId, const std::string& data);
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> streamRecvEx(const rsp::GUID& socketId,
                                                                          uint32_t maxBytes = 4096,
                                                                          uint32_t waitMilliseconds = 0);
-    RSPCLIENT_API std::optional<std::string> socketRecv(const rsp::GUID& socketId,
+    RSPCLIENT_API std::optional<std::string> streamRecv(const rsp::GUID& socketId,
                                                         uint32_t maxBytes = 4096,
                                                         uint32_t waitMilliseconds = 0);
-    RSPCLIENT_API bool socketClose(const rsp::GUID& socketId);
-    RSPCLIENT_API bool tryDequeueSocketReply(rsp::proto::SocketReply& reply);
-    RSPCLIENT_API std::size_t pendingSocketReplyCount() const;
+    RSPCLIENT_API bool streamClose(const rsp::GUID& socketId);
+    RSPCLIENT_API bool tryDequeueStreamReply(rsp::proto::StreamReply& reply);
+    RSPCLIENT_API std::size_t pendingStreamReplyCount() const;
     RSPCLIENT_API bool tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement);
     RSPCLIENT_API std::size_t pendingResourceAdvertisementCount() const;
-    RSPCLIENT_API void registerSocketRoute(const rsp::GUID& socketId, rsp::NodeID nodeId);
+    RSPCLIENT_API void registerStreamRoute(const rsp::GUID& socketId, rsp::NodeID nodeId);
 
 private:
     struct PendingPingState {
@@ -134,7 +134,7 @@ private:
 
     struct PendingConnectState {
         bool completed = false;
-        std::optional<rsp::proto::SocketReply> reply;
+        std::optional<rsp::proto::StreamReply> reply;
     };
 
     struct PendingEndorsementState {
@@ -143,7 +143,7 @@ private:
         std::optional<rsp::proto::EndorsementDone> reply;
     };
 
-    struct NativeSocketBridgeState {
+    struct NativeStreamBridgeState {
         rsp::os::SocketHandle bridgeSocket = 0;
         std::atomic<bool> stopping = false;
         std::atomic<bool> remoteClosed = false;
@@ -167,27 +167,27 @@ private:
     bool shouldHandleLocally(const rsp::proto::RSPMessage& message) const;
     void handlePingReply(const rsp::proto::RSPMessage& message);
     void handleEndorsementDone(const rsp::proto::RSPMessage& message);
-    void handleSocketReply(const rsp::proto::RSPMessage& message);
+    void handleStreamReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
     bool sendIdentity(rsp::NodeID nodeId);
     bool sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
                                             const rsp::proto::Endorsement& requestedMessage);
     std::optional<rsp::proto::EndorsementDone> waitForPendingEndorsement(const std::string& pendingKey);
-    std::shared_ptr<NativeSocketBridgeState> attachNativeSocketBridge(const rsp::GUID& socketId,
+    std::shared_ptr<NativeStreamBridgeState> attachNativeStreamBridge(const rsp::GUID& socketId,
                                                                       rsp::os::SocketHandle bridgeSocket);
-    void startNativeSocketBridgeWorker(const rsp::GUID& socketId,
-                                       const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
-    void runNativeSocketBridge(const rsp::GUID& socketId,
-                               const std::shared_ptr<NativeSocketBridgeState>& bridgeState);
+    void startNativeStreamBridgeWorker(const rsp::GUID& socketId,
+                                       const std::shared_ptr<NativeStreamBridgeState>& bridgeState);
+    void runNativeStreamBridge(const rsp::GUID& socketId,
+                               const std::shared_ptr<NativeStreamBridgeState>& bridgeState);
     void runNativeListenSocketBridge(const std::shared_ptr<NativeListenBridgeState>& bridgeState);
     void stopNativeSocketBridges();
     void stopNativeSocketBridgesForNode(const rsp::NodeID& nodeId);
     void stopNativeListenBridges();
     void stopNativeListenBridgesForNode(const rsp::NodeID& nodeId);
     static rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId);
-    static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
-    static std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId);
-    std::optional<rsp::proto::SocketReply> waitForSocketReply(const rsp::GUID& socketId);
+    static rsp::proto::StreamID toProtoStreamId(const rsp::GUID& socketId);
+    static std::optional<rsp::GUID> fromProtoStreamId(const rsp::proto::StreamID& socketId);
+    std::optional<rsp::proto::StreamReply> waitForStreamReply(const rsp::GUID& socketId);
 
     RSPClientMessage::Ptr messageClient_;
     std::thread receiveThread_;
@@ -197,13 +197,13 @@ private:
     std::map<std::string, PendingEndorsementState> pendingEndorsements_;
     std::map<rsp::GUID, PendingConnectState> pendingConnects_;
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
-    std::deque<rsp::proto::SocketReply> pendingSocketReplies_;
+    std::deque<rsp::proto::StreamReply> pendingStreamReplies_;
     std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
-    std::map<rsp::GUID, std::deque<rsp::proto::SocketReply>> socketReplyQueues_;
-    std::set<rsp::GUID> awaitedSocketReplies_;
-    std::map<rsp::GUID, std::shared_ptr<NativeSocketBridgeState>> nativeSocketBridges_;
+    std::map<rsp::GUID, std::deque<rsp::proto::StreamReply>> streamReplyQueues_;
+    std::set<rsp::GUID> awaitedStreamReplies_;
+    std::map<rsp::GUID, std::shared_ptr<NativeStreamBridgeState>> nativeStreamBridges_;
     std::map<rsp::GUID, std::shared_ptr<NativeListenBridgeState>> nativeListenBridges_;
-    std::map<rsp::GUID, rsp::NodeID> socketRoutes_;
+    std::map<rsp::GUID, rsp::NodeID> streamRoutes_;
     uint32_t nextPingSequence_ = 1;
     bool stopping_ = false;
 };

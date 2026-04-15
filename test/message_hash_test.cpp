@@ -135,13 +135,13 @@ static void test_endorsements_deterministic() {
 }
 
 static void test_socket_send_field_order() {
-    // SocketSend has data=2 and index=3 in non-numeric proto order;
+    // StreamSend has data=2 and index=3 in non-numeric proto order;
     // verify that changing either affects the hash distinctly.
     auto mk = [](const std::string& data, uint64_t index) {
         rsp::proto::RSPMessage msg;
         msg.mutable_source()->set_value(std::string(16, '\x01'));
-        rsp::proto::SocketSend s;
-        s.mutable_socket_number()->set_value(std::string(16, '\x01'));
+        rsp::proto::StreamSend s;
+        s.mutable_stream_id()->set_value(std::string(16, '\x01'));
         s.set_data(data);
         s.set_index(index);
         rsp::packServiceMessage(msg, s);
@@ -163,7 +163,7 @@ static void test_connect_tcp_request() {
         msg.mutable_source()->set_value(std::string(16, '\x01'));
         rsp::proto::ConnectTCPRequest c;
         c.set_host_port(host);
-        c.mutable_socket_number()->set_value(std::string(16, '\x02'));
+        c.mutable_stream_id()->set_value(std::string(16, '\x02'));
         rsp::packServiceMessage(msg, c);
         return msg;
     };

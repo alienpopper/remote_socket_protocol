@@ -5,7 +5,7 @@ package rsp.proto;
 import "messages.proto";
 
 message ConnectSshd {
-    SocketID socket_number = 2;
+    StreamID stream_id = 2;
     optional uint32 timeout_ms = 5;
     optional bool async_data = 8;
     optional bool use_socket = 9;

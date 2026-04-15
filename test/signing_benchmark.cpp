@@ -41,7 +41,7 @@ rsp::proto::RSPMessage makeServiceMessage(const rsp::NodeID& source, const rsp::
 
     rsp::proto::ConnectTCPRequest req;
     req.set_host_port("127.0.0.1:8080");
-    req.mutable_socket_number()->set_value(std::string(16, '\xCD'));
+    req.mutable_stream_id()->set_value(std::string(16, '\xCD'));
     req.set_timeout_ms(5000);
     rsp::packServiceMessage(msg, req);
     return msg;

@@ -23,7 +23,7 @@
 const {Duplex, EventEmitter} = require('stream');
 const messages = require('./messages');
 
-const {SUCCESS, SOCKET_DATA, SOCKET_CLOSED, SOCKET_ERROR, NEW_CONNECTION} = messages.SOCKET_STATUS;
+const {SUCCESS, STREAM_DATA, STREAM_CLOSED, STREAM_ERROR, NEW_CONNECTION} = messages.STREAM_STATUS;
 const TRACE = process.env.RSP_NET_TRACE === '1';
 
 function trace(message) {
@@ -44,23 +44,23 @@ class RSPSocket extends Duplex {
         this._socketId = socketId;
         this._closing = false;
 
-        client.attachSocketHandler(socketId, (reply) => this._onSocketReply(reply));
+        client.attachStreamHandler(socketId, (reply) => this._onStreamReply(reply));
     }
 
     get socketId() {
         return this._socketId;
     }
 
-    _onSocketReply(reply) {
+    _onStreamReply(reply) {
         const status = reply.error || 0;
         trace(`socket=${this._socketId} reply_status=${status}`);
-        if (status === SOCKET_DATA) {
+        if (status === STREAM_DATA) {
             const data = reply.data ? Buffer.from(reply.data, 'hex') : Buffer.alloc(0);
             trace(`socket=${this._socketId} data_len=${data.length}`);
             this.push(data);
-        } else if (status === SOCKET_CLOSED || status === SOCKET_ERROR) {
+        } else if (status === STREAM_CLOSED || status === STREAM_ERROR) {
             this._closing = true;
-            this._client.detachSocketHandler(this._socketId);
+            this._client.detachStreamHandler(this._socketId);
             this.push(null);
         }
         // SUCCESS replies from fire-and-forget sends are silently ignored.
@@ -73,7 +73,7 @@ class RSPSocket extends Duplex {
         }
         const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
         trace(`socket=${this._socketId} write_len=${data.length}`);
-        this._client.socketSend(this._socketId, data)
+        this._client.streamSend(this._socketId, data)
             .then((sent) => {
                 if (!sent) {
                     callback(new Error(`socket send failed for socket ${this._socketId}`));
@@ -85,7 +85,7 @@ class RSPSocket extends Duplex {
     }
 
     _read(_size) {
-        // Data is pushed asynchronously from _onSocketReply; nothing to pull here.
+        // Data is pushed asynchronously from _onStreamReply; nothing to pull here.
     }
 
     _final(callback) {
@@ -101,8 +101,8 @@ class RSPSocket extends Duplex {
     _doClose() {
         if (this._closing) return Promise.resolve();
         this._closing = true;
-        this._client.detachSocketHandler(this._socketId);
-        return this._client.socketClose(this._socketId)
+        this._client.detachStreamHandler(this._socketId);
+        return this._client.streamClose(this._socketId)
             .then((closed) => {
                 if (!closed) {
                     trace(`socket=${this._socketId} close not acknowledged`);
@@ -124,7 +124,7 @@ class RSPServer extends EventEmitter {
         this._listenSocketId = listenSocketId;
         this._closed = false;
 
-        client.attachSocketHandler(listenSocketId, (reply) => this._onListenReply(reply));
+        client.attachStreamHandler(listenSocketId, (reply) => this._onListenReply(reply));
     }
 
     get socketId() {
@@ -133,14 +133,14 @@ class RSPServer extends EventEmitter {
 
     _onListenReply(reply) {
         const status = reply.error || 0;
-        if (status === NEW_CONNECTION && reply.new_socket_id?.value) {
-            // _handleSocketReply already registered the route for new_socket_id.
-            const socket = new RSPSocket(this._client, reply.new_socket_id.value);
+        if (status === NEW_CONNECTION && reply.new_stream_id?.value) {
+            // _handleStreamReply already registered the route for new_socket_id.
+            const socket = new RSPSocket(this._client, reply.new_stream_id.value);
             this.emit('connection', socket);
-        } else if (status === SOCKET_CLOSED || status === SOCKET_ERROR) {
+        } else if (status === STREAM_CLOSED || status === STREAM_ERROR) {
             if (!this._closed) {
                 this._closed = true;
-                this._client.detachSocketHandler(this._listenSocketId);
+                this._client.detachStreamHandler(this._listenSocketId);
                 this.emit('close');
             }
         }
@@ -149,8 +149,8 @@ class RSPServer extends EventEmitter {
     async close() {
         if (this._closed) return;
         this._closed = true;
-        this._client.detachSocketHandler(this._listenSocketId);
-        await this._client.socketClose(this._listenSocketId).catch(() => {});
+        this._client.detachStreamHandler(this._listenSocketId);
+        await this._client.streamClose(this._listenSocketId).catch(() => {});
     }
 }
 
@@ -159,10 +159,10 @@ class RSPServer extends EventEmitter {
 async function createConnection(client, nodeId, hostPort, options = {}) {
     const reply = await client.connectTCPEx(nodeId, hostPort, {asyncData: true, ...options});
     const status = reply?.error ?? SUCCESS;
-    if (status !== SUCCESS || !reply?.socket_id?.value) {
+    if (status !== SUCCESS || !reply?.stream_id?.value) {
         throw Object.assign(new Error(`RSP connect failed (status=${status})`), {status, reply});
     }
-    return new RSPSocket(client, reply.socket_id.value);
+    return new RSPSocket(client, reply.stream_id.value);
 }
 
 // Create an RSPServer listening on hostPort via the given RSP node.
@@ -174,10 +174,10 @@ async function createServer(client, nodeId, hostPort, options = {}) {
         ...options,
     });
     const status = reply?.error ?? SUCCESS;
-    if (status !== SUCCESS || !reply?.socket_id?.value) {
+    if (status !== SUCCESS || !reply?.stream_id?.value) {
         throw Object.assign(new Error(`RSP listen failed (status=${status})`), {status, reply});
     }
-    return new RSPServer(client, nodeId, reply.socket_id.value);
+    return new RSPServer(client, nodeId, reply.stream_id.value);
 }
 
 module.exports = {RSPSocket, RSPServer, createConnection, createServer};

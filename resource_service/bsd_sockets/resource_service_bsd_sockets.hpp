@@ -49,18 +49,18 @@ protected:
                                  const rsp::GUID& socketId,
                                  bool asyncData, bool shareSocket);
 
-    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
-                                                   rsp::proto::SOCKET_STATUS status,
+    rsp::proto::RSPMessage makeStreamReplyMessage(const rsp::proto::RSPMessage& request,
+                                                   rsp::proto::STREAM_STATUS status,
                                                    const std::string& errorMessage = std::string(),
                                                    const rsp::GUID* socketId = nullptr) const;
-    rsp::proto::RSPMessage makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
-                                                   rsp::proto::SOCKET_STATUS status,
+    rsp::proto::RSPMessage makeStreamReplyMessage(const rsp::proto::NodeId& destinationNodeId,
+                                                   rsp::proto::STREAM_STATUS status,
                                                    const std::string& errorMessage = std::string(),
                                                    const rsp::GUID* socketId = nullptr,
                                                    bool traceEnabled = false) const;
 
-    static rsp::proto::SocketID toProtoSocketId(const rsp::GUID& socketId);
-    static std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId);
+    static rsp::proto::StreamID toProtoStreamId(const rsp::GUID& socketId);
+    static std::optional<rsp::GUID> fromProtoStreamId(const rsp::proto::StreamID& socketId);
 
 private:
     struct ManagedSocketState {
@@ -95,9 +95,9 @@ private:
 
     bool handleConnectTCPRequest(const rsp::proto::RSPMessage& message);
     bool handleAcceptTCP(const rsp::proto::RSPMessage& message);
-    bool handleSocketSend(const rsp::proto::RSPMessage& message);
-    bool handleSocketRecv(const rsp::proto::RSPMessage& message);
-    bool handleSocketClose(const rsp::proto::RSPMessage& message);
+    bool handleStreamSend(const rsp::proto::RSPMessage& message);
+    bool handleStreamRecv(const rsp::proto::RSPMessage& message);
+    bool handleStreamClose(const rsp::proto::RSPMessage& message);
     void runAsyncReadLoop(const std::shared_ptr<ManagedSocketState>& socketState);
     void handleAcceptedConnection(const std::shared_ptr<ManagedListenerState>& listenerState,
                                  const rsp::transport::ConnectionHandle& connection);

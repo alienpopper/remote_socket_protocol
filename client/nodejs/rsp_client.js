@@ -15,14 +15,14 @@ const {
     SUCCESS,
     CONNECT_REFUSED,
     CONNECT_TIMEOUT,
-    SOCKET_CLOSED,
-    SOCKET_DATA,
-    SOCKET_ERROR,
+    STREAM_CLOSED,
+    STREAM_DATA,
+    STREAM_ERROR,
     NEW_CONNECTION,
-    ASYNC_SOCKET,
+    ASYNC_STREAM,
     INVALID_FLAGS,
-    SOCKET_IN_USE,
-} = messages.SOCKET_STATUS;
+    STREAM_IN_USE,
+} = messages.STREAM_STATUS;
 
 const {
     ENDORSEMENT_SUCCESS,
@@ -335,10 +335,10 @@ class RSPClient extends EventEmitter {
 
         this._pendingConnects = new Map();     // socketId -> {resolve, reject, timer}
         this._pendingListens = new Map();      // socketId -> {resolve, reject, timer}
-        this._socketRoutes = new Map();        // socketId -> nodeId
-        this._socketReplyQueues = new Map();   // socketId -> SocketReply[]
-        this._awaitedSocketReplies = new Map();// socketId -> {resolve, reject, timer}
-        this._pendingSocketReplies = [];       // global async queue
+        this._streamRoutes = new Map();        // socketId -> nodeId
+        this._streamReplyQueues = new Map();   // socketId -> StreamReply[]
+        this._awaitedStreamReplies = new Map();// socketId -> {resolve, reject, timer}
+        this._pendingStreamReplies = [];       // global async queue
 
         this._pendingEndorsements = new Map(); // nodeIdHex -> {resolve, reject, timer}
         this._endorsementCache = new Map();    // `${nodeId}:${typeHex}` -> endorsement
@@ -346,7 +346,7 @@ class RSPClient extends EventEmitter {
         this._pendingResourceAdvertisements = [];
         this._identityCache = new Map();       // nodeId -> publicKeyPem
 
-        this._socketHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
+        this._streamHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
 
         this._configureAutoReconnect(options.autoReconnect);
     }
@@ -437,8 +437,8 @@ class RSPClient extends EventEmitter {
         this._pendingConnects.clear();
         for (const [, p] of this._pendingListens) { clearTimeout(p.timer); p.reject(closedError); }
         this._pendingListens.clear();
-        for (const [, p] of this._awaitedSocketReplies) { clearTimeout(p.timer); p.reject(closedError); }
-        this._awaitedSocketReplies.clear();
+        for (const [, p] of this._awaitedStreamReplies) { clearTimeout(p.timer); p.reject(closedError); }
+        this._awaitedStreamReplies.clear();
         for (const [, p] of this._pendingEndorsements) { clearTimeout(p.timer); p.reject(closedError); }
         this._pendingEndorsements.clear();
     }
@@ -452,10 +452,10 @@ class RSPClient extends EventEmitter {
 
         this._rejectAllPending(reason);
 
-        this._socketHandlers.clear();
-        this._socketRoutes.clear();
-        this._socketReplyQueues.clear();
-        this._pendingSocketReplies = [];
+        this._streamHandlers.clear();
+        this._streamRoutes.clear();
+        this._streamReplyQueues.clear();
+        this._pendingStreamReplies = [];
 
         if (!socket) {
             return;
@@ -631,8 +631,8 @@ class RSPClient extends EventEmitter {
             this._handlePingReply(msg);
         } else if (hasField(msg, 'service_message')) {
             const typeName = serviceMessageTypeName(msg);
-            if (typeName === 'rsp.proto.SocketReply') {
-                this._handleSocketReply(msg, unpackServiceMessage(msg));
+            if (typeName === 'rsp.proto.StreamReply') {
+                this._handleStreamReply(msg, unpackServiceMessage(msg));
             } else if (typeName === 'rsp.proto.EndorsementDone') {
                 this._handleEndorsementDone(msg);
             } else {
@@ -668,66 +668,66 @@ class RSPClient extends EventEmitter {
         pending.resolve(true);
     }
 
-    _handleSocketReply(msg, socketReply) {
-        const socketIdHex = socketReply.socket_id?.value;
-        const status = socketReply.error || 0;
-        if (socketIdHex) {
-            trace(`socket_reply socket=${socketIdHex} status=${status}`);
+    _handleStreamReply(msg, streamReply) {
+        const streamIdHex = streamReply.stream_id?.value;
+        const status = streamReply.error || 0;
+        if (streamIdHex) {
+            trace(`socket_reply socket=${streamIdHex} status=${status}`);
         }
 
-        if (socketIdHex) {
-            const connectPending = this._pendingConnects.get(socketIdHex);
+        if (streamIdHex) {
+            const connectPending = this._pendingConnects.get(streamIdHex);
             if (connectPending) {
-                const status = socketReply.error || 0;
+                const status = streamReply.error || 0;
                 if (status === SUCCESS || status === CONNECT_REFUSED || status === CONNECT_TIMEOUT ||
-                    status === SOCKET_ERROR || status === SOCKET_IN_USE || status === INVALID_FLAGS) {
+                    status === STREAM_ERROR || status === STREAM_IN_USE || status === INVALID_FLAGS) {
                     clearTimeout(connectPending.timer);
-                    this._pendingConnects.delete(socketIdHex);
-                    connectPending.resolve(socketReply);
+                    this._pendingConnects.delete(streamIdHex);
+                    connectPending.resolve(streamReply);
                     return;
                 }
             }
 
-            const listenPending = this._pendingListens.get(socketIdHex);
+            const listenPending = this._pendingListens.get(streamIdHex);
             if (listenPending) {
-                const status = socketReply.error || 0;
-                if (status === SUCCESS || status === SOCKET_ERROR ||
-                    status === SOCKET_IN_USE || status === INVALID_FLAGS) {
+                const status = streamReply.error || 0;
+                if (status === SUCCESS || status === STREAM_ERROR ||
+                    status === STREAM_IN_USE || status === INVALID_FLAGS) {
                     clearTimeout(listenPending.timer);
-                    this._pendingListens.delete(socketIdHex);
-                    listenPending.resolve(socketReply);
+                    this._pendingListens.delete(streamIdHex);
+                    listenPending.resolve(streamReply);
                     return;
                 }
             }
 
-            if (socketReply.new_socket_id?.value) {
+            if (streamReply.new_stream_id?.value) {
                 const sourceNodeId = this._senderNodeIdFromMessage(msg);
                 if (sourceNodeId) {
-                    this._socketRoutes.set(socketReply.new_socket_id.value, sourceNodeId);
+                    this._streamRoutes.set(streamReply.new_stream_id.value, sourceNodeId);
                 }
             }
 
-            const awaited = this._awaitedSocketReplies.get(socketIdHex);
-            if (awaited && (!awaited.predicate || awaited.predicate(socketReply))) {
-                this._awaitedSocketReplies.delete(socketIdHex);
+            const awaited = this._awaitedStreamReplies.get(streamIdHex);
+            if (awaited && (!awaited.predicate || awaited.predicate(streamReply))) {
+                this._awaitedStreamReplies.delete(streamIdHex);
                 clearTimeout(awaited.timer);
-                awaited.resolve(socketReply);
+                awaited.resolve(streamReply);
                 return;
             }
 
-            const handler = this._socketHandlers.get(socketIdHex);
+            const handler = this._streamHandlers.get(streamIdHex);
             if (handler) {
-                handler(socketReply);
+                handler(streamReply);
                 return;
             }
 
-            const queue = this._socketReplyQueues.get(socketIdHex) || [];
-            queue.push(socketReply);
-            this._socketReplyQueues.set(socketIdHex, queue);
+            const queue = this._streamReplyQueues.get(streamIdHex) || [];
+            queue.push(streamReply);
+            this._streamReplyQueues.set(streamIdHex, queue);
         }
 
-        this._pendingSocketReplies.push(socketReply);
-        this.emit('socket_reply', socketIdHex, socketReply);
+        this._pendingStreamReplies.push(streamReply);
+        this.emit('stream_reply', streamIdHex, streamReply);
     }
 
     _handleEndorsementDone(msg) {
@@ -840,7 +840,7 @@ class RSPClient extends EventEmitter {
         const parsed = JSON.parse(payload.toString('utf8'));
         if (TRACE) {
             const keys = Object.keys(parsed || {}).join(',');
-            if (hasField(parsed, 'socket_reply') || hasField(parsed, 'error') || hasField(parsed, 'endorsement_needed')) {
+            if (hasField(parsed, 'stream_reply') || hasField(parsed, 'error') || hasField(parsed, 'endorsement_needed')) {
                 trace(`recv_raw keys=${keys}`);
             }
         }
@@ -856,24 +856,24 @@ class RSPClient extends EventEmitter {
 
     // --- Socket reply waiting ---
 
-    _waitForSocketReply(socketId, timeoutMs = DEFAULT_TIMEOUT_MS, predicate = null) {
-        const queue = this._socketReplyQueues.get(socketId);
+    _waitForStreamReply(socketId, timeoutMs = DEFAULT_TIMEOUT_MS, predicate = null) {
+        const queue = this._streamReplyQueues.get(socketId);
         if (queue && queue.length > 0) {
             const index = predicate ? queue.findIndex(predicate) : 0;
             if (index >= 0) {
                 const [reply] = queue.splice(index, 1);
-                if (queue.length === 0) this._socketReplyQueues.delete(socketId);
-                const idx = this._pendingSocketReplies.indexOf(reply);
-                if (idx >= 0) this._pendingSocketReplies.splice(idx, 1);
+                if (queue.length === 0) this._streamReplyQueues.delete(socketId);
+                const idx = this._pendingStreamReplies.indexOf(reply);
+                if (idx >= 0) this._pendingStreamReplies.splice(idx, 1);
                 return Promise.resolve(reply);
             }
         }
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
-                this._awaitedSocketReplies.delete(socketId);
+                this._awaitedStreamReplies.delete(socketId);
                 reject(new Error(`socket reply timed out for socket ${socketId}`));
             }, timeoutMs);
-            this._awaitedSocketReplies.set(socketId, {resolve, reject, timer, predicate});
+            this._awaitedStreamReplies.set(socketId, {resolve, reject, timer, predicate});
         });
     }
 
@@ -916,7 +916,7 @@ class RSPClient extends EventEmitter {
         const socketId = randomUuidB64();
         const connectFields = {
             host_port: hostPort,
-            socket_number: {value: socketId},
+            stream_id: {value: socketId},
         };
         if (useSocket) connectFields.use_socket = true;
         if (timeoutMs > 0) connectFields.timeout_ms = timeoutMs;
@@ -944,9 +944,9 @@ class RSPClient extends EventEmitter {
         });
 
         if (reply && (reply.error || 0) === SUCCESS) {
-            const confirmedId = reply.socket_id?.value || socketId;
-            if (!reply.socket_id?.value) reply.socket_id = {value: socketId};
-            this._socketRoutes.set(confirmedId, nodeId);
+            const confirmedId = reply.stream_id?.value || socketId;
+            if (!reply.stream_id?.value) reply.socket_id = {value: socketId};
+            this._streamRoutes.set(confirmedId, nodeId);
         }
         return reply;
     }
@@ -954,8 +954,8 @@ class RSPClient extends EventEmitter {
     async connectTCP(nodeId, hostPort, options = {}) {
         let reply;
         try { reply = await this.connectTCPEx(nodeId, hostPort, options); } catch { return null; }
-        if (!reply || (reply.error || 0) !== SUCCESS || !reply.socket_id?.value) return null;
-        return reply.socket_id.value;
+        if (!reply || (reply.error || 0) !== SUCCESS || !reply.stream_id?.value) return null;
+        return reply.stream_id.value;
     }
 
     // --- Listen ---
@@ -969,7 +969,7 @@ class RSPClient extends EventEmitter {
         const socketId = randomUuidB64();
         const listenFields = {
             host_port: hostPort,
-            socket_number: {value: socketId},
+            stream_id: {value: socketId},
         };
         if (timeoutMs > 0) listenFields.timeout_ms = timeoutMs;
         if (asyncAccept) listenFields.async_accept = true;
@@ -997,9 +997,9 @@ class RSPClient extends EventEmitter {
         });
 
         if (reply && (reply.error || 0) === SUCCESS) {
-            const confirmedId = reply.socket_id?.value || socketId;
-            if (!reply.socket_id?.value) reply.socket_id = {value: socketId};
-            this._socketRoutes.set(confirmedId, nodeId);
+            const confirmedId = reply.stream_id?.value || socketId;
+            if (!reply.stream_id?.value) reply.socket_id = {value: socketId};
+            this._streamRoutes.set(confirmedId, nodeId);
         }
         return reply;
     }
@@ -1007,8 +1007,8 @@ class RSPClient extends EventEmitter {
     async listenTCP(nodeId, hostPort, options = {}) {
         let reply;
         try { reply = await this.listenTCPEx(nodeId, hostPort, options); } catch { return null; }
-        if (!reply || (reply.error || 0) !== SUCCESS || !reply.socket_id?.value) return null;
-        return reply.socket_id.value;
+        if (!reply || (reply.error || 0) !== SUCCESS || !reply.stream_id?.value) return null;
+        return reply.stream_id.value;
     }
 
     // --- Accept ---
@@ -1019,11 +1019,11 @@ class RSPClient extends EventEmitter {
             shareChildSocket = false, childUseSocket = false, childAsyncData = false,
         } = options;
 
-        const nodeId = this._socketRoutes.get(listenSocketId);
+        const nodeId = this._streamRoutes.get(listenSocketId);
         if (!nodeId) return null;
 
-        const acceptFields = {listen_socket_number: {value: listenSocketId}};
-        if (newSocketId) acceptFields.new_socket_number = {value: normalizeGuid(newSocketId)};
+        const acceptFields = {listen_stream_id: {value: listenSocketId}};
+        if (newSocketId) acceptFields.new_stream_id = {value: normalizeGuid(newSocketId)};
         if (timeoutMs > 0) acceptFields.timeout_ms = timeoutMs;
         if (shareChildSocket) acceptFields.share_child_socket = true;
         if (childUseSocket) acceptFields.child_use_socket = true;
@@ -1037,11 +1037,11 @@ class RSPClient extends EventEmitter {
 
         const waitMs = timeoutMs > 0 ? timeoutMs + 1000 : DEFAULT_TIMEOUT_MS;
         let reply;
-        try { reply = await this._waitForSocketReply(listenSocketId, waitMs); } catch { return null; }
+        try { reply = await this._waitForStreamReply(listenSocketId, waitMs); } catch { return null; }
 
         if (reply && (reply.error === SUCCESS || reply.error === NEW_CONNECTION) &&
-            reply.new_socket_id?.value) {
-            this._socketRoutes.set(reply.new_socket_id.value, nodeId);
+            reply.new_stream_id?.value) {
+            this._streamRoutes.set(reply.new_stream_id.value, nodeId);
         }
         return reply || null;
     }
@@ -1050,14 +1050,14 @@ class RSPClient extends EventEmitter {
         let reply;
         try { reply = await this.acceptTCPEx(listenSocketId, options); } catch { return null; }
         if (!reply || (reply.error !== SUCCESS && reply.error !== NEW_CONNECTION) ||
-            !reply.new_socket_id?.value) return null;
-        return reply.new_socket_id.value;
+            !reply.new_stream_id?.value) return null;
+        return reply.new_stream_id.value;
     }
 
     // --- Socket send / recv / close ---
 
-    async socketSend(socketId, data) {
-        const nodeId = this._socketRoutes.get(socketId);
+    async streamSend(socketId, data) {
+        const nodeId = this._streamRoutes.get(socketId);
         if (!nodeId) {
             trace(`socketSend route-miss socket=${socketId}`);
             return false;
@@ -1067,7 +1067,7 @@ class RSPClient extends EventEmitter {
         trace(`socketSend socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            service_message: packServiceMessage('SocketSend', {socket_number: {value: socketId}, data: dataB64}),
+            service_message: packServiceMessage('StreamSend', {stream_id: {value: socketId}, data: dataB64}),
         };
         try {
             await this._sendSignedMessage(request);
@@ -1081,12 +1081,12 @@ class RSPClient extends EventEmitter {
             const remainingMs = deadline - Date.now();
             let reply;
             try {
-                reply = await this._waitForSocketReply(
+                reply = await this._waitForStreamReply(
                     socketId,
                     remainingMs,
                     (candidate) => {
                         const status = candidate?.error || 0;
-                        return status !== SOCKET_DATA && status !== NEW_CONNECTION && status !== ASYNC_SOCKET;
+                        return status !== STREAM_DATA && status !== NEW_CONNECTION && status !== ASYNC_STREAM;
                     }
                 );
             } catch (error) {
@@ -1100,7 +1100,7 @@ class RSPClient extends EventEmitter {
                 return true;
             }
 
-            if (status === SOCKET_CLOSED || status === SOCKET_ERROR || status === INVALID_FLAGS) {
+            if (status === STREAM_CLOSED || status === STREAM_ERROR || status === INVALID_FLAGS) {
                 return false;
             }
         }
@@ -1109,31 +1109,31 @@ class RSPClient extends EventEmitter {
         return false;
     }
 
-    async socketRecvEx(socketId, maxBytes = 4096, waitMs = 0) {
-        const nodeId = this._socketRoutes.get(socketId);
+    async streamRecvEx(socketId, maxBytes = 4096, waitMs = 0) {
+        const nodeId = this._streamRoutes.get(socketId);
         if (!nodeId) return null;
 
-        const recvFields = {socket_number: {value: socketId}, max_bytes: maxBytes};
+        const recvFields = {stream_id: {value: socketId}, max_bytes: maxBytes};
         if (waitMs > 0) recvFields.wait_ms = waitMs;
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            service_message: packServiceMessage('SocketRecv', recvFields),
+            service_message: packServiceMessage('StreamRecv', recvFields),
         };
 
         try { await this._sendSignedMessage(request); } catch { return null; }
 
         const replyTimeoutMs = waitMs > 0 ? waitMs + 1000 : DEFAULT_TIMEOUT_MS;
-        try { return await this._waitForSocketReply(socketId, replyTimeoutMs); } catch { return null; }
+        try { return await this._waitForStreamReply(socketId, replyTimeoutMs); } catch { return null; }
     }
 
-    async socketRecv(socketId, maxBytes = 4096, waitMs = 0) {
-        const reply = await this.socketRecvEx(socketId, maxBytes, waitMs);
-        if (!reply || (reply.error !== SOCKET_DATA && reply.error !== SUCCESS)) return null;
+    async streamRecv(socketId, maxBytes = 4096, waitMs = 0) {
+        const reply = await this.streamRecvEx(socketId, maxBytes, waitMs);
+        if (!reply || (reply.error !== STREAM_DATA && reply.error !== SUCCESS)) return null;
         return reply.data ? Buffer.from(reply.data, 'base64') : Buffer.alloc(0);
     }
 
-    async socketClose(socketId) {
-        const nodeId = this._socketRoutes.get(socketId);
+    async streamClose(socketId) {
+        const nodeId = this._streamRoutes.get(socketId);
         if (!nodeId) {
             trace(`socketClose route-miss socket=${socketId}`);
             return true;
@@ -1141,13 +1141,13 @@ class RSPClient extends EventEmitter {
 
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            service_message: packServiceMessage('SocketClose', {socket_number: {value: socketId}}),
+            service_message: packServiceMessage('StreamClose', {stream_id: {value: socketId}}),
         };
         try {
             await this._sendSignedMessage(request);
         } catch (error) {
             trace(`socketClose send-error socket=${socketId} error=${error.message}`);
-            this._socketRoutes.delete(socketId);
+            this._streamRoutes.delete(socketId);
             return true;
         }
 
@@ -1156,37 +1156,37 @@ class RSPClient extends EventEmitter {
             const remaining = deadline - Date.now();
             let reply;
             try {
-                reply = await this._waitForSocketReply(
+                reply = await this._waitForStreamReply(
                     socketId,
                     remaining,
                     (candidate) => {
                         const status = candidate?.error || 0;
-                        return status !== SOCKET_DATA && status !== NEW_CONNECTION && status !== ASYNC_SOCKET;
+                        return status !== STREAM_DATA && status !== NEW_CONNECTION && status !== ASYNC_STREAM;
                     }
                 );
             } catch {
                 break;
             }
             if (!reply) break;
-            if (reply.error === SUCCESS || reply.error === SOCKET_CLOSED) {
-                this._socketRoutes.delete(socketId);
+            if (reply.error === SUCCESS || reply.error === STREAM_CLOSED) {
+                this._streamRoutes.delete(socketId);
                 return true;
             }
             return false;
         }
 
-        this._socketRoutes.delete(socketId);
+        this._streamRoutes.delete(socketId);
         return false;
     }
 
     // --- Non-blocking dequeue (mirrors C++ tryDequeue* API) ---
 
-    tryDequeueSocketReply() {
-        return this._pendingSocketReplies.length > 0 ? this._pendingSocketReplies.shift() : null;
+    tryDequeueStreamReply() {
+        return this._pendingStreamReplies.length > 0 ? this._pendingStreamReplies.shift() : null;
     }
 
-    pendingSocketReplyCount() {
-        return this._pendingSocketReplies.length;
+    pendingStreamReplyCount() {
+        return this._pendingStreamReplies.length;
     }
 
     tryDequeueResourceAdvertisement() {
@@ -1200,50 +1200,50 @@ class RSPClient extends EventEmitter {
 
     // --- Route registration ---
 
-    registerSocketRoute(socketId, nodeId) {
-        this._socketRoutes.set(normalizeGuid(socketId), nodeId);
+    registerStreamRoute(socketId, nodeId) {
+        this._streamRoutes.set(normalizeGuid(socketId), nodeId);
     }
 
     // Attach a direct reply handler for a socket, bypassing the queue system.
     // Used by RSPSocket / RSPServer in rsp_net.js for streaming operation.
     // Drains any already-queued replies so no data is lost between connect and attach.
-    attachSocketHandler(socketId, handler) {
-        this._socketHandlers.set(socketId, handler);
-        const queue = this._socketReplyQueues.get(socketId);
+    attachStreamHandler(socketId, handler) {
+        this._streamHandlers.set(socketId, handler);
+        const queue = this._streamReplyQueues.get(socketId);
         if (queue && queue.length > 0) {
-            this._socketReplyQueues.delete(socketId);
+            this._streamReplyQueues.delete(socketId);
             for (const reply of queue) {
-                const idx = this._pendingSocketReplies.indexOf(reply);
-                if (idx >= 0) this._pendingSocketReplies.splice(idx, 1);
+                const idx = this._pendingStreamReplies.indexOf(reply);
+                if (idx >= 0) this._pendingStreamReplies.splice(idx, 1);
             }
             process.nextTick(() => { for (const reply of queue) handler(reply); });
         }
     }
 
-    detachSocketHandler(socketId) {
-        this._socketHandlers.delete(socketId);
+    detachStreamHandler(socketId) {
+        this._streamHandlers.delete(socketId);
     }
 
     // Fire-and-forget socket send: queues data without waiting for a SUCCESS reply.
     // Use this from streaming code (RSPSocket._write) to avoid blocking on acknowledgement.
-    async sendSocketData(socketId, data) {
-        const nodeId = this._socketRoutes.get(socketId);
+    async sendStreamData(socketId, data) {
+        const nodeId = this._streamRoutes.get(socketId);
         if (!nodeId) {
-            trace(`sendSocketData route-miss socket=${socketId}`);
+            trace(`sendStreamData route-miss socket=${socketId}`);
             return false;
         }
         const dataB64 = Buffer.isBuffer(data) ? data.toString('base64') : Buffer.from(data).toString('base64');
-        trace(`sendSocketData socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
+        trace(`sendStreamData socket=${socketId} node=${nodeId} bytes=${Buffer.from(dataB64, 'base64').length}`);
         const request = {
             destination: {value: encodeNodeIdForField(nodeId)},
-            socket_send: {socket_number: {value: socketId}, data: dataB64},
+            stream_send: {stream_id: {value: socketId}, data: dataB64},
         };
         try {
             await this._sendSignedMessage(request);
-            trace(`sendSocketData sent socket=${socketId}`);
+            trace(`sendStreamData sent socket=${socketId}`);
             return true;
         } catch (error) {
-            trace(`sendSocketData error socket=${socketId} error=${error.message}`);
+            trace(`sendStreamData error socket=${socketId} error=${error.message}`);
             return false;
         }
     }

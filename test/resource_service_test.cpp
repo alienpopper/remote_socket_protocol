@@ -155,7 +155,7 @@ std::string findAvailableEndpoint(uint16_t /*firstPort*/, uint16_t /*lastPort*/)
     return std::string("127.0.0.1:") + std::to_string(port);
 }
 
-std::optional<rsp::GUID> fromProtoSocketId(const rsp::proto::SocketID& socketId) {
+std::optional<rsp::GUID> fromProtoStreamId(const rsp::proto::StreamID& socketId) {
     if (socketId.value().size() != 16) {
         return std::nullopt;
     }
@@ -505,18 +505,18 @@ void testClientExchangesTcpDataThroughResourceService() {
     const auto socketId = client->connectTCP(resourceServiceNodeId, socketServer.endpoint());
     require(socketId.has_value(), "client should receive a socket id from the resource service");
 
-    const auto receivedGreeting = client->socketRecv(*socketId, static_cast<uint32_t>(greeting.size()));
+    const auto receivedGreeting = client->streamRecv(*socketId, static_cast<uint32_t>(greeting.size()));
     require(receivedGreeting.has_value(), "client should receive greeting bytes from the remote TCP server");
     require(*receivedGreeting == greeting, "client should receive the expected greeting bytes");
 
-    require(client->socketSend(*socketId, clientPayload),
+    require(client->streamSend(*socketId, clientPayload),
             "client should send payload bytes to the remote TCP server through the resource service");
 
-    const auto receivedResponse = client->socketRecv(*socketId, static_cast<uint32_t>(serverResponse.size()));
+    const auto receivedResponse = client->streamRecv(*socketId, static_cast<uint32_t>(serverResponse.size()));
     require(receivedResponse.has_value(), "client should receive response bytes from the remote TCP server");
     require(*receivedResponse == serverResponse, "client should receive the expected response bytes");
 
-    require(client->socketClose(*socketId), "client should close the remote TCP socket through the resource service");
+    require(client->streamClose(*socketId), "client should close the remote TCP socket through the resource service");
     socketServer.wait();
 
     require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -669,22 +669,22 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         require(socketId.has_value(),
             "client should connect through the discovered TCP connect resource without test-supplied node ids");
 
-        const auto receivedGreeting = client->socketRecv(*socketId, static_cast<uint32_t>(greeting.size()));
+        const auto receivedGreeting = client->streamRecv(*socketId, static_cast<uint32_t>(greeting.size()));
         require(receivedGreeting.has_value(),
             "client should receive greeting bytes from the TCP server through the discovered resource service");
         require(*receivedGreeting == greeting,
             "client should receive the expected greeting bytes through the discovered resource service");
 
-        require(client->socketSend(*socketId, clientPayload),
+        require(client->streamSend(*socketId, clientPayload),
             "client should send payload bytes through the discovered resource service");
 
-        const auto receivedResponse = client->socketRecv(*socketId, static_cast<uint32_t>(serverResponse.size()));
+        const auto receivedResponse = client->streamRecv(*socketId, static_cast<uint32_t>(serverResponse.size()));
         require(receivedResponse.has_value(),
             "client should receive response bytes from the TCP server through the discovered resource service");
         require(*receivedResponse == serverResponse,
             "client should receive the expected response bytes through the discovered resource service");
 
-        require(client->socketClose(*socketId),
+        require(client->streamClose(*socketId),
             "client should close the discovered TCP connection through the resource service");
         socketServer.wait();
 
@@ -801,24 +801,24 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
     const auto socketId = client->connectTCP(resourceServiceNodeId, socketServer.endpoint(), 0, 0, 0, true);
     require(socketId.has_value(), "client should receive a socket id for async socket connection");
 
-    bool sawAsyncSocketReply = false;
+    bool sawAsyncStreamReply = false;
     std::string receivedStream;
-    const auto recvReply = client->socketRecvEx(*socketId, 32);
+    const auto recvReply = client->streamRecvEx(*socketId, 32);
     require(recvReply.has_value(), "client should receive a socket reply when socket_recv is used on an async socket");
-    if (recvReply->error() == rsp::proto::ASYNC_SOCKET) {
-        sawAsyncSocketReply = true;
-    } else if (recvReply->error() == rsp::proto::SOCKET_DATA && recvReply->has_data()) {
+    if (recvReply->error() == rsp::proto::ASYNC_STREAM) {
+        sawAsyncStreamReply = true;
+    } else if (recvReply->error() == rsp::proto::STREAM_DATA && recvReply->has_data()) {
         receivedStream += recvReply->data();
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while ((!sawAsyncSocketReply || receivedStream.size() < expectedStream.size()) &&
+    while ((!sawAsyncStreamReply || receivedStream.size() < expectedStream.size()) &&
            std::chrono::steady_clock::now() < deadline) {
-        rsp::proto::SocketReply reply;
-        if (client->tryDequeueSocketReply(reply)) {
-            if (reply.error() == rsp::proto::ASYNC_SOCKET) {
-                sawAsyncSocketReply = true;
-            } else if (reply.error() == rsp::proto::SOCKET_DATA && reply.has_data()) {
+        rsp::proto::StreamReply reply;
+        if (client->tryDequeueStreamReply(reply)) {
+            if (reply.error() == rsp::proto::ASYNC_STREAM) {
+                sawAsyncStreamReply = true;
+            } else if (reply.error() == rsp::proto::STREAM_DATA && reply.has_data()) {
                 receivedStream += reply.data();
             }
             continue;
@@ -827,12 +827,12 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    require(sawAsyncSocketReply,
-            "socket_recv on an async socket should eventually reply with ASYNC_SOCKET");
+    require(sawAsyncStreamReply,
+            "socket_recv on an async socket should eventually reply with ASYNC_STREAM");
     require(receivedStream == expectedStream,
         "client should receive the expected periodic async socket payload stream in order");
 
-    require(client->socketClose(*socketId), "client should close the async socket through the resource service");
+    require(client->streamClose(*socketId), "client should close the async socket through the resource service");
     socketServer.wait();
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its async test connection");
@@ -931,19 +931,19 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         const auto childSocketId = client->acceptTCP(*listenSocketId, std::nullopt, 5000);
         require(childSocketId.has_value(), "client should accept an inbound TCP connection through the resource service");
 
-        const auto receivedGreeting = client->socketRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
+        const auto receivedGreeting = client->streamRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
         require(receivedGreeting.has_value(), "accepted socket should receive greeting bytes from the peer");
         require(*receivedGreeting == greeting, "accepted socket should receive the expected greeting bytes");
 
-        require(client->socketSend(*childSocketId, clientPayload),
+        require(client->streamSend(*childSocketId, clientPayload),
             "accepted socket should send payload bytes to the peer");
 
-        const auto receivedResponse = client->socketRecv(*childSocketId, static_cast<uint32_t>(response.size()));
+        const auto receivedResponse = client->streamRecv(*childSocketId, static_cast<uint32_t>(response.size()));
         require(receivedResponse.has_value(), "accepted socket should receive response bytes from the peer");
         require(*receivedResponse == response, "accepted socket should receive the expected response bytes");
 
-        require(client->socketClose(*childSocketId), "client should close the accepted child socket");
-        require(client->socketClose(*listenSocketId), "client should close the listening socket");
+        require(client->streamClose(*childSocketId), "client should close the accepted child socket");
+        require(client->streamClose(*listenSocketId), "client should close the listening socket");
         peer.wait();
 
         require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -983,8 +983,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto acceptReply = client->acceptTCPEx(*listenSocketId, std::nullopt, 10);
         require(acceptReply.has_value(), "accept on an async listener should receive a reply");
-        require(acceptReply->error() == rsp::proto::ASYNC_SOCKET,
-            "accept on an async listener should return ASYNC_SOCKET");
+        require(acceptReply->error() == rsp::proto::ASYNC_STREAM,
+            "accept on an async listener should return ASYNC_STREAM");
 
         TestSocketClientPeer peer;
         const std::string greeting = "async-accept-greeting";
@@ -992,19 +992,19 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         const std::string response = "async-accept-response";
         peer.start(listenerEndpoint, greeting, clientPayload, response);
 
-        rsp::proto::SocketReply newConnectionReply;
+        rsp::proto::StreamReply newConnectionReply;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         bool receivedNewConnection = false;
         while (std::chrono::steady_clock::now() < deadline) {
-        if (!client->tryDequeueSocketReply(newConnectionReply)) {
+        if (!client->tryDequeueStreamReply(newConnectionReply)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 
         if (newConnectionReply.error() == rsp::proto::NEW_CONNECTION &&
-            newConnectionReply.has_socket_id() &&
-            newConnectionReply.has_new_socket_id()) {
-            const auto replyListenSocketId = fromProtoSocketId(newConnectionReply.socket_id());
+            newConnectionReply.has_stream_id() &&
+            newConnectionReply.has_new_stream_id()) {
+            const auto replyListenSocketId = fromProtoStreamId(newConnectionReply.stream_id());
             if (replyListenSocketId.has_value() && *replyListenSocketId == *listenSocketId) {
             receivedNewConnection = true;
             break;
@@ -1013,22 +1013,22 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         }
 
         require(receivedNewConnection, "client should receive a NEW_CONNECTION reply for async accept");
-        const auto childSocketId = fromProtoSocketId(newConnectionReply.new_socket_id());
+        const auto childSocketId = fromProtoStreamId(newConnectionReply.new_stream_id());
         require(childSocketId.has_value(), "NEW_CONNECTION reply should include a child socket id");
 
-        const auto receivedGreeting = client->socketRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
+        const auto receivedGreeting = client->streamRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
         require(receivedGreeting.has_value(), "async accepted socket should receive greeting bytes from the peer");
         require(*receivedGreeting == greeting, "async accepted socket should receive the expected greeting bytes");
 
-        require(client->socketSend(*childSocketId, clientPayload),
+        require(client->streamSend(*childSocketId, clientPayload),
             "async accepted socket should send payload bytes to the peer");
 
-        const auto receivedResponse = client->socketRecv(*childSocketId, static_cast<uint32_t>(response.size()));
+        const auto receivedResponse = client->streamRecv(*childSocketId, static_cast<uint32_t>(response.size()));
         require(receivedResponse.has_value(), "async accepted socket should receive response bytes from the peer");
         require(*receivedResponse == response, "async accepted socket should receive the expected response bytes");
 
-        require(client->socketClose(*childSocketId), "client should close the async accepted child socket");
-        require(client->socketClose(*listenSocketId), "client should close the async listening socket");
+        require(client->streamClose(*childSocketId), "client should close the async accepted child socket");
+        require(client->streamClose(*listenSocketId), "client should close the async listening socket");
         peer.wait();
 
         require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -1087,7 +1087,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(*receivedResponse == response, "accepted native socket should receive the expected response bytes");
 
         rsp::os::closeSocket(*localSocket);
-        require(client->socketClose(*listenSocketId), "client should close the listening socket after native accept bridge test");
+        require(client->streamClose(*listenSocketId), "client should close the listening socket after native accept bridge test");
         peer.wait();
 
         require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -1133,24 +1133,24 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto exclusiveSocketId = ownerClient->connectTCP(resourceServiceNodeId, exclusiveSocketServer.endpoint());
         require(exclusiveSocketId.has_value(), "owner client should receive an exclusive socket id");
-        otherClient->registerSocketRoute(*exclusiveSocketId, resourceServiceNodeId);
+        otherClient->registerStreamRoute(*exclusiveSocketId, resourceServiceNodeId);
 
-        const auto mismatchReply = otherClient->socketRecvEx(*exclusiveSocketId, 64);
+        const auto mismatchReply = otherClient->streamRecvEx(*exclusiveSocketId, 64);
         require(mismatchReply.has_value(), "second client should receive a reply for exclusive socket recv");
         require(mismatchReply->error() == rsp::proto::NODEID_MISMATCH,
             "exclusive socket recv from a different node id should return NODEID_MISMATCH");
 
-        const auto ownerGreeting = ownerClient->socketRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveGreeting.size()));
+        const auto ownerGreeting = ownerClient->streamRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveGreeting.size()));
         require(ownerGreeting.has_value(), "owner client should still be able to receive from its exclusive socket");
         require(*ownerGreeting == exclusiveGreeting,
             "owner client should receive the expected exclusive socket greeting");
-        require(ownerClient->socketSend(*exclusiveSocketId, exclusivePayload),
+        require(ownerClient->streamSend(*exclusiveSocketId, exclusivePayload),
             "owner client should still be able to send on its exclusive socket");
-        const auto ownerResponse = ownerClient->socketRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveResponse.size()));
+        const auto ownerResponse = ownerClient->streamRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveResponse.size()));
         require(ownerResponse.has_value(), "owner client should still be able to receive the exclusive socket response");
         require(*ownerResponse == exclusiveResponse,
             "owner client should receive the expected exclusive socket response");
-        require(ownerClient->socketClose(*exclusiveSocketId), "owner client should close its exclusive socket");
+        require(ownerClient->streamClose(*exclusiveSocketId), "owner client should close its exclusive socket");
         exclusiveSocketServer.wait();
 
         TestSocketServer sharedSocketServer;
@@ -1161,23 +1161,23 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto sharedSocketId = ownerClient->connectTCP(resourceServiceNodeId, sharedSocketServer.endpoint(), 0, 0, 0, false, true);
         require(sharedSocketId.has_value(), "owner client should receive a shared socket id");
-        otherClient->registerSocketRoute(*sharedSocketId, resourceServiceNodeId);
+        otherClient->registerStreamRoute(*sharedSocketId, resourceServiceNodeId);
 
-        const auto sharedGreetingReply = otherClient->socketRecvEx(*sharedSocketId, 64);
+        const auto sharedGreetingReply = otherClient->streamRecvEx(*sharedSocketId, 64);
         require(sharedGreetingReply.has_value(), "second client should receive a reply for shared socket recv");
-        require(sharedGreetingReply->error() == rsp::proto::SOCKET_DATA,
+        require(sharedGreetingReply->error() == rsp::proto::STREAM_DATA,
             "shared socket recv from a different node id should succeed");
         require(sharedGreetingReply->has_data() && sharedGreetingReply->data() == sharedGreeting,
             "second client should receive the shared socket greeting");
-        require(otherClient->socketSend(*sharedSocketId, sharedPayload),
+        require(otherClient->streamSend(*sharedSocketId, sharedPayload),
             "second client should be able to send on a shared socket");
-        const auto sharedResponseReply = otherClient->socketRecvEx(*sharedSocketId, 64);
+        const auto sharedResponseReply = otherClient->streamRecvEx(*sharedSocketId, 64);
         require(sharedResponseReply.has_value(), "second client should receive the shared socket response");
-        require(sharedResponseReply->error() == rsp::proto::SOCKET_DATA,
+        require(sharedResponseReply->error() == rsp::proto::STREAM_DATA,
             "shared socket response should succeed for a different node id");
         require(sharedResponseReply->has_data() && sharedResponseReply->data() == sharedResponse,
             "second client should receive the shared socket response");
-        require(otherClient->socketClose(*sharedSocketId), "second client should be able to close a shared socket");
+        require(otherClient->streamClose(*sharedSocketId), "second client should be able to close a shared socket");
         sharedSocketServer.wait();
 
         require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -1283,10 +1283,10 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             require(sharedAsyncReply->error() == rsp::proto::INVALID_FLAGS,
                 "share_socket combined with async_data should return INVALID_FLAGS");
 
-            const auto sharedUseSocketReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
-            require(sharedUseSocketReply.has_value(),
+            const auto sharedUseStreamReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
+            require(sharedUseStreamReply.has_value(),
                 "share_socket combined with use_socket should receive a reply");
-            require(sharedUseSocketReply->error() == rsp::proto::INVALID_FLAGS,
+            require(sharedUseStreamReply->error() == rsp::proto::INVALID_FLAGS,
                 "share_socket combined with use_socket should return INVALID_FLAGS");
 
             require(resourceService->removeConnection(resourceServiceConnectionId),

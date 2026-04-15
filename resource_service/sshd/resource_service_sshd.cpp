@@ -143,7 +143,7 @@ bool SshdResourceService::handleNodeSpecificMessage(const rsp::proto::RSPMessage
     if (rsp::hasServiceMessage<rsp::proto::ConnectTCPRequest>(message) ||
         rsp::hasServiceMessage<rsp::proto::ListenTCPRequest>(message) ||
         rsp::hasServiceMessage<rsp::proto::AcceptTCP>(message)) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR,
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR,
                                            "UNIMPLEMENTED: rsp_sshd does not support this request"));
     }
 
@@ -157,13 +157,13 @@ bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& messag
         return false;
     }
 
-    if (!request.has_socket_number()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
+    if (!request.has_stream_id()) {
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
     }
 
-    const auto socketId = fromProtoSocketId(request.socket_number());
+    const auto socketId = fromProtoStreamId(request.stream_id());
     if (!socketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
     }
 
     const bool asyncData = request.has_async_data() && request.async_data();
@@ -171,13 +171,13 @@ bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& messag
 
     if (shareSocket) {
         if (asyncData) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "share_socket cannot be combined with async_data",
                                                &*socketId));
         }
         if (request.has_use_socket() && request.use_socket()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "share_socket cannot be combined with use_socket",
                                                &*socketId));
@@ -188,7 +188,7 @@ bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& messag
     int fds[2];
     if (::socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
         log("socketpair failed: " + std::string(strerror(errno)));
-        return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED,
+        return send(makeStreamReplyMessage(message, rsp::proto::CONNECT_REFUSED,
                                            "socketpair failed", &*socketId));
     }
 
@@ -197,7 +197,7 @@ bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& messag
         log("fork failed: " + std::string(strerror(errno)));
         ::close(fds[0]);
         ::close(fds[1]);
-        return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED,
+        return send(makeStreamReplyMessage(message, rsp::proto::CONNECT_REFUSED,
                                            "fork failed", &*socketId));
     }
 

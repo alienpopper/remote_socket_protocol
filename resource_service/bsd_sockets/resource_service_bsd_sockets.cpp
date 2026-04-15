@@ -102,16 +102,16 @@ bool BsdSocketsResourceService::handleNodeSpecificMessage(const rsp::proto::RSPM
         return handleAcceptTCP(message);
     }
 
-    if (rsp::hasServiceMessage<rsp::proto::SocketSend>(message)) {
-        return handleSocketSend(message);
+    if (rsp::hasServiceMessage<rsp::proto::StreamSend>(message)) {
+        return handleStreamSend(message);
     }
 
-    if (rsp::hasServiceMessage<rsp::proto::SocketRecv>(message)) {
-        return handleSocketRecv(message);
+    if (rsp::hasServiceMessage<rsp::proto::StreamRecv>(message)) {
+        return handleStreamRecv(message);
     }
 
-    if (rsp::hasServiceMessage<rsp::proto::SocketClose>(message)) {
-        return handleSocketClose(message);
+    if (rsp::hasServiceMessage<rsp::proto::StreamClose>(message)) {
+        return handleStreamClose(message);
     }
 
     return false;
@@ -147,29 +147,29 @@ bool BsdSocketsResourceService::handleConnectTCPRequest(const rsp::proto::RSPMes
         return false;
     }
 
-    if (!request.has_socket_number()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
+    if (!request.has_stream_id()) {
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
     }
 
-    const auto socketId = fromProtoSocketId(request.socket_number());
+    const auto socketId = fromProtoStreamId(request.stream_id());
     if (!socketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
     }
 
     if (request.host_port().empty()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "host_port is required", &*socketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "host_port is required", &*socketId));
     }
 
     if (request.has_share_socket() && request.share_socket()) {
         if (request.has_async_data() && request.async_data()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "share_socket cannot be combined with async_data",
                                                &*socketId));
         }
 
         if (request.has_use_socket() && request.use_socket()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "share_socket cannot be combined with use_socket",
                                                &*socketId));
@@ -182,7 +182,7 @@ bool BsdSocketsResourceService::handleConnectTCPRequest(const rsp::proto::RSPMes
     auto tcpResult = createTCPConnection(request.host_port(), totalAttempts, retryDelayMilliseconds);
 
     if (tcpResult.connection == nullptr) {
-        return send(makeSocketReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
     }
 
     return registerConnectedSocket(message, std::move(tcpResult), *socketId,
@@ -214,7 +214,7 @@ bool BsdSocketsResourceService::registerConnectedSocket(
         managedSockets_.emplace(socketId, socketState);
     }
 
-    const bool sent = send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &socketId));
+    const bool sent = send(makeStreamReplyMessage(message, rsp::proto::SUCCESS, std::string(), &socketId));
     if (!sent) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
         managedSockets_.erase(socketId);
@@ -242,37 +242,37 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
         return false;
     }
 
-    if (!request.has_socket_number()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
+    if (!request.has_stream_id()) {
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "socket_number is required"));
     }
 
-    const auto socketId = fromProtoSocketId(request.socket_number());
+    const auto socketId = fromProtoStreamId(request.stream_id());
     if (!socketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid socket_number"));
     }
 
     if (request.host_port().empty()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "host_port is required", &*socketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "host_port is required", &*socketId));
     }
 
     const bool asyncAccept = request.has_async_accept() && request.async_accept();
     if (!asyncAccept) {
         if (request.has_share_child_sockets() && request.share_child_sockets()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "share_child_sockets requires async_accept",
                                                &*socketId));
         }
 
         if (request.has_children_use_socket() && request.children_use_socket()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "children_use_socket requires async_accept",
                                                &*socketId));
         }
 
         if (request.has_children_async_data() && request.children_async_data()) {
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::INVALID_FLAGS,
                                                "children_async_data requires async_accept",
                                                &*socketId));
@@ -298,13 +298,13 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
         std::lock_guard<std::mutex> lock(socketsMutex_);
         if (managedSockets_.find(*socketId) != managedSockets_.end() ||
             managedListeningSockets_.find(*socketId) != managedListeningSockets_.end()) {
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_IN_USE, "socket id already exists", &*socketId));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_IN_USE, "socket id already exists", &*socketId));
         }
     }
 
     if (!tcpTransport->listen(request.host_port())) {
         tcpTransport->stop();
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "tcp listen failed", &*socketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "tcp listen failed", &*socketId));
     }
 
     {
@@ -312,7 +312,7 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
         managedListeningSockets_.emplace(*socketId, listenerState);
     }
 
-    const bool sent = send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
+    const bool sent = send(makeStreamReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
     if (!sent) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
         managedListeningSockets_.erase(*socketId);
@@ -329,9 +329,9 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
         return false;
     }
 
-    const auto listenSocketId = fromProtoSocketId(request.listen_socket_number());
+    const auto listenSocketId = fromProtoStreamId(request.listen_stream_id());
     if (!listenSocketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid listen socket id"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "invalid listen socket id"));
     }
 
     std::shared_ptr<ManagedListenerState> listenerState;
@@ -339,22 +339,22 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
         std::lock_guard<std::mutex> lock(socketsMutex_);
         const auto iterator = managedListeningSockets_.find(*listenSocketId);
         if (iterator == managedListeningSockets_.end()) {
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "listen socket not found", &*listenSocketId));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "listen socket not found", &*listenSocketId));
         }
 
         listenerState = iterator->second;
     }
 
     if (!validateListeningSocketAccess(message, listenerState)) {
-        return send(makeSocketReplyMessage(message,
+        return send(makeStreamReplyMessage(message,
                                            rsp::proto::NODEID_MISMATCH,
                                            "listen socket is owned by a different node id",
                                            &*listenSocketId));
     }
 
     if (listenerState->asyncAccept) {
-        return send(makeSocketReplyMessage(message,
-                                           rsp::proto::ASYNC_SOCKET,
+        return send(makeStreamReplyMessage(message,
+                                           rsp::proto::ASYNC_STREAM,
                                            "accept_tcp is ignored when async_accept is enabled",
                                            &*listenSocketId));
     }
@@ -378,26 +378,26 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
                                                                                         !listenerState->acceptedConnections.empty();
                                                                              });
             if (!ready) {
-                return send(makeSocketReplyMessage(message, rsp::proto::TIMED_OUT, "accept timed out", &*listenSocketId));
+                return send(makeStreamReplyMessage(message, rsp::proto::TIMED_OUT, "accept timed out", &*listenSocketId));
             }
         }
 
         if (listenerState->stopping.load() || listenerState->acceptedConnections.empty()) {
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "listen socket closed", &*listenSocketId));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "listen socket closed", &*listenSocketId));
         }
 
         acceptedConnection = listenerState->acceptedConnections.front();
         listenerState->acceptedConnections.pop_front();
     }
 
-    const auto childSocketId = request.has_new_socket_number()
-                                   ? fromProtoSocketId(request.new_socket_number())
+    const auto childSocketId = request.has_new_stream_id()
+                                   ? fromProtoStreamId(request.new_stream_id())
                                    : std::optional<rsp::GUID>(rsp::GUID());
     if (!childSocketId.has_value()) {
         if (acceptedConnection != nullptr) {
             acceptedConnection->close();
         }
-        return send(makeSocketReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid new_socket_number", &*listenSocketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::INVALID_FLAGS, "invalid new_socket_number", &*listenSocketId));
     }
 
     auto socketState = std::make_shared<ManagedSocketState>();
@@ -413,17 +413,17 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
             if (socketState->connection != nullptr) {
                 socketState->connection->close();
             }
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_IN_USE, "socket id already exists", &*listenSocketId));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_IN_USE, "socket id already exists", &*listenSocketId));
         }
 
         managedSockets_.emplace(*childSocketId, socketState);
     }
 
-    auto reply = makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*listenSocketId);
+    auto reply = makeStreamReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*listenSocketId);
     // Unpack, add child socket id, repack
-    rsp::proto::SocketReply socketReply;
+    rsp::proto::StreamReply socketReply;
     rsp::unpackServiceMessage(reply, &socketReply);
-    *socketReply.mutable_new_socket_id() = toProtoSocketId(*childSocketId);
+    *socketReply.mutable_new_stream_id() = toProtoStreamId(*childSocketId);
     rsp::packServiceMessage(reply, socketReply);
     const bool sent = send(reply);
     if (!sent) {
@@ -442,20 +442,20 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
     return true;
 }
 
-bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& message) {
+bool BsdSocketsResourceService::handleStreamSend(const rsp::proto::RSPMessage& message) {
     const bool trace = rsp::messageTraceEnabled(message);
 
-    rsp::proto::SocketSend sendMsg;
+    rsp::proto::StreamSend sendMsg;
     if (!rsp::unpackServiceMessage(message, &sendMsg)) {
         return false;
     }
 
-    const auto socketId = fromProtoSocketId(sendMsg.socket_number());
+    const auto socketId = fromProtoStreamId(sendMsg.stream_id());
     if (!socketId.has_value()) {
         if (trace) {
             std::cerr << "[resource_service] socket_send invalid socket id" << std::endl;
         }
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "invalid socket id"));
     }
 
     std::shared_ptr<ManagedSocketState> socketState;
@@ -466,7 +466,7 @@ bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& m
             if (trace) {
                 std::cerr << "[resource_service] socket_send socket not found id=" << socketId->toString() << std::endl;
             }
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "socket not found"));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "socket not found"));
         }
 
         socketState = iterator->second;
@@ -476,7 +476,7 @@ bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& m
         if (trace || (socketState != nullptr && socketState->traceEnabled)) {
             std::cerr << "[resource_service] socket_send node mismatch id=" << socketId->toString() << std::endl;
         }
-        return send(makeSocketReplyMessage(message, rsp::proto::NODEID_MISMATCH,
+        return send(makeStreamReplyMessage(message, rsp::proto::NODEID_MISMATCH,
                                            "socket is owned by a different node id"));
     }
 
@@ -494,24 +494,24 @@ bool BsdSocketsResourceService::handleSocketSend(const rsp::proto::RSPMessage& m
         if (effectiveTrace) {
             std::cerr << "[resource_service] socket_send sendAll failed id=" << socketId->toString() << std::endl;
         }
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "socket send failed"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "socket send failed"));
     }
 
     if (effectiveTrace) {
         std::cerr << "[resource_service] socket_send success id=" << socketId->toString() << std::endl;
     }
-    return send(makeSocketReplyMessage(message, rsp::proto::SUCCESS));
+    return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS));
 }
 
-bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& message) {
-    rsp::proto::SocketRecv recvMsg;
+bool BsdSocketsResourceService::handleStreamRecv(const rsp::proto::RSPMessage& message) {
+    rsp::proto::StreamRecv recvMsg;
     if (!rsp::unpackServiceMessage(message, &recvMsg)) {
         return false;
     }
 
-    const auto socketId = fromProtoSocketId(recvMsg.socket_number());
+    const auto socketId = fromProtoStreamId(recvMsg.stream_id());
     if (!socketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "invalid socket id"));
     }
 
     std::shared_ptr<ManagedSocketState> socketState;
@@ -519,19 +519,19 @@ bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& m
         std::lock_guard<std::mutex> lock(socketsMutex_);
         const auto iterator = managedSockets_.find(*socketId);
         if (iterator == managedSockets_.end()) {
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "socket not found"));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "socket not found"));
         }
 
         socketState = iterator->second;
     }
 
     if (!validateSocketAccess(message, socketState)) {
-        return send(makeSocketReplyMessage(message, rsp::proto::NODEID_MISMATCH,
+        return send(makeStreamReplyMessage(message, rsp::proto::NODEID_MISMATCH,
                                            "socket is owned by a different node id"));
     }
 
     if (socketState != nullptr && socketState->asyncData) {
-        return send(makeSocketReplyMessage(message, rsp::proto::ASYNC_SOCKET,
+        return send(makeStreamReplyMessage(message, rsp::proto::ASYNC_STREAM,
                                            "socket_recv is ignored when async_data is enabled"));
     }
 
@@ -541,30 +541,30 @@ bool BsdSocketsResourceService::handleSocketRecv(const rsp::proto::RSPMessage& m
     rsp::Buffer buffer(maxBytes);
     const int bytesRead = socketState == nullptr || socketState->connection == nullptr ? -1 : socketState->connection->recv(buffer);
     if (bytesRead < 0) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "socket recv failed"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "socket recv failed"));
     }
 
     if (bytesRead == 0) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "socket closed"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "socket closed"));
     }
 
-    auto reply = makeSocketReplyMessage(message, rsp::proto::SOCKET_DATA);
-    rsp::proto::SocketReply sr;
+    auto reply = makeStreamReplyMessage(message, rsp::proto::STREAM_DATA);
+    rsp::proto::StreamReply sr;
     rsp::unpackServiceMessage(reply, &sr);
     sr.set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
     rsp::packServiceMessage(reply, sr);
     return send(reply);
 }
 
-bool BsdSocketsResourceService::handleSocketClose(const rsp::proto::RSPMessage& message) {
-    rsp::proto::SocketClose closeMsg;
+bool BsdSocketsResourceService::handleStreamClose(const rsp::proto::RSPMessage& message) {
+    rsp::proto::StreamClose closeMsg;
     if (!rsp::unpackServiceMessage(message, &closeMsg)) {
         return false;
     }
 
-    const auto socketId = fromProtoSocketId(closeMsg.socket_number());
+    const auto socketId = fromProtoStreamId(closeMsg.stream_id());
     if (!socketId.has_value()) {
-        return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_ERROR, "invalid socket id"));
+        return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "invalid socket id"));
     }
 
     std::shared_ptr<ManagedListenerState> removedListener;
@@ -581,14 +581,14 @@ bool BsdSocketsResourceService::handleSocketClose(const rsp::proto::RSPMessage& 
         if (!validateListeningSocketAccess(message, removedListener)) {
             std::lock_guard<std::mutex> lock(socketsMutex_);
             managedListeningSockets_.emplace(*socketId, removedListener);
-            return send(makeSocketReplyMessage(message,
+            return send(makeStreamReplyMessage(message,
                                                rsp::proto::NODEID_MISMATCH,
                                                "listen socket is owned by a different node id",
                                                &*socketId));
         }
 
         stopManagedListener(removedListener);
-        return send(makeSocketReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
+        return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
     }
 
     std::shared_ptr<ManagedSocketState> removedSocket;
@@ -596,7 +596,7 @@ bool BsdSocketsResourceService::handleSocketClose(const rsp::proto::RSPMessage& 
         std::lock_guard<std::mutex> lock(socketsMutex_);
         const auto iterator = managedSockets_.find(*socketId);
         if (iterator == managedSockets_.end()) {
-            return send(makeSocketReplyMessage(message, rsp::proto::SOCKET_CLOSED, "socket not found"));
+            return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "socket not found"));
         }
 
         removedSocket = iterator->second;
@@ -606,13 +606,13 @@ bool BsdSocketsResourceService::handleSocketClose(const rsp::proto::RSPMessage& 
     if (!validateSocketAccess(message, removedSocket)) {
         std::lock_guard<std::mutex> lock(socketsMutex_);
         managedSockets_.emplace(*socketId, removedSocket);
-        return send(makeSocketReplyMessage(message, rsp::proto::NODEID_MISMATCH,
+        return send(makeStreamReplyMessage(message, rsp::proto::NODEID_MISMATCH,
                                            "socket is owned by a different node id"));
     }
 
     stopManagedSocket(removedSocket);
 
-    return send(makeSocketReplyMessage(message, rsp::proto::SUCCESS));
+    return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS));
 }
 
 void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<ManagedListenerState>& listenerState,
@@ -647,15 +647,15 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
         managedSockets_.emplace(socketState->socketId, socketState);
     }
 
-    auto reply = makeSocketReplyMessage(listenerState->requesterNodeId,
+    auto reply = makeStreamReplyMessage(listenerState->requesterNodeId,
                                         rsp::proto::NEW_CONNECTION,
                                         std::string(),
                                         &listenerState->socketId,
                                         listenerState->traceEnabled);
     {
-        rsp::proto::SocketReply sr;
+        rsp::proto::StreamReply sr;
         rsp::unpackServiceMessage(reply, &sr);
-        *sr.mutable_new_socket_id() = toProtoSocketId(socketState->socketId);
+        *sr.mutable_new_stream_id() = toProtoStreamId(socketState->socketId);
         rsp::packServiceMessage(reply, sr);
     }
     if (!send(reply)) {
@@ -690,13 +690,13 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
         }
         if (bytesRead < 0) {
             if (!socketState->stopping.load()) {
-                const auto reply = makeSocketReplyMessage(socketState->requesterNodeId,
-                                                          rsp::proto::SOCKET_ERROR,
+                const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
+                                                          rsp::proto::STREAM_ERROR,
                                                           "socket recv failed",
                                                           &socketState->socketId,
                                                           socketState->traceEnabled);
                 if (socketState->traceEnabled) {
-                    std::cerr << "[resource_service] async_read_loop send SOCKET_ERROR id="
+                    std::cerr << "[resource_service] async_read_loop send STREAM_ERROR id="
                               << socketState->socketId.toString() << std::endl;
                 }
                 send(reply);
@@ -706,13 +706,13 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
 
         if (bytesRead == 0) {
             if (!socketState->stopping.load()) {
-                const auto reply = makeSocketReplyMessage(socketState->requesterNodeId,
-                                                          rsp::proto::SOCKET_CLOSED,
+                const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
+                                                          rsp::proto::STREAM_CLOSED,
                                                           "socket closed",
                                                           &socketState->socketId,
                                                           socketState->traceEnabled);
                 if (socketState->traceEnabled) {
-                    std::cerr << "[resource_service] async_read_loop send SOCKET_CLOSED id="
+                    std::cerr << "[resource_service] async_read_loop send STREAM_CLOSED id="
                               << socketState->socketId.toString() << std::endl;
                 }
                 send(reply);
@@ -720,19 +720,19 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
             break;
         }
 
-        auto reply = makeSocketReplyMessage(socketState->requesterNodeId,
-                                            rsp::proto::SOCKET_DATA,
+        auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
+                                            rsp::proto::STREAM_DATA,
                                             std::string(),
                                             &socketState->socketId,
                                             socketState->traceEnabled);
         {
-            rsp::proto::SocketReply sr;
+            rsp::proto::StreamReply sr;
             rsp::unpackServiceMessage(reply, &sr);
             sr.set_data(readBufferToString(buffer, static_cast<uint32_t>(bytesRead)));
             rsp::packServiceMessage(reply, sr);
         }
         if (socketState->traceEnabled) {
-            std::cerr << "[resource_service] async_read_loop send SOCKET_DATA id="
+            std::cerr << "[resource_service] async_read_loop send STREAM_DATA id="
                       << socketState->socketId.toString() << " bytes=" << bytesRead << std::endl;
         }
         if (!send(reply)) {
@@ -773,8 +773,8 @@ bool BsdSocketsResourceService::validateListeningSocketAccess(const rsp::proto::
     return toProtoNodeId(*senderNodeId).value() == listenerState->requesterNodeId.value();
 }
 
-rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const rsp::proto::RSPMessage& request,
-                                                                         rsp::proto::SOCKET_STATUS status,
+rsp::proto::RSPMessage BsdSocketsResourceService::makeStreamReplyMessage(const rsp::proto::RSPMessage& request,
+                                                                         rsp::proto::STREAM_STATUS status,
                                                                          const std::string& errorMessage,
                                                                          const rsp::GUID* socketId) const {
     const rsp::GUID* effectiveSocketId = socketId;
@@ -783,22 +783,22 @@ rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const r
         rsp::proto::ConnectTCPRequest connectReq;
         rsp::proto::ListenTCPRequest listenReq;
         rsp::proto::AcceptTCP acceptReq;
-        rsp::proto::SocketSend sendReq;
-        rsp::proto::SocketRecv recvReq;
-        rsp::proto::SocketClose closeReq;
+        rsp::proto::StreamSend sendReq;
+        rsp::proto::StreamRecv recvReq;
+        rsp::proto::StreamClose closeReq;
 
-        if (rsp::unpackServiceMessage(request, &connectReq) && connectReq.has_socket_number()) {
-            derivedSocketId = fromProtoSocketId(connectReq.socket_number());
-        } else if (rsp::unpackServiceMessage(request, &listenReq) && listenReq.has_socket_number()) {
-            derivedSocketId = fromProtoSocketId(listenReq.socket_number());
+        if (rsp::unpackServiceMessage(request, &connectReq) && connectReq.has_stream_id()) {
+            derivedSocketId = fromProtoStreamId(connectReq.stream_id());
+        } else if (rsp::unpackServiceMessage(request, &listenReq) && listenReq.has_stream_id()) {
+            derivedSocketId = fromProtoStreamId(listenReq.stream_id());
         } else if (rsp::unpackServiceMessage(request, &acceptReq)) {
-            derivedSocketId = fromProtoSocketId(acceptReq.listen_socket_number());
+            derivedSocketId = fromProtoStreamId(acceptReq.listen_stream_id());
         } else if (rsp::unpackServiceMessage(request, &sendReq)) {
-            derivedSocketId = fromProtoSocketId(sendReq.socket_number());
+            derivedSocketId = fromProtoStreamId(sendReq.stream_id());
         } else if (rsp::unpackServiceMessage(request, &recvReq)) {
-            derivedSocketId = fromProtoSocketId(recvReq.socket_number());
+            derivedSocketId = fromProtoStreamId(recvReq.stream_id());
         } else if (rsp::unpackServiceMessage(request, &closeReq)) {
-            derivedSocketId = fromProtoSocketId(closeReq.socket_number());
+            derivedSocketId = fromProtoStreamId(closeReq.stream_id());
         }
 
         if (derivedSocketId.has_value()) {
@@ -811,13 +811,13 @@ rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const r
         return rsp::proto::RSPMessage();
     }
 
-    auto reply = makeSocketReplyMessage(toProtoNodeId(*senderNodeId), status, errorMessage, effectiveSocketId);
+    auto reply = makeStreamReplyMessage(toProtoNodeId(*senderNodeId), status, errorMessage, effectiveSocketId);
     rsp::copyMessageTrace(request, reply);
     return reply;
 }
 
-rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const rsp::proto::NodeId& destinationNodeId,
-                                                                         rsp::proto::SOCKET_STATUS status,
+rsp::proto::RSPMessage BsdSocketsResourceService::makeStreamReplyMessage(const rsp::proto::NodeId& destinationNodeId,
+                                                                         rsp::proto::STREAM_STATUS status,
                                                                          const std::string& errorMessage,
                                                                          const rsp::GUID* socketId,
                                                                          bool traceEnabled) const {
@@ -827,16 +827,16 @@ rsp::proto::RSPMessage BsdSocketsResourceService::makeSocketReplyMessage(const r
         reply.mutable_trace()->set_value(true);
     }
 
-    rsp::proto::SocketReply socketReply;
+    rsp::proto::StreamReply socketReply;
     if (socketId != nullptr) {
-        *socketReply.mutable_socket_id() = toProtoSocketId(*socketId);
+        *socketReply.mutable_stream_id() = toProtoStreamId(*socketId);
     }
     socketReply.set_error(status);
     if (!errorMessage.empty()) {
         socketReply.set_message(errorMessage);
     }
     if (socketId != nullptr) {
-        *socketReply.mutable_new_socket_id() = toProtoSocketId(*socketId);
+        *socketReply.mutable_new_stream_id() = toProtoStreamId(*socketId);
     }
     rsp::packServiceMessage(reply, socketReply);
 
@@ -902,8 +902,8 @@ void BsdSocketsResourceService::closeAllManagedSockets() {
     }
 }
 
-rsp::proto::SocketID BsdSocketsResourceService::toProtoSocketId(const rsp::GUID& socketId) {
-    rsp::proto::SocketID protoSocketId;
+rsp::proto::StreamID BsdSocketsResourceService::toProtoStreamId(const rsp::GUID& socketId) {
+    rsp::proto::StreamID protoSocketId;
     std::string value(16, '\0');
     const uint64_t high = socketId.high();
     const uint64_t low = socketId.low();
@@ -913,7 +913,7 @@ rsp::proto::SocketID BsdSocketsResourceService::toProtoSocketId(const rsp::GUID&
     return protoSocketId;
 }
 
-std::optional<rsp::GUID> BsdSocketsResourceService::fromProtoSocketId(const rsp::proto::SocketID& socketId) {
+std::optional<rsp::GUID> BsdSocketsResourceService::fromProtoStreamId(const rsp::proto::StreamID& socketId) {
     if (socketId.value().size() != 16) {
         return std::nullopt;
     }
