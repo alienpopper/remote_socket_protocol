@@ -686,7 +686,7 @@ $(SSHD_DESC): $(PROTOBUF_GENERATED_SOURCE)
 
 $(SSHD_DESC_HEADER): $(SSHD_DESC)
 
-$(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/build/gen/messages.pb.o: $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(PROTOBUF_GENERATED_SOURCE) -o $(OBJ_DIR)/build/gen/messages.pb.o
 
@@ -726,9 +726,13 @@ $(OBJ_DIR)/common/encoding/json/json_encoding.o: common/message_queue/mq.hpp $(P
 
 $(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
+$(OBJ_DIR)/resource_service/resource_service.o: $(PROTOBUF_GENERATED_HEADER)
+
 $(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o: $(BSD_SOCKETS_GENERATED_HEADER) $(BSD_SOCKETS_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o: $(SSHD_GENERATED_HEADER) $(SSHD_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/client/cpp_full/rsp_client.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
