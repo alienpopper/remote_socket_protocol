@@ -14,6 +14,7 @@ else
 		OS_COMMON_SOURCE := os/osx/os_fileops.cpp
 		OS_SOCKET_SOURCE := os/osx/os_socket.cpp
 		OS_SOURCE := os/osx/os_random.cpp
+		OS_SYSTEM_LIBS += -framework CoreFoundation
 	else
 		OS_COMMON_SOURCE := os/linux/os_fileops.cpp
 		OS_SOCKET_SOURCE := os/linux/os_socket.cpp
