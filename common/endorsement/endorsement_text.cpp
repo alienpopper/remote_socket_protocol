@@ -307,6 +307,16 @@ struct Parser {
         return pos + len <= text.size() && text.compare(pos, len, prefix, len) == 0;
     }
 
+    bool startsWithCI(const char* prefix, std::size_t len) const {
+        if (pos + len > text.size()) return false;
+        for (std::size_t i = 0; i < len; ++i) {
+            if (std::toupper(static_cast<unsigned char>(text[pos + i])) !=
+                std::toupper(static_cast<unsigned char>(prefix[i])))
+                return false;
+        }
+        return true;
+    }
+
     uint8_t hexValue(char c) const {
         if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
         if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
@@ -475,12 +485,12 @@ struct Parser {
             expect(')');
             return tree;
         }
-        if (startsWith("TRUE", 4)) {
+        if (startsWithCI("TRUE", 4)) {
             pos += 4;
             tree.mutable_true_value();
             return tree;
         }
-        if (startsWith("FALSE", 5)) {
+        if (startsWithCI("FALSE", 5)) {
             pos += 5;
             tree.mutable_false_value();
             return tree;
@@ -571,12 +581,12 @@ struct Parser {
             expect(')');
             return tree;
         }
-        if (startsWith("TRUE", 4)) {
+        if (startsWithCI("TRUE", 4)) {
             pos += 4;
             tree.mutable_true_value();
             return tree;
         }
-        if (startsWith("FALSE", 5)) {
+        if (startsWithCI("FALSE", 5)) {
             pos += 5;
             tree.mutable_false_value();
             return tree;
@@ -674,12 +684,12 @@ struct Parser {
             expect(')');
             return tree;
         }
-        if (startsWith("TRUE", 4)) {
+        if (startsWithCI("TRUE", 4)) {
             pos += 4;
             tree.mutable_true_value();
             return tree;
         }
-        if (startsWith("FALSE", 5)) {
+        if (startsWithCI("FALSE", 5)) {
             pos += 5;
             tree.mutable_false_value();
             return tree;

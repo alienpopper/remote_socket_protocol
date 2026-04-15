@@ -23,6 +23,7 @@ public:
 
     ResourceManager();
     explicit ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports);
+    ResourceManager(rsp::KeyPair keyPair, std::vector<rsp::transport::ListeningTransportHandle> clientTransports);
     ~ResourceManager() override;
 
     int run() const override;

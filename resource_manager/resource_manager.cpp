@@ -170,6 +170,46 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
     registerTransportCallbacks();
 }
 
+ResourceManager::ResourceManager(rsp::KeyPair keyPair,
+                                 std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
+    : RSPNode(std::move(keyPair)),
+      incomingMessages_(std::make_shared<IncomingMessageQueue>(*this)),
+      authzQueue_(nullptr),
+      signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
+          [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
+          [this](rsp::proto::RSPMessage message, std::string reason) {
+              handleSignatureFailure(std::move(message), reason);
+          },
+          [this](const rsp::NodeID& nodeId) { return verificationKeyForNodeId(nodeId); })),
+      handshakeQueue_(std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeServer>(
+          signatureCheckQueue_,
+          this->keyPair().duplicate(),
+          [this](const rsp::encoding::EncodingHandle& encoding) { handleHandshakeSuccess(encoding); },
+          [](const rsp::transport::ConnectionHandle& connection) {
+              if (connection != nullptr) {
+                  connection->close();
+              }
+          })),
+      authnQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthN>(
+          this->keyPair().duplicate(),
+          [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNSuccess(encoding); },
+          [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNFailure(encoding); },
+          [this](const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity) {
+              cacheAuthenticatedIdentity(peerNodeId, identity);
+          })),
+      clientTransports_(std::move(clientTransports)) {
+    incomingMessages_->setWorkerCount(1);
+    incomingMessages_->start();
+        rebuildAuthorizationQueue();
+    signatureCheckQueue_->setWorkerCount(1);
+    signatureCheckQueue_->start();
+    handshakeQueue_->setWorkerCount(4);
+    handshakeQueue_->start();
+    authnQueue_->setWorkerCount(4);
+    authnQueue_->start();
+    registerTransportCallbacks();
+}
+
 ResourceManager::~ResourceManager() {
     if (incomingMessages_ != nullptr) {
         incomingMessages_->stop();
