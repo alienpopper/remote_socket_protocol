@@ -162,6 +162,17 @@ message ServiceSchema {
     string proto_file_name = 1;
     bytes proto_file_descriptor_set = 2; // Self-contained FileDescriptorSet
     repeated string accepted_type_urls = 3;
+    bytes schema_hash = 4;              // SHA-256 of proto_file_descriptor_set
+    uint32 schema_version = 5;          // Monotonically increasing version per proto_file_name
+}
+
+message SchemaRequest {
+    optional string proto_file_name = 1;  // request schemas for a specific proto
+    optional bytes schema_hash = 2;       // request a specific version by hash
+}
+
+message SchemaReply {
+    repeated ServiceSchema schemas = 1;
 }
 
 message ResourceAdvertisement{
@@ -410,6 +421,8 @@ message RSPMessage {
       ResourceAdvertisement resource_advertisement = 16;
       ResourceQuery resource_query = 17;
       EndorsementNeeded endorsement_needed = 23;
+      SchemaRequest schema_request = 25;
+      SchemaReply schema_reply = 26;
   }
 
   // Service-specific payload — opaque to RM at compile time.

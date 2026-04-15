@@ -299,9 +299,44 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
             return true;
         }
 
+        schemaRegistry_.ingest(message.resource_advertisement());
+
         std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
         resourceAdvertisements_[*nodeId] = message.resource_advertisement();
         return true;
+    }
+
+    if (message.has_schema_request()) {
+        const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+        if (!requesterNodeId.has_value()) {
+            return false;
+        }
+
+        const auto& request = message.schema_request();
+
+        rsp::proto::RSPMessage reply;
+        *reply.mutable_destination() = toProtoNodeId(*requesterNodeId);
+
+        auto* schemaReply = reply.mutable_schema_reply();
+        if (!request.proto_file_name().empty()) {
+            auto schema = schemaRegistry_.findByProtoFile(request.proto_file_name());
+            if (schema.has_value()) {
+                *schemaReply->add_schemas() = std::move(*schema);
+            }
+        } else if (!request.schema_hash().empty()) {
+            auto schema = schemaRegistry_.findByHash(request.schema_hash());
+            if (schema.has_value()) {
+                *schemaReply->add_schemas() = std::move(*schema);
+            }
+        } else {
+            // No filter: return all known schemas.
+            for (auto& s : schemaRegistry_.allSchemas()) {
+                *schemaReply->add_schemas() = std::move(s);
+            }
+        }
+
+        const auto queue = outputQueue();
+        return queue != nullptr && queue->push(std::move(reply));
     }
 
     if (message.has_resource_query()) {
@@ -412,6 +447,10 @@ std::optional<rsp::proto::ResourceAdvertisement> ResourceManager::resourceAdvert
     }
 
     return iterator->second;
+}
+
+size_t ResourceManager::schemaCount() const {
+    return schemaRegistry_.size();
 }
 
 bool ResourceManager::sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const {

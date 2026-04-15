@@ -3,8 +3,10 @@
 #include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
 #include "common/transport/transport_tcp.hpp"
+#include "resource_service/schema_helpers.hpp"
 
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
+#include "resource_service/bsd_sockets/bsd_sockets_desc.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -85,6 +87,20 @@ rsp::proto::ResourceAdvertisement BsdSocketsResourceService::buildResourceAdvert
     }
     tcpListen->mutable_allowed_range()->set_start_port(0);
     tcpListen->mutable_allowed_range()->set_end_port(0);
+
+    *advertisement.add_schemas() = buildServiceSchema(
+        "bsd_sockets.proto",
+        rsp::schema::kBsdSocketsDescriptor,
+        rsp::schema::kBsdSocketsDescriptorSize,
+        1,
+        {
+            "type.rsp/rsp.proto.ConnectTCPRequest",
+            "type.rsp/rsp.proto.ListenTCPRequest",
+            "type.rsp/rsp.proto.AcceptTCP",
+            "type.rsp/rsp.proto.StreamSend",
+            "type.rsp/rsp.proto.StreamRecv",
+            "type.rsp/rsp.proto.StreamClose",
+        });
 
     return advertisement;
 }

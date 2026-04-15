@@ -48,6 +48,11 @@ SSHD_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb
 SSHD_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb.h
 SSHD_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/sshd/sshd.pb.o
 PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT)
+EMBED_DESCRIPTOR_SCRIPT := scripts/embed_descriptor.py
+BSD_SOCKETS_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.desc
+BSD_SOCKETS_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets_desc.hpp
+SSHD_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.desc
+SSHD_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd_desc.hpp
 
 TOP_BIN_DIR := bin
 ESP_RM_TARGET := $(TOP_BIN_DIR)/esp_rm
@@ -657,6 +662,11 @@ test: test-base-types test-keypair test-endorsement test-message-hash test-messa
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto
+	@mkdir -p $(dir $(BSD_SOCKETS_DESC))
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(BSD_SOCKETS_DESC) --include_imports resource_service/bsd_sockets/bsd_sockets.proto
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(SSHD_DESC) --include_imports resource_service/sshd/sshd.proto
+	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(BSD_SOCKETS_DESC) $(BSD_SOCKETS_DESC_HEADER) --name kBsdSocketsDescriptor
+	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(SSHD_DESC) $(SSHD_DESC_HEADER) --name kSshdDescriptor
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
@@ -664,9 +674,17 @@ $(BSD_SOCKETS_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
 
 $(BSD_SOCKETS_GENERATED_HEADER): $(BSD_SOCKETS_GENERATED_SOURCE)
 
+$(BSD_SOCKETS_DESC): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_DESC_HEADER): $(BSD_SOCKETS_DESC)
+
 $(SSHD_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
 
 $(SSHD_GENERATED_HEADER): $(SSHD_GENERATED_SOURCE)
+
+$(SSHD_DESC): $(PROTOBUF_GENERATED_SOURCE)
+
+$(SSHD_DESC_HEADER): $(SSHD_DESC)
 
 $(PROTOBUF_GENERATED_OBJECT): $(PROTOBUF_GENERATED_SOURCE) $(PROTOBUF_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
@@ -707,6 +725,10 @@ $(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue/mq
 $(OBJ_DIR)/common/encoding/json/json_encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o: $(BSD_SOCKETS_GENERATED_HEADER) $(BSD_SOCKETS_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
+$(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o: $(SSHD_GENERATED_HEADER) $(SSHD_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 

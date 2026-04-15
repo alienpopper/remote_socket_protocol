@@ -150,6 +150,11 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
+    if (message.has_schema_reply()) {
+        handleSchemaReply(message);
+        return true;
+    }
+
     return false;
 }
 
@@ -935,6 +940,43 @@ bool RSPClient::tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisemen
 std::size_t RSPClient::pendingResourceAdvertisementCount() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
     return pendingResourceAdvertisements_.size();
+}
+
+bool RSPClient::querySchemas(rsp::NodeID nodeId,
+                             const std::string& protoFileName,
+                             const std::string& schemaHash) {
+    rsp::proto::RSPMessage request;
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    auto* schemaRequest = request.mutable_schema_request();
+    if (!protoFileName.empty()) {
+        schemaRequest->set_proto_file_name(protoFileName);
+    }
+    if (!schemaHash.empty()) {
+        schemaRequest->set_schema_hash(schemaHash);
+    }
+    return messageClient_->send(request);
+}
+
+bool RSPClient::tryDequeueSchemaReply(rsp::proto::SchemaReply& reply) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (pendingSchemaReplies_.empty()) {
+        return false;
+    }
+
+    reply = pendingSchemaReplies_.front();
+    pendingSchemaReplies_.pop_front();
+    return true;
+}
+
+std::size_t RSPClient::pendingSchemaReplyCount() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return pendingSchemaReplies_.size();
+}
+
+void RSPClient::handleSchemaReply(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    pendingSchemaReplies_.push_back(message.schema_reply());
+    stateChanged_.notify_all();
 }
 
 void RSPClient::registerStreamRoute(const rsp::GUID& socketId, rsp::NodeID nodeId) {

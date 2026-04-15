@@ -123,6 +123,11 @@ public:
     RSPCLIENT_API std::size_t pendingStreamReplyCount() const;
     RSPCLIENT_API bool tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement);
     RSPCLIENT_API std::size_t pendingResourceAdvertisementCount() const;
+    RSPCLIENT_API bool querySchemas(rsp::NodeID nodeId,
+                                    const std::string& protoFileName = std::string(),
+                                    const std::string& schemaHash = std::string());
+    RSPCLIENT_API bool tryDequeueSchemaReply(rsp::proto::SchemaReply& reply);
+    RSPCLIENT_API std::size_t pendingSchemaReplyCount() const;
     RSPCLIENT_API void registerStreamRoute(const rsp::GUID& socketId, rsp::NodeID nodeId);
 
 private:
@@ -169,6 +174,7 @@ private:
     void handleEndorsementDone(const rsp::proto::RSPMessage& message);
     void handleStreamReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
+    void handleSchemaReply(const rsp::proto::RSPMessage& message);
     bool sendIdentity(rsp::NodeID nodeId);
     bool sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
                                             const rsp::proto::Endorsement& requestedMessage);
@@ -199,6 +205,7 @@ private:
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::StreamReply> pendingStreamReplies_;
     std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
+    std::deque<rsp::proto::SchemaReply> pendingSchemaReplies_;
     std::map<rsp::GUID, std::deque<rsp::proto::StreamReply>> streamReplyQueues_;
     std::set<rsp::GUID> awaitedStreamReplies_;
     std::map<rsp::GUID, std::shared_ptr<NativeStreamBridgeState>> nativeStreamBridges_;

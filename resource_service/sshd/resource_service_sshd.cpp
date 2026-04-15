@@ -18,10 +18,12 @@
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/service_message.hpp"
 #include "common/transport/transport.hpp"
+#include "resource_service/schema_helpers.hpp"
 #include "third_party/json/single_include/nlohmann/json.hpp"
 
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 #include "resource_service/sshd/sshd.pb.h"
+#include "resource_service/sshd/sshd_desc.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -131,6 +133,19 @@ rsp::proto::ResourceAdvertisement SshdResourceService::buildResourceAdvertisemen
     if (!cfg_.sshdConfig.empty()) {
         sshd->set_server_name(cfg_.sshdConfig);
     }
+
+    *advertisement.add_schemas() = buildServiceSchema(
+        "sshd.proto",
+        rsp::schema::kSshdDescriptor,
+        rsp::schema::kSshdDescriptorSize,
+        1,
+        {
+            "type.rsp/rsp.proto.ConnectSshd",
+            "type.rsp/rsp.proto.StreamSend",
+            "type.rsp/rsp.proto.StreamRecv",
+            "type.rsp/rsp.proto.StreamClose",
+        });
+
     return advertisement;
 }
 

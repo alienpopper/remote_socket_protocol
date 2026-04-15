@@ -5,6 +5,7 @@
 #include "common/message_queue/mq.hpp"
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
+#include "resource_manager/schema_registry.hpp"
 
 #include <functional>
 #include <map>
@@ -34,6 +35,7 @@ public:
     size_t resourceAdvertisementCount() const;
     bool hasResourceAdvertisement(const rsp::NodeID& nodeId) const;
     std::optional<rsp::proto::ResourceAdvertisement> resourceAdvertisement(const rsp::NodeID& nodeId) const;
+    size_t schemaCount() const;
     bool sendToConnection(size_t index, const rsp::proto::RSPMessage& message) const;
     bool routeAndSend(const rsp::proto::RSPMessage& message) const;
     bool isForThisNode(const rsp::proto::RSPMessage& message) const;
@@ -77,6 +79,7 @@ private:
     std::vector<ActiveEncodingState> activeEncodings_;
     mutable std::mutex resourceAdvertisementsMutex_;
     mutable std::map<rsp::NodeID, rsp::proto::ResourceAdvertisement> resourceAdvertisements_;
+    SchemaRegistry schemaRegistry_;
     mutable std::mutex newEncodingCallbackMutex_;
     NewEncodingCallback newEncodingCallback_;
     mutable std::mutex authzQueueMutex_;
