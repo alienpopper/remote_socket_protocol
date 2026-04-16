@@ -352,6 +352,35 @@ bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uin
     return messageClient_->send(request);
 }
 
+std::optional<rsp::proto::ResourceAdvertisement> RSPClient::resourceList(
+        rsp::NodeID nodeId, const std::string& query, uint32_t maxRecords) {
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        resourceListPending_ = true;
+        resourceListResult_.reset();
+    }
+
+    if (!queryResources(nodeId, query, maxRecords)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        resourceListPending_ = false;
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return stopping_ || !resourceListPending_;
+    });
+
+    if (!replied || stopping_ || !resourceListResult_.has_value()) {
+        resourceListPending_ = false;
+        return std::nullopt;
+    }
+
+    auto result = std::move(resourceListResult_);
+    resourceListResult_.reset();
+    return result;
+}
+
 std::optional<rsp::proto::StreamReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
                                                                   const std::string& hostPort,
                                                                   uint32_t timeoutMilliseconds,
@@ -1175,7 +1204,12 @@ void RSPClient::handleStreamReply(const rsp::proto::RSPMessage& message) {
 
 void RSPClient::handleResourceAdvertisement(const rsp::proto::RSPMessage& message) {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    pendingResourceAdvertisements_.push_back(message.resource_advertisement());
+    if (resourceListPending_) {
+        resourceListResult_ = message.resource_advertisement();
+        resourceListPending_ = false;
+    } else {
+        pendingResourceAdvertisements_.push_back(message.resource_advertisement());
+    }
     stateChanged_.notify_all();
 }
 

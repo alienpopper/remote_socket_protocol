@@ -55,6 +55,10 @@ public:
     RSPCLIENT_API bool queryResources(rsp::NodeID nodeId,
                                       const std::string& query = std::string(),
                                       uint32_t maxRecords = 0);
+    RSPCLIENT_API std::optional<rsp::proto::ResourceAdvertisement> resourceList(
+        rsp::NodeID nodeId,
+        const std::string& query = std::string(),
+        uint32_t maxRecords = 0);
 
     RSPCLIENT_API std::optional<rsp::proto::StreamReply> connectTCPEx(rsp::NodeID nodeId,
                                                                          const std::string& hostPort,
@@ -205,6 +209,8 @@ private:
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::StreamReply> pendingStreamReplies_;
     std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
+    bool resourceListPending_ = false;
+    std::optional<rsp::proto::ResourceAdvertisement> resourceListResult_;
     std::deque<rsp::proto::SchemaReply> pendingSchemaReplies_;
     std::map<rsp::GUID, std::deque<rsp::proto::StreamReply>> streamReplyQueues_;
     std::set<rsp::GUID> awaitedStreamReplies_;

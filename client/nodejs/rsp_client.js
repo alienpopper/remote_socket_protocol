@@ -344,6 +344,7 @@ class RSPClient extends EventEmitter {
         this._endorsementCache = new Map();    // `${nodeId}:${typeHex}` -> endorsement
 
         this._pendingResourceAdvertisements = [];
+        this._pendingResourceList = null;       // {resolve, reject, timer}
         this._identityCache = new Map();       // nodeId -> publicKeyPem
 
         this._streamHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
@@ -643,7 +644,14 @@ class RSPClient extends EventEmitter {
             this.emit('endorsement_needed', msg.endorsement_needed);
         } else if (hasField(msg, 'resource_advertisement')) {
             trace('received resource_advertisement');
-            this._pendingResourceAdvertisements.push(msg.resource_advertisement);
+            if (this._pendingResourceList) {
+                const {resolve, timer} = this._pendingResourceList;
+                this._pendingResourceList = null;
+                clearTimeout(timer);
+                resolve(msg.resource_advertisement);
+            } else {
+                this._pendingResourceAdvertisements.push(msg.resource_advertisement);
+            }
             this.emit('resource_advertisement', msg.resource_advertisement);
         } else {
             const keys = Object.keys(msg || {}).join(',');
@@ -1325,6 +1333,21 @@ class RSPClient extends EventEmitter {
         } catch {
             return false;
         }
+    }
+
+    async resourceList(nodeId, query = '', maxRecords = 0, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this._pendingResourceList = null;
+                resolve(null);
+            }, timeoutMs);
+            this._pendingResourceList = {resolve, reject, timer};
+            this.queryResources(nodeId, query, maxRecords).catch((err) => {
+                clearTimeout(timer);
+                this._pendingResourceList = null;
+                reject(err);
+            });
+        });
     }
 }
 

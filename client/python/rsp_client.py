@@ -280,6 +280,7 @@ class RSPClient:
 
         self._socket_handlers: dict[str, Any] = {}      # socketId -> handler
         self._pending_resource_advertisements: list = []
+        self._pending_resource_list: asyncio.Future | None = None
 
     # --- Context manager ---
 
@@ -463,7 +464,11 @@ class RSPClient:
         elif _has_field(msg, "endorsement_needed"):
             pass  # endorsement_needed not yet handled
         elif _has_field(msg, "resource_advertisement"):
-            self._pending_resource_advertisements.append(msg["resource_advertisement"])
+            if self._pending_resource_list is not None and not self._pending_resource_list.done():
+                self._pending_resource_list.set_result(msg["resource_advertisement"])
+                self._pending_resource_list = None
+            else:
+                self._pending_resource_advertisements.append(msg["resource_advertisement"])
 
     def _handle_ping_reply(self, msg: dict) -> None:
         reply = msg["ping_reply"]
@@ -1087,6 +1092,32 @@ class RSPClient:
             return True
         except Exception:
             return False
+
+    async def resource_list(
+        self, node_id: str, query: str = "", max_records: int = 0,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending_resource_list = fut
+
+        try:
+            await self._send_signed_message({
+                "destination": {"value": _encode_node_id_for_field(node_id)},
+                "resource_query": {
+                    **(({"query": query} if query else {})),
+                    **(({"max_records": max_records} if max_records > 0 else {})),
+                },
+            })
+        except Exception:
+            self._pending_resource_list = None
+            return None
+
+        try:
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending_resource_list = None
+            return None
 
 
 # --- Public re-exports for callers that import from this module ---
