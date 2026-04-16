@@ -77,12 +77,31 @@ struct MacroContext {
 static std::string expandMacros(const std::string& input,
                                 const MacroContext& ctx) {
     std::string result = input;
-    const std::string macro = "MY_NODEID()";
+
+    // MY_NODEID() — expands to this node's nodeID hex string.
+    const std::string myNodeId = "MY_NODEID()";
     size_t pos = 0;
-    while ((pos = result.find(macro, pos)) != std::string::npos) {
-        result.replace(pos, macro.size(), ctx.nodeId);
+    while ((pos = result.find(myNodeId, pos)) != std::string::npos) {
+        result.replace(pos, myNodeId.size(), ctx.nodeId);
         pos += ctx.nodeId.size();
     }
+
+    // NODEID_FROM_FILE(<path>) — reads a public key PEM file, derives its nodeID.
+    const std::string fromFilePrefix = "NODEID_FROM_FILE(";
+    pos = 0;
+    while ((pos = result.find(fromFilePrefix, pos)) != std::string::npos) {
+        size_t argStart = pos + fromFilePrefix.size();
+        size_t argEnd = result.find(')', argStart);
+        if (argEnd == std::string::npos) {
+            throw std::runtime_error("NODEID_FROM_FILE( missing closing ')'");
+        }
+        std::string path = result.substr(argStart, argEnd - argStart);
+        rsp::NodeID id = rsp::KeyPair::nodeIDFromPublicKeyFile(path);
+        std::string replacement = id.toString();
+        result.replace(pos, (argEnd + 1) - pos, replacement);
+        pos += replacement.size();
+    }
+
     return result;
 }
 

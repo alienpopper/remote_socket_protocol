@@ -215,6 +215,13 @@ KeyPair KeyPair::readFromDisk(const std::string& privateKeyPath, const std::stri
     return KeyPair(duplicateKey(privateKey.get()).release());
 }
 
+NodeID KeyPair::nodeIDFromPublicKeyFile(const std::string& publicKeyPath) {
+    std::unique_ptr<EVP_PKEY, KeyDeleter> key(readPublicKeyFile(publicKeyPath));
+    verifyP256(key.get());
+    KeyPair kp(duplicateKey(key.get()).release());
+    return kp.nodeID();
+}
+
 KeyPair KeyPair::duplicate() const {
     if (!isValid()) {
         throw makeError("cannot duplicate an empty keypair");
