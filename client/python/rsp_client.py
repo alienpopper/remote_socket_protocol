@@ -281,6 +281,7 @@ class RSPClient:
         self._socket_handlers: dict[str, Any] = {}      # socketId -> handler
         self._pending_resource_advertisements: list = []
         self._pending_resource_list: asyncio.Future | None = None
+        self._pending_name_reply: asyncio.Future | None = None
 
     # --- Context manager ---
 
@@ -461,6 +462,8 @@ class RSPClient:
                 self._handle_socket_reply(msg, _unpack_service_message(msg))
             elif type_name == "rsp.proto.EndorsementDone":
                 self._handle_endorsement_done(msg)
+            elif type_name and type_name.startswith("rsp.proto.Name") and type_name.endswith("Reply"):
+                self._handle_name_reply(msg)
         elif _has_field(msg, "endorsement_needed"):
             pass  # endorsement_needed not yet handled
         elif _has_field(msg, "resource_advertisement"):
@@ -1118,6 +1121,97 @@ class RSPClient:
         except asyncio.TimeoutError:
             self._pending_resource_list = None
             return None
+
+    # --- Name service ---
+
+    def _handle_name_reply(self, msg: dict) -> None:
+        if self._pending_name_reply is not None and not self._pending_name_reply.done():
+            self._pending_name_reply.set_result(_unpack_service_message(msg))
+            self._pending_name_reply = None
+
+    async def _send_name_request(
+        self, node_id: str, type_name: str, fields: dict,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending_name_reply = fut
+
+        try:
+            await self._send_signed_message({
+                "destination": {"value": _encode_node_id_for_field(node_id)},
+                "service_message": _pack_service_message(type_name, fields),
+            })
+        except Exception:
+            self._pending_name_reply = None
+            return None
+
+        try:
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending_name_reply = None
+            return None
+
+    async def name_create(
+        self, node_id: str, name: str, owner: str, type_uuid: str, value_uuid: str,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        return await self._send_name_request(node_id, "NameCreateRequest", {
+            "record": {
+                "name": name,
+                "owner": {"value": _encode_node_id_for_field(owner)},
+                "type": {"value": _encode_node_id_for_field(type_uuid)},
+                "value": {"value": _encode_node_id_for_field(value_uuid)},
+            },
+        }, timeout)
+
+    async def name_read(
+        self, node_id: str, name: str, owner: str | None = None,
+        type_uuid: str | None = None, timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        fields: dict = {"name": name}
+        if owner is not None:
+            fields["owner"] = {"value": _encode_node_id_for_field(owner)}
+        if type_uuid is not None:
+            fields["type"] = {"value": _encode_node_id_for_field(type_uuid)}
+        return await self._send_name_request(node_id, "NameReadRequest", fields, timeout)
+
+    async def name_update(
+        self, node_id: str, name: str, owner: str, type_uuid: str, new_value: str,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        return await self._send_name_request(node_id, "NameUpdateRequest", {
+            "name": name,
+            "owner": {"value": _encode_node_id_for_field(owner)},
+            "type": {"value": _encode_node_id_for_field(type_uuid)},
+            "new_value": {"value": _encode_node_id_for_field(new_value)},
+        }, timeout)
+
+    async def name_delete(
+        self, node_id: str, name: str, owner: str, type_uuid: str,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        return await self._send_name_request(node_id, "NameDeleteRequest", {
+            "name": name,
+            "owner": {"value": _encode_node_id_for_field(owner)},
+            "type": {"value": _encode_node_id_for_field(type_uuid)},
+        }, timeout)
+
+    async def name_query(
+        self, node_id: str, name_prefix: str = "", owner: str | None = None,
+        type_uuid: str | None = None, max_records: int = 0,
+        timeout: float = DEFAULT_TIMEOUT_S,
+    ) -> dict | None:
+        fields: dict = {}
+        if name_prefix:
+            fields["name_prefix"] = name_prefix
+        if owner is not None:
+            fields["owner"] = {"value": _encode_node_id_for_field(owner)}
+        if type_uuid is not None:
+            fields["type"] = {"value": _encode_node_id_for_field(type_uuid)}
+        if max_records > 0:
+            fields["max_records"] = max_records
+        return await self._send_name_request(node_id, "NameQueryRequest", fields, timeout)
 
 
 # --- Public re-exports for callers that import from this module ---

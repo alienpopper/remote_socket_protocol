@@ -30,6 +30,7 @@ RESOURCE_SERVICE_JSON_TEST_TARGET := $(BIN_DIR)/resource_service_json_test
 NODEJS_PING_FIXTURE_TARGET := $(BIN_DIR)/nodejs_ping_fixture
 RESOURCE_SERVICE_TARGET := $(BIN_DIR)/resource_service
 BSD_SOCKETS_TARGET := $(BIN_DIR)/rsp_bsd_sockets
+NAME_SERVICE_TARGET := $(BIN_DIR)/rsp_name_service
 ENDORSEMENT_SERVICE_TEST_TARGET := $(BIN_DIR)/endorsement_service_test
 ENDORSEMENT_SERVICE_TARGET := $(BIN_DIR)/endorsement_service
 TRANSPORT_MEMORY_TEST_TARGET := $(BIN_DIR)/transport_memory_test
@@ -47,12 +48,17 @@ BSD_SOCKETS_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/bsd_socket
 SSHD_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb.cc
 SSHD_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.pb.h
 SSHD_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/sshd/sshd.pb.o
-PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT)
+NAME_SERVICE_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.pb.cc
+NAME_SERVICE_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.pb.h
+NAME_SERVICE_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/name_service/name_service.pb.o
+PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT) $(NAME_SERVICE_GENERATED_OBJECT)
 EMBED_DESCRIPTOR_SCRIPT := scripts/embed_descriptor.py
 BSD_SOCKETS_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.desc
 BSD_SOCKETS_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets_desc.hpp
 SSHD_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.desc
 SSHD_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd_desc.hpp
+NAME_SERVICE_DESC := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.desc
+NAME_SERVICE_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/name_service/name_service_desc.hpp
 
 TOP_BIN_DIR := bin
 ESP_RM_TARGET := $(TOP_BIN_DIR)/esp_rm
@@ -134,6 +140,12 @@ ENDORSEMENT_SERVICE_SOURCES := \
 	endorsement_service/endorsement_service.cpp \
 	endorsement_service/endorsement_service_main.cpp
 
+NAME_SERVICE_SOURCES := \
+	$(FULL_CLIENT_LIBRARY_SOURCES) \
+	resource_service/resource_service.cpp \
+	name_service/name_service.cpp \
+	name_service/name_service_main.cpp
+
 ifeq ($(OS),Windows_NT)
 	TARGET := $(TARGET).exe
 endif
@@ -166,6 +178,12 @@ BSD_SOCKETS_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT)
 ENDORSEMENT_SERVICE_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(ENDORSEMENT_SERVICE_SOURCES)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(PROTOBUF_GENERATED_OBJECT)
+NAME_SERVICE_OBJECTS := \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(NAME_SERVICE_SOURCES)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -465,12 +483,12 @@ SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
 .PHONY: all clean directories test test-base-types test-client test-endorsement test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-endorsement-service test-transport-memory test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-python-http-server test-openssh-stress generate-messages rsp-sshd rsp-ssh
 
-$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(GENERATE_MESSAGES_SCRIPT)
-	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto name_service/name_service.proto $(GENERATE_MESSAGES_SCRIPT)
+	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto name_service/name_service.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 generate-messages: $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 
-all: generate-messages $(TARGET) $(ESP_RM_TARGET) $(ESP_ES_TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(BSD_SOCKETS_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET) $(RSP_CLI_TOOL_TARGET) $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET)
+all: generate-messages $(TARGET) $(ESP_RM_TARGET) $(ESP_ES_TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(BSD_SOCKETS_TARGET) $(NAME_SERVICE_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET) $(RSP_CLI_TOOL_TARGET) $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET)
 
 include third_party/Makefile
 
@@ -500,6 +518,9 @@ $(RESOURCE_SERVICE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_
 
 $(BSD_SOCKETS_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(BSD_SOCKETS_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(BSD_SOCKETS_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
+$(NAME_SERVICE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(NAME_SERVICE_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(NAME_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
 $(ENDORSEMENT_SERVICE_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_SERVICE_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
@@ -659,14 +680,17 @@ test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(P
 
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto name_service/name_service.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto name_service/name_service.proto
 	@mkdir -p $(dir $(BSD_SOCKETS_DESC))
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(BSD_SOCKETS_DESC) --include_imports resource_service/bsd_sockets/bsd_sockets.proto
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(SSHD_DESC) --include_imports resource_service/sshd/sshd.proto
+	@mkdir -p $(dir $(NAME_SERVICE_DESC))
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(NAME_SERVICE_DESC) --include_imports name_service/name_service.proto
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(BSD_SOCKETS_DESC) $(BSD_SOCKETS_DESC_HEADER) --name kBsdSocketsDescriptor
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(SSHD_DESC) $(SSHD_DESC_HEADER) --name kSshdDescriptor
+	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(NAME_SERVICE_DESC) $(NAME_SERVICE_DESC_HEADER) --name kNameServiceDescriptor
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
@@ -697,6 +721,18 @@ $(BSD_SOCKETS_GENERATED_OBJECT): $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_G
 $(SSHD_GENERATED_OBJECT): $(SSHD_GENERATED_SOURCE) $(SSHD_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(SSHD_GENERATED_SOURCE) -o $@
+
+$(NAME_SERVICE_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(NAME_SERVICE_GENERATED_HEADER): $(NAME_SERVICE_GENERATED_SOURCE)
+
+$(NAME_SERVICE_DESC): $(PROTOBUF_GENERATED_SOURCE)
+
+$(NAME_SERVICE_DESC_HEADER): $(NAME_SERVICE_DESC)
+
+$(NAME_SERVICE_GENERATED_OBJECT): $(NAME_SERVICE_GENERATED_SOURCE) $(NAME_SERVICE_GENERATED_HEADER)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(NAME_SERVICE_GENERATED_SOURCE) -o $@
 
 $(OBJ_DIR)/common/keypair.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
@@ -732,11 +768,13 @@ $(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o: $(BSD_SO
 
 $(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o: $(SSHD_GENERATED_HEADER) $(SSHD_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
+$(OBJ_DIR)/name_service/name_service.o: $(NAME_SERVICE_GENERATED_HEADER) $(NAME_SERVICE_DESC_HEADER) $(PROTOBUF_GENERATED_HEADER)
+
 $(OBJ_DIR)/client/cpp_full/rsp_client.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(NAME_SERVICE_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/client_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 

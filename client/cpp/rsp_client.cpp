@@ -7,6 +7,7 @@
 #include "common/service_message.hpp"
 
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
+#include "name_service/name_service.pb.h"
 
 #include <chrono>
 #include <cstring>
@@ -29,6 +30,25 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
     protoNodeId.set_value(value);
     return protoNodeId;
+}
+
+rsp::proto::Uuid toProtoUuid(const rsp::GUID& guid) {
+    rsp::proto::Uuid protoUuid;
+    std::string value(16, '\0');
+    const uint64_t high = guid.high();
+    const uint64_t low = guid.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoUuid.set_value(value);
+    return protoUuid;
+}
+
+bool isNameServiceReply(const rsp::proto::RSPMessage& message) {
+    return rsp::hasServiceMessage<rsp::proto::NameCreateReply>(message) ||
+           rsp::hasServiceMessage<rsp::proto::NameReadReply>(message) ||
+           rsp::hasServiceMessage<rsp::proto::NameUpdateReply>(message) ||
+           rsp::hasServiceMessage<rsp::proto::NameDeleteReply>(message) ||
+           rsp::hasServiceMessage<rsp::proto::NameQueryReply>(message);
 }
 
 rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
@@ -152,6 +172,11 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
 
     if (message.has_schema_reply()) {
         handleSchemaReply(message);
+        return true;
+    }
+
+    if (isNameServiceReply(message)) {
+        handleNameServiceReply(message);
         return true;
     }
 
@@ -379,6 +404,127 @@ std::optional<rsp::proto::ResourceAdvertisement> RSPClient::resourceList(
     auto result = std::move(resourceListResult_);
     resourceListResult_.reset();
     return result;
+}
+
+// ---------------------------------------------------------------------------
+// Name service wrappers
+// ---------------------------------------------------------------------------
+
+template <typename ReplyT, typename RequestT>
+std::optional<ReplyT> sendNameRequest(RSPClient& self,
+                                      rsp::NodeID nodeId,
+                                      const RequestT& serviceReq,
+                                      std::mutex& stateMutex,
+                                      std::condition_variable& stateChanged,
+                                      bool& nameReplyPending,
+                                      std::optional<rsp::proto::RSPMessage>& nameReplyMessage,
+                                      const bool& stopping,
+                                      RSPClientMessage::Ptr& messageClient) {
+    {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        nameReplyPending = true;
+        nameReplyMessage.reset();
+    }
+
+    rsp::proto::RSPMessage request;
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    rsp::packServiceMessage(request, serviceReq);
+
+    if (!messageClient->send(request)) {
+        std::lock_guard<std::mutex> lock(stateMutex);
+        nameReplyPending = false;
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex);
+    const bool replied = stateChanged.wait_for(lock, std::chrono::seconds(5), [&]() {
+        return stopping || !nameReplyPending;
+    });
+
+    if (!replied || stopping || !nameReplyMessage.has_value()) {
+        nameReplyPending = false;
+        return std::nullopt;
+    }
+
+    ReplyT reply;
+    if (!rsp::unpackServiceMessage(*nameReplyMessage, &reply)) {
+        nameReplyMessage.reset();
+        return std::nullopt;
+    }
+    nameReplyMessage.reset();
+    return reply;
+}
+
+std::optional<rsp::proto::NameCreateReply> RSPClient::nameCreate(
+        rsp::NodeID nodeId, const std::string& name,
+        rsp::NodeID owner, const rsp::GUID& type, const rsp::GUID& value) {
+    rsp::proto::NameCreateRequest req;
+    auto* record = req.mutable_record();
+    record->set_name(name);
+    *record->mutable_owner() = toProtoNodeId(owner);
+    *record->mutable_type() = toProtoUuid(type);
+    *record->mutable_value() = toProtoUuid(value);
+    return sendNameRequest<rsp::proto::NameCreateReply>(*this, nodeId, req,
+        stateMutex_, stateChanged_, nameReplyPending_, nameReplyMessage_, stopping_, messageClient_);
+}
+
+std::optional<rsp::proto::NameReadReply> RSPClient::nameRead(
+        rsp::NodeID nodeId, const std::string& name,
+        const std::optional<rsp::NodeID>& owner, const std::optional<rsp::GUID>& type) {
+    rsp::proto::NameReadRequest req;
+    req.set_name(name);
+    if (owner.has_value()) {
+        *req.mutable_owner() = toProtoNodeId(*owner);
+    }
+    if (type.has_value()) {
+        *req.mutable_type() = toProtoUuid(*type);
+    }
+    return sendNameRequest<rsp::proto::NameReadReply>(*this, nodeId, req,
+        stateMutex_, stateChanged_, nameReplyPending_, nameReplyMessage_, stopping_, messageClient_);
+}
+
+std::optional<rsp::proto::NameUpdateReply> RSPClient::nameUpdate(
+        rsp::NodeID nodeId, const std::string& name,
+        rsp::NodeID owner, const rsp::GUID& type, const rsp::GUID& newValue) {
+    rsp::proto::NameUpdateRequest req;
+    req.set_name(name);
+    *req.mutable_owner() = toProtoNodeId(owner);
+    *req.mutable_type() = toProtoUuid(type);
+    *req.mutable_new_value() = toProtoUuid(newValue);
+    return sendNameRequest<rsp::proto::NameUpdateReply>(*this, nodeId, req,
+        stateMutex_, stateChanged_, nameReplyPending_, nameReplyMessage_, stopping_, messageClient_);
+}
+
+std::optional<rsp::proto::NameDeleteReply> RSPClient::nameDelete(
+        rsp::NodeID nodeId, const std::string& name,
+        rsp::NodeID owner, const rsp::GUID& type) {
+    rsp::proto::NameDeleteRequest req;
+    req.set_name(name);
+    *req.mutable_owner() = toProtoNodeId(owner);
+    *req.mutable_type() = toProtoUuid(type);
+    return sendNameRequest<rsp::proto::NameDeleteReply>(*this, nodeId, req,
+        stateMutex_, stateChanged_, nameReplyPending_, nameReplyMessage_, stopping_, messageClient_);
+}
+
+std::optional<rsp::proto::NameQueryReply> RSPClient::nameQuery(
+        rsp::NodeID nodeId, const std::string& namePrefix,
+        const std::optional<rsp::NodeID>& owner, const std::optional<rsp::GUID>& type,
+        uint32_t maxRecords) {
+    rsp::proto::NameQueryRequest req;
+    if (!namePrefix.empty()) {
+        req.set_name_prefix(namePrefix);
+    }
+    if (owner.has_value()) {
+        *req.mutable_owner() = toProtoNodeId(*owner);
+    }
+    if (type.has_value()) {
+        *req.mutable_type() = toProtoUuid(*type);
+    }
+    if (maxRecords > 0) {
+        req.set_max_records(maxRecords);
+    }
+    return sendNameRequest<rsp::proto::NameQueryReply>(*this, nodeId, req,
+        stateMutex_, stateChanged_, nameReplyPending_, nameReplyMessage_, stopping_, messageClient_);
 }
 
 std::optional<rsp::proto::StreamReply> RSPClient::connectTCPEx(rsp::NodeID nodeId,
@@ -1213,6 +1359,15 @@ void RSPClient::handleResourceAdvertisement(const rsp::proto::RSPMessage& messag
     stateChanged_.notify_all();
 }
 
+void RSPClient::handleNameServiceReply(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (nameReplyPending_) {
+        nameReplyMessage_ = message;
+        nameReplyPending_ = false;
+    }
+    stateChanged_.notify_all();
+}
+
 void RSPClient::runNativeStreamBridge(const rsp::GUID& socketId,
                                       const std::shared_ptr<NativeStreamBridgeState>& bridgeState) {
     std::vector<uint8_t> buffer(4096);
@@ -1375,6 +1530,10 @@ void RSPClient::stopNativeListenBridgesForNode(const rsp::NodeID& nodeId) {
 
 rsp::proto::NodeId RSPClient::toProtoNodeId(const rsp::NodeID& nodeId) {
     return ::rsp::client::toProtoNodeId(nodeId);
+}
+
+rsp::proto::Uuid RSPClient::toProtoUuid(const rsp::GUID& guid) {
+    return ::rsp::client::toProtoUuid(guid);
 }
 
 rsp::proto::StreamID RSPClient::toProtoStreamId(const rsp::GUID& socketId) {

@@ -39,6 +39,12 @@ const SCHEMA = {
             "ENDORSEMENT_CHALLENGE": 2,
             "ENDORSEMENT_INVALID_SIGNATURE": 3,
             "ENDORSEMENT_UNKNOWN_IDENTITY": 4
+        },
+        "NAME_STATUS": {
+            "NAME_SUCCESS": 0,
+            "NAME_NOT_FOUND": 1,
+            "NAME_DUPLICATE": 2,
+            "NAME_ERROR": 3
         }
     },
     "messages": {
@@ -2197,6 +2203,313 @@ const SCHEMA = {
                     "kind": "scalar",
                     "type": "bool",
                     "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameRecord": {
+            "fields": [
+                {
+                    "name": "name",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "owner",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "type",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 4,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameCreateRequest": {
+            "fields": [
+                {
+                    "name": "record",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NameRecord",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameCreateReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "NAME_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "message",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameReadRequest": {
+            "fields": [
+                {
+                    "name": "name",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "owner",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "type",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameReadReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "NAME_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "records",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NameRecord",
+                    "repeated": true,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameUpdateRequest": {
+            "fields": [
+                {
+                    "name": "name",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "owner",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "type",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "new_value",
+                    "number": 4,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameUpdateReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "NAME_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "message",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameDeleteRequest": {
+            "fields": [
+                {
+                    "name": "name",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "owner",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "type",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameDeleteReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "NAME_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "message",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameQueryRequest": {
+            "fields": [
+                {
+                    "name": "name_prefix",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "owner",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "type",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "max_records",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NameQueryReply": {
+            "fields": [
+                {
+                    "name": "records",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NameRecord",
+                    "repeated": true,
                     "has_presence": true,
                     "oneof": null
                 }

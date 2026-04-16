@@ -345,6 +345,7 @@ class RSPClient extends EventEmitter {
 
         this._pendingResourceAdvertisements = [];
         this._pendingResourceList = null;       // {resolve, reject, timer}
+        this._pendingNameReply = null;          // {resolve, reject, timer}
         this._identityCache = new Map();       // nodeId -> publicKeyPem
 
         this._streamHandlers = new Map();      // socketId -> handler (used by rsp_net.js)
@@ -636,6 +637,8 @@ class RSPClient extends EventEmitter {
                 this._handleStreamReply(msg, unpackServiceMessage(msg));
             } else if (typeName === 'rsp.proto.EndorsementDone') {
                 this._handleEndorsementDone(msg);
+            } else if (typeName && typeName.startsWith('rsp.proto.Name') && typeName.endsWith('Reply')) {
+                this._handleNameReply(msg);
             } else {
                 trace(`unhandled service_message type=${typeName}`);
             }
@@ -1348,6 +1351,79 @@ class RSPClient extends EventEmitter {
                 reject(err);
             });
         });
+    }
+
+    // --- Name service ---
+
+    _handleNameReply(msg) {
+        if (this._pendingNameReply) {
+            const {resolve, timer} = this._pendingNameReply;
+            this._pendingNameReply = null;
+            clearTimeout(timer);
+            resolve(unpackServiceMessage(msg));
+        }
+    }
+
+    async _sendNameRequest(nodeId, typeName, fields, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this._pendingNameReply = null;
+                resolve(null);
+            }, timeoutMs);
+            this._pendingNameReply = {resolve, reject, timer};
+            this._sendSignedMessage({
+                destination: {value: encodeNodeIdForField(nodeId)},
+                service_message: packServiceMessage(typeName, fields),
+            }).catch((err) => {
+                clearTimeout(timer);
+                this._pendingNameReply = null;
+                reject(err);
+            });
+        });
+    }
+
+    async nameCreate(nodeId, name, owner, type, value, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        return this._sendNameRequest(nodeId, 'NameCreateRequest', {
+            record: {
+                name,
+                owner: {value: encodeNodeIdForField(owner)},
+                type: {value: encodeNodeIdForField(type)},
+                value: {value: encodeNodeIdForField(value)},
+            },
+        }, timeoutMs);
+    }
+
+    async nameRead(nodeId, name, owner = null, type = null, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        const fields = {name};
+        if (owner) fields.owner = {value: encodeNodeIdForField(owner)};
+        if (type) fields.type = {value: encodeNodeIdForField(type)};
+        return this._sendNameRequest(nodeId, 'NameReadRequest', fields, timeoutMs);
+    }
+
+    async nameUpdate(nodeId, name, owner, type, newValue, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        return this._sendNameRequest(nodeId, 'NameUpdateRequest', {
+            name,
+            owner: {value: encodeNodeIdForField(owner)},
+            type: {value: encodeNodeIdForField(type)},
+            new_value: {value: encodeNodeIdForField(newValue)},
+        }, timeoutMs);
+    }
+
+    async nameDelete(nodeId, name, owner, type, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        return this._sendNameRequest(nodeId, 'NameDeleteRequest', {
+            name,
+            owner: {value: encodeNodeIdForField(owner)},
+            type: {value: encodeNodeIdForField(type)},
+        }, timeoutMs);
+    }
+
+    async nameQuery(nodeId, namePrefix = '', owner = null, type = null, maxRecords = 0, timeoutMs = DEFAULT_TIMEOUT_MS) {
+        const fields = {};
+        if (namePrefix) fields.name_prefix = namePrefix;
+        if (owner) fields.owner = {value: encodeNodeIdForField(owner)};
+        if (type) fields.type = {value: encodeNodeIdForField(type)};
+        if (maxRecords > 0) fields.max_records = maxRecords;
+        return this._sendNameRequest(nodeId, 'NameQueryRequest', fields, timeoutMs);
     }
 }
 

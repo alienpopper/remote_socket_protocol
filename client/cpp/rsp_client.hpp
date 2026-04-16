@@ -3,6 +3,7 @@
 #include "client/cpp/rsp_client_export.hpp"
 #include "client/cpp/rsp_client_message.hpp"
 #include "common/node.hpp"
+#include "name_service/name_service.pb.h"
 #include "os/os_socket.hpp"
 
 #include <atomic>
@@ -58,6 +59,35 @@ public:
     RSPCLIENT_API std::optional<rsp::proto::ResourceAdvertisement> resourceList(
         rsp::NodeID nodeId,
         const std::string& query = std::string(),
+        uint32_t maxRecords = 0);
+
+    RSPCLIENT_API std::optional<rsp::proto::NameCreateReply> nameCreate(
+        rsp::NodeID nodeId,
+        const std::string& name,
+        rsp::NodeID owner,
+        const rsp::GUID& type,
+        const rsp::GUID& value);
+    RSPCLIENT_API std::optional<rsp::proto::NameReadReply> nameRead(
+        rsp::NodeID nodeId,
+        const std::string& name,
+        const std::optional<rsp::NodeID>& owner = std::nullopt,
+        const std::optional<rsp::GUID>& type = std::nullopt);
+    RSPCLIENT_API std::optional<rsp::proto::NameUpdateReply> nameUpdate(
+        rsp::NodeID nodeId,
+        const std::string& name,
+        rsp::NodeID owner,
+        const rsp::GUID& type,
+        const rsp::GUID& newValue);
+    RSPCLIENT_API std::optional<rsp::proto::NameDeleteReply> nameDelete(
+        rsp::NodeID nodeId,
+        const std::string& name,
+        rsp::NodeID owner,
+        const rsp::GUID& type);
+    RSPCLIENT_API std::optional<rsp::proto::NameQueryReply> nameQuery(
+        rsp::NodeID nodeId,
+        const std::string& namePrefix = std::string(),
+        const std::optional<rsp::NodeID>& owner = std::nullopt,
+        const std::optional<rsp::GUID>& type = std::nullopt,
         uint32_t maxRecords = 0);
 
     RSPCLIENT_API std::optional<rsp::proto::StreamReply> connectTCPEx(rsp::NodeID nodeId,
@@ -179,6 +209,7 @@ private:
     void handleStreamReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
     void handleSchemaReply(const rsp::proto::RSPMessage& message);
+    void handleNameServiceReply(const rsp::proto::RSPMessage& message);
     bool sendIdentity(rsp::NodeID nodeId);
     bool sendBeginEndorsementRequestMessage(rsp::NodeID nodeId,
                                             const rsp::proto::Endorsement& requestedMessage);
@@ -195,6 +226,7 @@ private:
     void stopNativeListenBridges();
     void stopNativeListenBridgesForNode(const rsp::NodeID& nodeId);
     static rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId);
+    static rsp::proto::Uuid toProtoUuid(const rsp::GUID& guid);
     static rsp::proto::StreamID toProtoStreamId(const rsp::GUID& socketId);
     static std::optional<rsp::GUID> fromProtoStreamId(const rsp::proto::StreamID& socketId);
     std::optional<rsp::proto::StreamReply> waitForStreamReply(const rsp::GUID& socketId);
@@ -211,6 +243,8 @@ private:
     std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
     bool resourceListPending_ = false;
     std::optional<rsp::proto::ResourceAdvertisement> resourceListResult_;
+    bool nameReplyPending_ = false;
+    std::optional<rsp::proto::RSPMessage> nameReplyMessage_;
     std::deque<rsp::proto::SchemaReply> pendingSchemaReplies_;
     std::map<rsp::GUID, std::deque<rsp::proto::StreamReply>> streamReplyQueues_;
     std::set<rsp::GUID> awaitedStreamReplies_;

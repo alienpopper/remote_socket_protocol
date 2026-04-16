@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package rsp.proto;
+
+import "messages.proto";
+
+message NameRecord {
+    string name = 1;
+    NodeId owner = 2;
+    Uuid type = 3;
+    Uuid value = 4;
+}
+
+enum NAME_STATUS {
+    NAME_SUCCESS = 0;
+    NAME_NOT_FOUND = 1;
+    NAME_DUPLICATE = 2;   // (name, owner, type) already exists
+    NAME_ERROR = 3;
+}
+
+message NameCreateRequest {
+    NameRecord record = 1;
+}
+
+message NameCreateReply {
+    NAME_STATUS status = 1;
+    optional string message = 2;
+}
+
+message NameReadRequest {
+    string name = 1;
+    optional NodeId owner = 2;
+    optional Uuid type = 3;
+}
+
+message NameReadReply {
+    NAME_STATUS status = 1;
+    repeated NameRecord records = 2;
+}
+
+message NameUpdateRequest {
+    // Identifies the record to update: (name, owner, type)
+    string name = 1;
+    NodeId owner = 2;
+    Uuid type = 3;
+    // New value
+    Uuid new_value = 4;
+}
+
+message NameUpdateReply {
+    NAME_STATUS status = 1;
+    optional string message = 2;
+}
+
+message NameDeleteRequest {
+    string name = 1;
+    NodeId owner = 2;
+    Uuid type = 3;
+}
+
+message NameDeleteReply {
+    NAME_STATUS status = 1;
+    optional string message = 2;
+}
+
+message NameQueryRequest {
+    optional string name_prefix = 1;
+    optional NodeId owner = 2;
+    optional Uuid type = 3;
+    uint32 max_records = 4;
+}
+
+message NameQueryReply {
+    repeated NameRecord records = 1;
+}
