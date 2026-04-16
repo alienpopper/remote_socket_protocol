@@ -272,7 +272,8 @@ void ResourceManager::rebuildAuthorizationQueue() {
         [this](rsp::proto::RSPMessage message) { handleAuthorizedMessage(std::move(message)); },
         [this](rsp::proto::RSPMessage message) { handleAuthorizationFailure(std::move(message)); },
         [this](const rsp::NodeID& nodeId) { return getAuthorizationEndorsements(nodeId); },
-        authorizationTree());
+        authorizationTree(),
+        &schemaRegistry_);
     newQueue->setWorkerCount(1);
     newQueue->start();
 

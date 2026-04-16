@@ -81,6 +81,7 @@ COMMON_SOURCES := \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_JSON_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
+	$(COMMON_FIELD_RESOLVER_SOURCE) \
 	common/endorsement/endorsement_text.cpp \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
@@ -100,6 +101,7 @@ CLIENT_LIBRARY_SOURCES := \
 	$(COMMON_PROTOBUF_ENCODING_SOURCE) \
 	$(COMMON_JSON_ENCODING_SOURCE) \
 	$(COMMON_ENDORSEMENT_SOURCE) \
+	$(COMMON_FIELD_RESOLVER_SOURCE) \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
@@ -136,6 +138,7 @@ BSD_SOCKETS_SOURCES := \
 
 ENDORSEMENT_SERVICE_SOURCES := \
 	$(COMMON_ENDORSEMENT_SOURCE) \
+	$(COMMON_FIELD_RESOLVER_SOURCE) \
 	$(FULL_CLIENT_LIBRARY_SOURCES) \
 	endorsement_service/endorsement_service.cpp \
 	endorsement_service/endorsement_service_main.cpp
@@ -201,6 +204,7 @@ ENDORSEMENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -284,6 +288,7 @@ MQ_AUTHZ_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/message_queue/mq_authz.o \
 	$(OBJ_DIR)/common/message_queue/mq_signing.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -311,6 +316,7 @@ CLIENT_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -337,6 +343,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -365,6 +372,7 @@ RESOURCE_SERVICE_JSON_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -391,6 +399,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -418,6 +427,7 @@ NODEJS_PING_FIXTURE_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -445,6 +455,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
@@ -464,6 +475,7 @@ RSP_ENDORSEMENT_TOOL_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -746,11 +758,13 @@ $(OBJ_DIR)/common/message_queue/mq_signing.o: $(BORINGSSL_INCLUDE_HEADER) $(PROT
 
 $(OBJ_DIR)/common/message_queue/mq_authn.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/message_queue/mq_authz.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/message_queue/mq_authz.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER) resource_manager/schema_registry.hpp
 
 $(OBJ_DIR)/test/keypair_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/common/endorsement/endorsement.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/common/endorsement/endorsement.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER) common/endorsement/field_resolver.hpp resource_manager/schema_registry.hpp
+
+$(OBJ_DIR)/common/endorsement/field_resolver.o: $(PROTOBUF_GENERATED_HEADER) common/endorsement/field_resolver.hpp resource_manager/schema_registry.hpp
 
 $(OBJ_DIR)/test/endorsement_test.o: $(PROTOBUF_GENERATED_HEADER)
 

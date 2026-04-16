@@ -6,6 +6,10 @@
 #include <functional>
 #include <vector>
 
+namespace rsp::resource_manager {
+class SchemaRegistry;
+}
+
 namespace rsp::message_queue {
 
 class MessageQueueAuthZ : public rsp::RSPMessageQueue {
@@ -17,7 +21,8 @@ public:
     MessageQueueAuthZ(SuccessCallback success,
                       FailureCallback failure,
                       GetEndorsementsCallback getEndorsements,
-                      rsp::proto::ERDAbstractSyntaxTree authorizationTree);
+                      rsp::proto::ERDAbstractSyntaxTree authorizationTree,
+                      const rsp::resource_manager::SchemaRegistry* schemaRegistry = nullptr);
 
 protected:
     void handleMessage(Message message, rsp::MessageQueueSharedState& sharedState) override;
@@ -28,6 +33,7 @@ private:
     FailureCallback failure_;
     GetEndorsementsCallback getEndorsements_;
     rsp::proto::ERDAbstractSyntaxTree authorizationTree_;
+    const rsp::resource_manager::SchemaRegistry* schemaRegistry_;
 };
 
 }  // namespace rsp::message_queue

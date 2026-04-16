@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <vector>
 
+namespace rsp::resource_manager {
+class SchemaSnapshot;
+}
+
 namespace rsp {
 
 class Endorsement {
@@ -45,10 +49,12 @@ bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirem
                                   const Endorsement& endorsement);
 
 bool messageMatchesRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree,
-                               const rsp::proto::RSPMessage& message);
+                               const rsp::proto::RSPMessage& message,
+                               const rsp::resource_manager::SchemaSnapshot* schemaSnapshot = nullptr);
 
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
                                                         const std::vector<Endorsement>& endorsements,
-                                                        const rsp::proto::RSPMessage* message = nullptr);
+                                                        const rsp::proto::RSPMessage* message = nullptr,
+                                                        const rsp::resource_manager::SchemaSnapshot* schemaSnapshot = nullptr);
 
 }  // namespace rsp

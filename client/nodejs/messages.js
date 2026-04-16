@@ -1487,6 +1487,160 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "ERDASTFieldPath": {
+            "fields": [
+                {
+                    "name": "segments",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": true,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "ERDASTFieldValue": {
+            "fields": [
+                {
+                    "name": "bytes_value",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "string_value",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "int_value",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "int64",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "uint_value",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint64",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "bool_value",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "enum_value",
+                    "number": 6,
+                    "kind": "scalar",
+                    "type": "int32",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                }
+            ],
+            "oneofs": [
+                {
+                    "name": "value",
+                    "fields": [
+                        "bytes_value",
+                        "string_value",
+                        "int_value",
+                        "uint_value",
+                        "bool_value",
+                        "enum_value"
+                    ]
+                }
+            ]
+        },
+        "ERDASTFieldEquals": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "ERDASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "ERDASTFieldValue",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "ERDASTFieldExists": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "ERDASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "ERDASTFieldContains": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "ERDASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "sub_path",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "ERDASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "ERDASTFieldValue",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
         "ERDASTMessageTree": {
             "fields": [
                 {
@@ -1569,6 +1723,33 @@ const SCHEMA = {
                     "repeated": false,
                     "has_presence": true,
                     "oneof": "node_type"
+                },
+                {
+                    "name": "field_equals",
+                    "number": 200,
+                    "kind": "message",
+                    "type": "ERDASTFieldEquals",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "field_exists",
+                    "number": 201,
+                    "kind": "message",
+                    "type": "ERDASTFieldExists",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "field_contains",
+                    "number": 202,
+                    "kind": "message",
+                    "type": "ERDASTFieldContains",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
                 }
             ],
             "oneofs": [
@@ -1583,7 +1764,10 @@ const SCHEMA = {
                         "all_of",
                         "any_of",
                         "destination",
-                        "source"
+                        "source",
+                        "field_equals",
+                        "field_exists",
+                        "field_contains"
                     ]
                 }
             ]

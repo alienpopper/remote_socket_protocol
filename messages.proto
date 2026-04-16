@@ -364,6 +364,47 @@ message ERDASTMesSource {
     NodeId source = 1;
 }
 
+// A dot-separated path into a message, expressed as repeated segments.
+// Examples:
+//   ["destination", "value"]           – the bytes of the destination NodeId
+//   ["signature", "signer", "value"]   – equivalent to legacy SOURCE()
+//   ["service_message", "host_port"]   – field inside an unpacked Any
+//   ["ping_request", "sequence"]       – a compile-time known field
+message ERDASTFieldPath {
+    repeated string segments = 1;
+}
+
+// A typed literal value to compare against.
+message ERDASTFieldValue {
+    oneof value {
+        bytes   bytes_value   = 1;
+        string  string_value  = 2;
+        int64   int_value     = 3;
+        uint64  uint_value    = 4;
+        bool    bool_value    = 5;
+        int32   enum_value    = 6;  // protobuf enum ordinal
+    }
+}
+
+// Leaf: true when the field at the given path equals the literal value.
+message ERDASTFieldEquals {
+    ERDASTFieldPath path = 1;
+    ERDASTFieldValue value = 2;
+}
+
+// Leaf: true when the field at the given path is present (has_xxx).
+message ERDASTFieldExists {
+    ERDASTFieldPath path = 1;
+}
+
+// Leaf: true when a repeated field (at path) contains at least one
+// element whose sub-field (sub_path, relative to the element) equals value.
+message ERDASTFieldContains {
+    ERDASTFieldPath path = 1;       // path to the repeated field
+    ERDASTFieldPath sub_path = 2;   // path within each element
+    ERDASTFieldValue value = 3;
+}
+
 message ERDASTMessageTree{
     oneof node_type{
         ERDASTMesEquals equals = 1;
@@ -373,8 +414,13 @@ message ERDASTMessageTree{
         ERDASTFalse false_value = 10;
         ERDASTMesAllOf all_of = 11;
         ERDASTMesAnyOf any_of = 12;
+        // Legacy leaves (kept for backward compatibility)
         ERDASTMesDestination destination = 100;
         ERDASTMesSource source = 101;
+        // Generic field-path leaves
+        ERDASTFieldEquals field_equals = 200;
+        ERDASTFieldExists field_exists = 201;
+        ERDASTFieldContains field_contains = 202;
     }
 }
 

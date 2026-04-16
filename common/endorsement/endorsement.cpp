@@ -1,4 +1,6 @@
 #include "common/endorsement/endorsement.hpp"
+#include "common/endorsement/field_resolver.hpp"
+#include "resource_manager/schema_registry.hpp"
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -337,27 +339,28 @@ bool evaluateRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
 }
 
 bool evaluateMessageTree(const rsp::proto::ERDASTMessageTree& tree,
-                         const rsp::proto::RSPMessage& message) {
+                         const rsp::proto::RSPMessage& message,
+                         const rsp::resource_manager::SchemaSnapshot* snap) {
     switch (tree.node_type_case()) {
         case rsp::proto::ERDASTMessageTree::kEquals:
             return tree.equals().has_lhs() && tree.equals().has_rhs() &&
-                   evaluateMessageTree(tree.equals().lhs(), message) ==
-                       evaluateMessageTree(tree.equals().rhs(), message);
+                   evaluateMessageTree(tree.equals().lhs(), message, snap) ==
+                       evaluateMessageTree(tree.equals().rhs(), message, snap);
         case rsp::proto::ERDASTMessageTree::kAnd:
             return tree.and_().has_lhs() && tree.and_().has_rhs() &&
-                   evaluateMessageTree(tree.and_().lhs(), message) &&
-                   evaluateMessageTree(tree.and_().rhs(), message);
+                   evaluateMessageTree(tree.and_().lhs(), message, snap) &&
+                   evaluateMessageTree(tree.and_().rhs(), message, snap);
         case rsp::proto::ERDASTMessageTree::kOr:
             return tree.or_().has_lhs() && tree.or_().has_rhs() &&
-                   (evaluateMessageTree(tree.or_().lhs(), message) ||
-                    evaluateMessageTree(tree.or_().rhs(), message));
+                   (evaluateMessageTree(tree.or_().lhs(), message, snap) ||
+                    evaluateMessageTree(tree.or_().rhs(), message, snap));
         case rsp::proto::ERDASTMessageTree::kAllOf:
             if (tree.all_of().terms_size() == 0) {
                 return false;
             }
 
             for (const auto& term : tree.all_of().terms()) {
-                if (!evaluateMessageTree(term, message)) {
+                if (!evaluateMessageTree(term, message, snap)) {
                     return false;
                 }
             }
@@ -365,7 +368,7 @@ bool evaluateMessageTree(const rsp::proto::ERDASTMessageTree& tree,
             return true;
         case rsp::proto::ERDASTMessageTree::kAnyOf:
             for (const auto& term : tree.any_of().terms()) {
-                if (evaluateMessageTree(term, message)) {
+                if (evaluateMessageTree(term, message, snap)) {
                     return true;
                 }
             }
@@ -380,6 +383,30 @@ bool evaluateMessageTree(const rsp::proto::ERDASTMessageTree& tree,
                    message.signature().has_signer() &&
                    parseNodeId(tree.source().source(), "invalid requirement source length") ==
                        parseSignatureSignerNodeId(message.signature().signer(), "invalid message signer length");
+        case rsp::proto::ERDASTMessageTree::kFieldEquals: {
+            if (!tree.field_equals().has_path() || !tree.field_equals().has_value()) return false;
+            auto resolved = rsp::endorsement::resolveFieldPath(tree.field_equals().path(), message, snap);
+            return rsp::endorsement::resolvedValueEquals(resolved, tree.field_equals().value());
+        }
+        case rsp::proto::ERDASTMessageTree::kFieldExists: {
+            if (!tree.field_exists().has_path()) return false;
+            auto resolved = rsp::endorsement::resolveFieldPath(tree.field_exists().path(), message, snap);
+            return rsp::endorsement::resolvedValuePresent(resolved);
+        }
+        case rsp::proto::ERDASTMessageTree::kFieldContains: {
+            if (!tree.field_contains().has_path() || !tree.field_contains().has_sub_path() ||
+                !tree.field_contains().has_value()) return false;
+            auto elements = rsp::endorsement::resolveRepeatedMessages(
+                tree.field_contains().path(), message, snap);
+            for (const auto* elem : elements) {
+                auto resolved = rsp::endorsement::resolveFieldPath(
+                    tree.field_contains().sub_path(), *elem, snap);
+                if (rsp::endorsement::resolvedValueEquals(resolved, tree.field_contains().value())) {
+                    return true;
+                }
+            }
+            return false;
+        }
         case rsp::proto::ERDASTMessageTree::kTrueValue:
             return true;
         case rsp::proto::ERDASTMessageTree::kFalseValue:
@@ -392,27 +419,28 @@ bool evaluateMessageTree(const rsp::proto::ERDASTMessageTree& tree,
 }
 
 bool evaluateMessageRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
-                                    const rsp::proto::RSPMessage& message) {
+                                    const rsp::proto::RSPMessage& message,
+                                    const rsp::resource_manager::SchemaSnapshot* snap) {
     switch (tree.node_type_case()) {
         case rsp::proto::ERDAbstractSyntaxTree::kEquals:
             return tree.equals().has_lhs() && tree.equals().has_rhs() &&
-                   evaluateMessageRequirementTree(tree.equals().lhs(), message) ==
-                       evaluateMessageRequirementTree(tree.equals().rhs(), message);
+                   evaluateMessageRequirementTree(tree.equals().lhs(), message, snap) ==
+                       evaluateMessageRequirementTree(tree.equals().rhs(), message, snap);
         case rsp::proto::ERDAbstractSyntaxTree::kAnd:
             return tree.and_().has_lhs() && tree.and_().has_rhs() &&
-                   evaluateMessageRequirementTree(tree.and_().lhs(), message) &&
-                   evaluateMessageRequirementTree(tree.and_().rhs(), message);
+                   evaluateMessageRequirementTree(tree.and_().lhs(), message, snap) &&
+                   evaluateMessageRequirementTree(tree.and_().rhs(), message, snap);
         case rsp::proto::ERDAbstractSyntaxTree::kOr:
             return tree.or_().has_lhs() && tree.or_().has_rhs() &&
-                   (evaluateMessageRequirementTree(tree.or_().lhs(), message) ||
-                    evaluateMessageRequirementTree(tree.or_().rhs(), message));
+                   (evaluateMessageRequirementTree(tree.or_().lhs(), message, snap) ||
+                    evaluateMessageRequirementTree(tree.or_().rhs(), message, snap));
         case rsp::proto::ERDAbstractSyntaxTree::kAllOf:
             if (tree.all_of().terms_size() == 0) {
                 return false;
             }
 
             for (const auto& term : tree.all_of().terms()) {
-                if (!evaluateMessageRequirementTree(term, message)) {
+                if (!evaluateMessageRequirementTree(term, message, snap)) {
                     return false;
                 }
             }
@@ -420,7 +448,7 @@ bool evaluateMessageRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tre
             return true;
         case rsp::proto::ERDAbstractSyntaxTree::kAnyOf:
             for (const auto& term : tree.any_of().terms()) {
-                if (evaluateMessageRequirementTree(term, message)) {
+                if (evaluateMessageRequirementTree(term, message, snap)) {
                     return true;
                 }
             }
@@ -428,7 +456,7 @@ bool evaluateMessageRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tre
             return false;
         case rsp::proto::ERDAbstractSyntaxTree::kMessage:
             return tree.message().has_tree() &&
-                   evaluateMessageTree(tree.message().tree(), message);
+                   evaluateMessageTree(tree.message().tree(), message, snap);
         case rsp::proto::ERDAbstractSyntaxTree::kEndorsement:
             return false;
         case rsp::proto::ERDAbstractSyntaxTree::kTrueValue:
@@ -636,7 +664,8 @@ rsp::proto::ERDAbstractSyntaxTree makeEqualsTree(const rsp::proto::ERDAbstractSy
 
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ERDAbstractSyntaxTree& tree,
                                                             const std::vector<Endorsement>& endorsements,
-                                                            const rsp::proto::RSPMessage* message) {
+                                                            const rsp::proto::RSPMessage* message,
+                                                            const rsp::resource_manager::SchemaSnapshot* snap) {
     const auto constantValue = getConstantTreeValue(tree);
     if (constantValue == ConstantTreeValue::kTrue) {
         return rsp::proto::ERDAbstractSyntaxTree();
@@ -651,7 +680,7 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
     }
 
     if (message != nullptr && isMessagePredicateNode(tree)) {
-        return evaluateMessageRequirementTree(tree, *message) ? rsp::proto::ERDAbstractSyntaxTree()
+        return evaluateMessageRequirementTree(tree, *message, snap) ? rsp::proto::ERDAbstractSyntaxTree()
                                                               : makeFalseTree();
     }
 
@@ -661,8 +690,8 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return tree;
             }
 
-            const auto reducedLeft = reduceRequirementTreeImpl(tree.equals().lhs(), endorsements, message);
-            const auto reducedRight = reduceRequirementTreeImpl(tree.equals().rhs(), endorsements, message);
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.equals().lhs(), endorsements, message, snap);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.equals().rhs(), endorsements, message, snap);
             if (isEmptyTree(reducedLeft) && isEmptyTree(reducedRight)) {
                 return rsp::proto::ERDAbstractSyntaxTree();
             }
@@ -686,8 +715,8 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return tree;
             }
 
-            const auto reducedLeft = reduceRequirementTreeImpl(tree.and_().lhs(), endorsements, message);
-            const auto reducedRight = reduceRequirementTreeImpl(tree.and_().rhs(), endorsements, message);
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.and_().lhs(), endorsements, message, snap);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.and_().rhs(), endorsements, message, snap);
             if (isEmptyTree(reducedLeft)) {
                 return reducedRight;
             }
@@ -707,8 +736,8 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
                 return tree;
             }
 
-            const auto reducedLeft = reduceRequirementTreeImpl(tree.or_().lhs(), endorsements, message);
-            const auto reducedRight = reduceRequirementTreeImpl(tree.or_().rhs(), endorsements, message);
+            const auto reducedLeft = reduceRequirementTreeImpl(tree.or_().lhs(), endorsements, message, snap);
+            const auto reducedRight = reduceRequirementTreeImpl(tree.or_().rhs(), endorsements, message, snap);
             if (isEmptyTree(reducedLeft) || isEmptyTree(reducedRight)) {
                 return rsp::proto::ERDAbstractSyntaxTree();
             }
@@ -731,7 +760,7 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
             std::vector<rsp::proto::ERDAbstractSyntaxTree> remainingTerms;
             remainingTerms.reserve(static_cast<std::size_t>(tree.all_of().terms_size()));
             for (const auto& term : tree.all_of().terms()) {
-                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements, message);
+                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements, message, snap);
                 if (isEmptyTree(reducedTerm)) {
                     continue;
                 }
@@ -761,7 +790,7 @@ rsp::proto::ERDAbstractSyntaxTree reduceRequirementTreeImpl(const rsp::proto::ER
             std::vector<rsp::proto::ERDAbstractSyntaxTree> remainingTerms;
             remainingTerms.reserve(static_cast<std::size_t>(tree.any_of().terms_size()));
             for (const auto& term : tree.any_of().terms()) {
-                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements, message);
+                auto reducedTerm = reduceRequirementTreeImpl(term, endorsements, message, snap);
                 if (isEmptyTree(reducedTerm)) {
                     return rsp::proto::ERDAbstractSyntaxTree();
                 }
@@ -923,9 +952,10 @@ bool endorsementMatchesRequirement(const rsp::proto::EndorsementNeeded& requirem
 }
 
 bool messageMatchesRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree,
-                              const rsp::proto::RSPMessage& message) {
+                              const rsp::proto::RSPMessage& message,
+                              const rsp::resource_manager::SchemaSnapshot* schemaSnapshot) {
     try {
-        return evaluateMessageRequirementTree(tree, message);
+        return evaluateMessageRequirementTree(tree, message, schemaSnapshot);
     } catch (const std::runtime_error&) {
         return false;
     }
@@ -933,9 +963,10 @@ bool messageMatchesRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree,
 
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
                                                         const std::vector<Endorsement>& endorsements,
-                                                        const rsp::proto::RSPMessage* message) {
+                                                        const rsp::proto::RSPMessage* message,
+                                                        const rsp::resource_manager::SchemaSnapshot* schemaSnapshot) {
     try {
-        return reduceRequirementTreeImpl(tree, endorsements, message);
+        return reduceRequirementTreeImpl(tree, endorsements, message, schemaSnapshot);
     } catch (const std::runtime_error&) {
         return tree;
     }

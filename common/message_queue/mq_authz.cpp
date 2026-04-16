@@ -1,6 +1,7 @@
 #include "common/message_queue/mq_authz.hpp"
 
 #include "common/message_queue/mq_signing.hpp"
+#include "resource_manager/schema_registry.hpp"
 
 #include <iostream>
 
@@ -9,11 +10,13 @@ namespace rsp::message_queue {
 MessageQueueAuthZ::MessageQueueAuthZ(SuccessCallback success,
                                      FailureCallback failure,
                                      GetEndorsementsCallback getEndorsements,
-                                     rsp::proto::ERDAbstractSyntaxTree authorizationTree)
+                                     rsp::proto::ERDAbstractSyntaxTree authorizationTree,
+                                     const rsp::resource_manager::SchemaRegistry* schemaRegistry)
     : success_(std::move(success)),
       failure_(std::move(failure)),
       getEndorsements_(std::move(getEndorsements)),
-      authorizationTree_(std::move(authorizationTree)) {
+      authorizationTree_(std::move(authorizationTree)),
+      schemaRegistry_(schemaRegistry) {
 }
 
 void MessageQueueAuthZ::handleMessage(Message message, rsp::MessageQueueSharedState&) {
@@ -43,7 +46,15 @@ void MessageQueueAuthZ::handleMessage(Message message, rsp::MessageQueueSharedSt
     }
 
     try {
-        const auto reducedRequirement = rsp::reduceRequirementTree(authorizationTree_, endorsements, &message);
+        // Take an immutable snapshot of schemas before evaluating so
+        // that descriptor changes cannot affect a mid-flight evaluation.
+        std::optional<rsp::resource_manager::SchemaSnapshot> snap;
+        const rsp::resource_manager::SchemaSnapshot* snapPtr = nullptr;
+        if (schemaRegistry_ != nullptr) {
+            snap = schemaRegistry_->snapshot();
+            snapPtr = &*snap;
+        }
+        const auto reducedRequirement = rsp::reduceRequirementTree(authorizationTree_, endorsements, &message, snapPtr);
         if (reducedRequirement.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::NODE_TYPE_NOT_SET) {
             if (trace) {
                 std::cerr << "[mq_authz] success" << std::endl;

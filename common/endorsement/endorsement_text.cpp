@@ -200,6 +200,44 @@ void appendMesNary(const char* op,
     out += ')';
 }
 
+void appendFieldPath(const rsp::proto::ERDASTFieldPath& path, std::string& out) {
+    for (int i = 0; i < path.segments_size(); ++i) {
+        if (i > 0) out += '.';
+        out += path.segments(i);
+    }
+}
+
+void appendFieldValue(const rsp::proto::ERDASTFieldValue& val, std::string& out) {
+    switch (val.value_case()) {
+        case rsp::proto::ERDASTFieldValue::kBytesValue:
+            out += "0x";
+            out += bytesToHex(val.bytes_value());
+            break;
+        case rsp::proto::ERDASTFieldValue::kStringValue:
+            out += '"';
+            out += val.string_value();
+            out += '"';
+            break;
+        case rsp::proto::ERDASTFieldValue::kIntValue:
+            out += std::to_string(val.int_value());
+            break;
+        case rsp::proto::ERDASTFieldValue::kUintValue:
+            out += std::to_string(val.uint_value());
+            out += 'u';
+            break;
+        case rsp::proto::ERDASTFieldValue::kBoolValue:
+            out += val.bool_value() ? "true" : "false";
+            break;
+        case rsp::proto::ERDASTFieldValue::kEnumValue:
+            out += "enum(";
+            out += std::to_string(val.enum_value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTFieldValue::VALUE_NOT_SET:
+            break;
+    }
+}
+
 void appendMessageTree(const rsp::proto::ERDASTMessageTree& tree, std::string& out) {
     switch (tree.node_type_case()) {
         case rsp::proto::ERDASTMessageTree::kAnd:
@@ -225,6 +263,27 @@ void appendMessageTree(const rsp::proto::ERDASTMessageTree& tree, std::string& o
         case rsp::proto::ERDASTMessageTree::kSource:
             out += "SOURCE(";
             out += bytesToUUID(tree.source().source().value());
+            out += ')';
+            break;
+        case rsp::proto::ERDASTMessageTree::kFieldEquals:
+            out += "FIELD_EQ(";
+            appendFieldPath(tree.field_equals().path(), out);
+            out += ", ";
+            appendFieldValue(tree.field_equals().value(), out);
+            out += ')';
+            break;
+        case rsp::proto::ERDASTMessageTree::kFieldExists:
+            out += "FIELD_EXISTS(";
+            appendFieldPath(tree.field_exists().path(), out);
+            out += ')';
+            break;
+        case rsp::proto::ERDASTMessageTree::kFieldContains:
+            out += "FIELD_CONTAINS(";
+            appendFieldPath(tree.field_contains().path(), out);
+            out += ", ";
+            appendFieldPath(tree.field_contains().sub_path(), out);
+            out += ", ";
+            appendFieldValue(tree.field_contains().value(), out);
             out += ')';
             break;
         case rsp::proto::ERDASTMessageTree::kTrueValue:
@@ -512,6 +571,127 @@ struct Parser {
         expect(')');
     }
 
+    // Parse a dot-separated field path (e.g. "destination.value")
+    // Stops at ',' or ')'.
+    rsp::proto::ERDASTFieldPath parseFieldPath() {
+        skipWhitespace();
+        rsp::proto::ERDASTFieldPath path;
+        std::string segment;
+        while (pos < text.size()) {
+            const char c = text[pos];
+            if (c == '.' ) {
+                if (segment.empty()) {
+                    throw std::runtime_error("empty path segment at position " + std::to_string(pos));
+                }
+                path.add_segments(std::move(segment));
+                segment.clear();
+                ++pos;
+                continue;
+            }
+            if (c == ',' || c == ')' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                break;
+            }
+            segment += c;
+            ++pos;
+        }
+        if (!segment.empty()) {
+            path.add_segments(std::move(segment));
+        }
+        if (path.segments_size() == 0) {
+            throw std::runtime_error("empty field path at position " + std::to_string(pos));
+        }
+        return path;
+    }
+
+    // Parse a typed literal value.
+    rsp::proto::ERDASTFieldValue parseFieldValue() {
+        skipWhitespace();
+        rsp::proto::ERDASTFieldValue val;
+        if (pos >= text.size()) {
+            throw std::runtime_error("expected field value at end of input");
+        }
+
+        // Quoted string
+        if (text[pos] == '"') {
+            ++pos;
+            std::string s;
+            while (pos < text.size() && text[pos] != '"') {
+                s += text[pos++];
+            }
+            if (pos >= text.size()) {
+                throw std::runtime_error("unterminated string literal");
+            }
+            ++pos;  // skip closing quote
+            val.set_string_value(std::move(s));
+            return val;
+        }
+
+        // Hex bytes: 0x...
+        if (pos + 1 < text.size() && text[pos] == '0' && (text[pos + 1] == 'x' || text[pos + 1] == 'X')) {
+            pos += 2;
+            val.set_bytes_value(parseHexBytes());
+            return val;
+        }
+
+        // Bool
+        if (startsWithCI("true", 4) && (pos + 4 >= text.size() || !std::isalnum(text[pos + 4]))) {
+            pos += 4;
+            val.set_bool_value(true);
+            return val;
+        }
+        if (startsWithCI("false", 5) && (pos + 5 >= text.size() || !std::isalnum(text[pos + 5]))) {
+            pos += 5;
+            val.set_bool_value(false);
+            return val;
+        }
+
+        // Enum: enum(N)
+        if (startsWith("enum(", 5)) {
+            pos += 5;
+            skipWhitespace();
+            bool negative = false;
+            if (pos < text.size() && text[pos] == '-') { negative = true; ++pos; }
+            int64_t n = 0;
+            while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+                n = n * 10 + (text[pos++] - '0');
+            }
+            if (negative) n = -n;
+            skipWhitespace();
+            expect(')');
+            val.set_enum_value(static_cast<int32_t>(n));
+            return val;
+        }
+
+        // Unsigned integer (trailing 'u')
+        // Or signed integer (optional leading '-')
+        {
+            bool negative = false;
+            std::size_t startPos = pos;
+            if (pos < text.size() && text[pos] == '-') {
+                negative = true;
+                ++pos;
+            }
+            if (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+                uint64_t n = 0;
+                while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9') {
+                    n = n * 10 + static_cast<uint64_t>(text[pos++] - '0');
+                }
+                if (!negative && pos < text.size() && (text[pos] == 'u' || text[pos] == 'U')) {
+                    ++pos;
+                    val.set_uint_value(n);
+                    return val;
+                }
+                int64_t signed_n = static_cast<int64_t>(n);
+                if (negative) signed_n = -signed_n;
+                val.set_int_value(signed_n);
+                return val;
+            }
+            pos = startPos;  // reset if not a number
+        }
+
+        throw std::runtime_error("unexpected field value at position " + std::to_string(pos));
+    }
+
     void parseMesNaryArgs(google::protobuf::RepeatedPtrField<rsp::proto::ERDASTMessageTree>* terms) {
         expect('(');
         skipWhitespace();
@@ -577,6 +757,36 @@ struct Parser {
             pos += 7;
             skipWhitespace();
             tree.mutable_source()->mutable_source()->set_value(parseUUIDBytes());
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("FIELD_EQ(", 9)) {
+            pos += 9;
+            *tree.mutable_field_equals()->mutable_path() = parseFieldPath();
+            skipWhitespace();
+            expect(',');
+            *tree.mutable_field_equals()->mutable_value() = parseFieldValue();
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("FIELD_EXISTS(", 13)) {
+            pos += 13;
+            *tree.mutable_field_exists()->mutable_path() = parseFieldPath();
+            skipWhitespace();
+            expect(')');
+            return tree;
+        }
+        if (startsWith("FIELD_CONTAINS(", 15)) {
+            pos += 15;
+            *tree.mutable_field_contains()->mutable_path() = parseFieldPath();
+            skipWhitespace();
+            expect(',');
+            *tree.mutable_field_contains()->mutable_sub_path() = parseFieldPath();
+            skipWhitespace();
+            expect(',');
+            *tree.mutable_field_contains()->mutable_value() = parseFieldValue();
             skipWhitespace();
             expect(')');
             return tree;
