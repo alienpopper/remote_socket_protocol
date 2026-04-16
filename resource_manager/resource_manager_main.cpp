@@ -66,6 +66,26 @@ static rsp::proto::ERDAbstractSyntaxTree buildMessageRulesTree(const nlohmann::j
     return combined;
 }
 
+// ---------------------------------------------------------------------------
+// Macro expansion – evaluated at config-load time, before rule parsing.
+// ---------------------------------------------------------------------------
+
+struct MacroContext {
+    std::string nodeId;   // hex string from KeyPair::nodeID().toString()
+};
+
+static std::string expandMacros(const std::string& input,
+                                const MacroContext& ctx) {
+    std::string result = input;
+    const std::string macro = "MY_NODEID()";
+    size_t pos = 0;
+    while ((pos = result.find(macro, pos)) != std::string::npos) {
+        result.replace(pos, macro.size(), ctx.nodeId);
+        pos += ctx.nodeId.size();
+    }
+    return result;
+}
+
 static void printUsage(const char* progName) {
     std::cerr << "Usage: " << progName << " [--config <file>]...\n"
               << "  --config <file>  Load a JSON configuration file (may be repeated)\n";
@@ -136,20 +156,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Build authorization tree from "message_rules" array.
-    rsp::proto::ERDAbstractSyntaxTree authzTree;
-    if (config.contains("message_rules")) {
-        try {
-            authzTree = buildMessageRulesTree(config["message_rules"]);
-        } catch (const std::exception& e) {
-            std::cerr << "error parsing message_rules: " << e.what() << '\n';
-            return 1;
-        }
-    } else {
-        authzTree.mutable_true_value();
-    }
-
     // Load keypair from config or generate a new one.
+    // This must happen before message_rules so that macros like MY_NODEID()
+    // can be expanded.
     bool hasKeypair = false;
     rsp::KeyPair loadedKeyPair;
     if (config.contains("keypair")) {
@@ -167,6 +176,34 @@ int main(int argc, char** argv) {
             std::cerr << "error loading keypair: " << e.what() << '\n';
             return 1;
         }
+    }
+
+    // If no keypair was loaded from config, generate one now so that
+    // MY_NODEID() is available for macro expansion in message_rules.
+    if (!hasKeypair) {
+        loadedKeyPair = rsp::KeyPair::generateP256();
+        hasKeypair = true;
+    }
+
+    MacroContext macros;
+    macros.nodeId = loadedKeyPair.nodeID().toString();
+
+    // Build authorization tree from "message_rules" array.
+    rsp::proto::ERDAbstractSyntaxTree authzTree;
+    if (config.contains("message_rules")) {
+        try {
+            // Expand macros in each rule string before parsing.
+            nlohmann::json expandedRules = nlohmann::json::array();
+            for (const auto& rule : config["message_rules"]) {
+                expandedRules.push_back(expandMacros(rule.get<std::string>(), macros));
+            }
+            authzTree = buildMessageRulesTree(expandedRules);
+        } catch (const std::exception& e) {
+            std::cerr << "error parsing message_rules: " << e.what() << '\n';
+            return 1;
+        }
+    } else {
+        authzTree.mutable_true_value();
     }
 
     class ConfiguredResourceManager : public rsp::resource_manager::ResourceManager {
@@ -196,13 +233,8 @@ int main(int argc, char** argv) {
     };
 
     std::unique_ptr<ConfiguredResourceManager> rm;
-    if (hasKeypair) {
-        rm = std::make_unique<ConfiguredResourceManager>(
-            std::move(loadedKeyPair), std::move(transports), std::move(authzTree));
-    } else {
-        rm = std::make_unique<ConfiguredResourceManager>(
-            std::move(transports), std::move(authzTree));
-    }
+    rm = std::make_unique<ConfiguredResourceManager>(
+        std::move(loadedKeyPair), std::move(transports), std::move(authzTree));
 
     std::cout << "resource_manager: node ID " << rm->nodeId().toString() << std::endl;
 
