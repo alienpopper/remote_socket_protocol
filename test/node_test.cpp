@@ -13,6 +13,10 @@ namespace {
 
 class TestNode : public rsp::RSPNode {
 public:
+    ~TestNode() override {
+        stopNodeQueues();
+    }
+
     int run() const override {
         return 0;
     }
