@@ -114,14 +114,14 @@ function waitForExpressReady(expressProcess) {
 
 async function requestEndorsementOrThrow(client, endorsementNodeId, endorsementType, endorsementValue, label) {
     let reply = null;
-    for (let attempt = 0; attempt < 3 && (!reply || reply.status !== ENDORSEMENT_SUCCESS); attempt += 1) {
+    for (let attempt = 0; attempt < 3 && (!reply || (reply.status || 0) !== ENDORSEMENT_SUCCESS); attempt += 1) {
         reply = await withTimeout(
             client.beginEndorsementRequest(endorsementNodeId, endorsementType, endorsementValue),
             3000,
             `${label} endorsement request`
         );
     }
-    if (!reply || reply.status !== ENDORSEMENT_SUCCESS) {
+    if (!reply || (reply.status || 0) !== ENDORSEMENT_SUCCESS) {
         throw new Error(`${label} endorsement failed (status=${reply ? reply.status : 'null'})`);
     }
 }

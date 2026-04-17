@@ -690,6 +690,9 @@ test-openssh-stress: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMEN
 test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 	node test/python_http_server_integration.js $(NODEJS_PING_FIXTURE_TARGET)
 
+test-bsd-sockets-web-service: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
+	node test/bsd_sockets_web_service_integration.js $(NODEJS_PING_FIXTURE_TARGET)
+
 test: test-base-types test-keypair test-endorsement test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/sshd/sshd.proto name_service/name_service.proto $(PROTOBUF_PROTOC)

@@ -2843,6 +2843,10 @@ function normalizeFieldValue(field, value, path) {
     case "enum":
         return normalizeEnum(field.type, value, path);
     case "message":
+        if (field.type === "Any") {
+            // google.protobuf.Any is not a fixed schema type — pass it through unchanged.
+            return value;
+        }
         return normalizeMessage(field.type, value, path);
     default:
         fail(path, `unsupported field kind ${field.kind}`);
@@ -2974,31 +2978,31 @@ class MessageHasher {
 function hashScalar(field, value, hasher) {
     switch (field.type) {
     case "bool":
-        hasher.feedBool(value);
+        hasher.feedBool(value || false);
         return;
     case "string":
-        hasher.feedBytes(Buffer.from(value, "utf8"));
+        hasher.feedBytes(Buffer.from(value || "", "utf8"));
         return;
     case "bytes":
-        hasher.feedBytes(Buffer.from(value, "base64"));
+        hasher.feedBytes(value != null ? Buffer.from(value, "base64") : Buffer.alloc(0));
         return;
     case "uint32":
     case "fixed32":
-        hasher.feedUint32(value);
+        hasher.feedUint32(value || 0);
         return;
     case "int32":
     case "sint32":
     case "sfixed32":
-        hasher.feedInt32(value);
+        hasher.feedInt32(value || 0);
         return;
     case "uint64":
     case "fixed64":
-        hasher.feedUint64(BigInt(value));
+        hasher.feedUint64(BigInt(value || 0));
         return;
     case "int64":
     case "sint64":
     case "sfixed64":
-        hasher.feedUint64(BigInt.asUintN(64, BigInt(value)));
+        hasher.feedUint64(BigInt.asUintN(64, BigInt(value || 0)));
         return;
     default:
         fail(field.type, "unsupported scalar type for hashing");

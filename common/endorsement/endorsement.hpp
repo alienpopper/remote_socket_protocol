@@ -54,7 +54,11 @@ bool messageMatchesRequirement(const rsp::proto::ERDAbstractSyntaxTree& tree,
 
 rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
                                                         const std::vector<Endorsement>& endorsements,
-                                                        const rsp::proto::RSPMessage* message = nullptr,
-                                                        const rsp::resource_manager::SchemaSnapshot* schemaSnapshot = nullptr);
+                                                        const rsp::proto::RSPMessage* message = nullptr);
+
+rsp::proto::ERDAbstractSyntaxTree reduceRequirementTree(const rsp::proto::ERDAbstractSyntaxTree& tree,
+                                                        const std::vector<Endorsement>& endorsements,
+                                                        const rsp::proto::RSPMessage* message,
+                                                        const rsp::resource_manager::SchemaSnapshot* schemaSnapshot);
 
 }  // namespace rsp

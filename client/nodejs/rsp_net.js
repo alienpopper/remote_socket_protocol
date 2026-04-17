@@ -39,7 +39,7 @@ function trace(message) {
 // is closed when the stream is ended or destroyed.
 class RSPSocket extends Duplex {
     constructor(client, socketId) {
-        super({allowHalfOpen: false});
+        super({allowHalfOpen: true});
         this._client = client;
         this._socketId = socketId;
         this._closing = false;
@@ -55,7 +55,7 @@ class RSPSocket extends Duplex {
         const status = reply.error || 0;
         trace(`socket=${this._socketId} reply_status=${status}`);
         if (status === STREAM_DATA) {
-            const data = reply.data ? Buffer.from(reply.data, 'hex') : Buffer.alloc(0);
+            const data = reply.data ? Buffer.from(reply.data, 'base64') : Buffer.alloc(0);
             trace(`socket=${this._socketId} data_len=${data.length}`);
             this.push(data);
         } else if (status === STREAM_CLOSED || status === STREAM_ERROR) {

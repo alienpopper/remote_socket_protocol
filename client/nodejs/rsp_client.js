@@ -1272,7 +1272,7 @@ class RSPClient extends EventEmitter {
         const requested = {
             subject: {value: encodeNodeIdForSigner(this.nodeId)},
             endorsement_service: {value: encodeNodeIdForSigner(this.nodeId)},
-            endorsement_type: {value: normalizeGuid(endorsementType)},
+            endorsement_type: {value: Buffer.from(normalizeGuid(endorsementType), 'hex').toString('base64')},
             endorsement_value: endorsementValueB64,
             valid_until: {milliseconds_since_epoch: Date.now() + 86400000},
         };
@@ -1295,7 +1295,7 @@ class RSPClient extends EventEmitter {
                 continue;
             }
 
-            if (done.status === ENDORSEMENT_SUCCESS && done.new_endorsement) {
+            if ((done.status || 0) === ENDORSEMENT_SUCCESS && done.new_endorsement) {
                 this._cacheEndorsement(done.new_endorsement);
             }
             return done;

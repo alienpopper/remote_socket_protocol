@@ -393,106 +393,131 @@ void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementN
     }
 }
 
+// Helper: hash the service_message Any field.
+void hashServiceMessage(MessageHasher& hasher, const google::protobuf::Any& any) {
+    hasher.feedBytes(any.type_url());
+
+    // Resolve the concrete message type from the linked-in descriptor pool and
+    // hash its fields reflectively so the result matches the canonical hash the
+    // JS/Python clients produce from their JSON schemas.
+    const std::string& typeUrl = any.type_url();
+    const auto slashPos = typeUrl.rfind('/');
+    const std::string fullName = slashPos != std::string::npos
+                                     ? typeUrl.substr(slashPos + 1)
+                                     : typeUrl;
+    const auto* descriptor = google::protobuf::DescriptorPool::generated_pool()
+                                 ->FindMessageTypeByName(fullName);
+    if (descriptor != nullptr) {
+        const auto* prototype = google::protobuf::MessageFactory::generated_factory()
+                                    ->GetPrototype(descriptor);
+        if (prototype != nullptr) {
+            std::unique_ptr<google::protobuf::Message> inner(prototype->New());
+            if (any.UnpackTo(inner.get())) {
+                hashMessageReflective(hasher, *inner);
+            }
+        }
+    }
+}
+
 void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message) {
+    // Hash fields in ascending field-number order to match the JS/Python clients,
+    // which iterate the schema in field-number order and skip absent optional fields.
+
+    // field 1: destination
     if (message.has_destination()) {
         hasher.tag(1);
         hashNodeId(hasher, message.destination());
     }
 
+    // field 2: source
     if (message.has_source()) {
         hasher.tag(2);
         hashNodeId(hasher, message.source());
     }
 
-    if (message.has_trace()) {
-        hasher.tag(24);
-        hasher.feedBool(message.trace().value());
-    }
-
-    switch (message.core_message_case()) {
-    case rsp::proto::RSPMessage::kChallengeRequest:
+    // fields 3–8: core_message oneof (challenge_request, identity, route, error,
+    //             ping_request, ping_reply)
+    if (message.has_challenge_request()) {
         hasher.tag(3);
         hashChallengeRequest(hasher, message.challenge_request());
-        break;
-    case rsp::proto::RSPMessage::kIdentity:
+    }
+    if (message.has_identity()) {
         hasher.tag(4);
         hashIdentity(hasher, message.identity());
-        break;
-    case rsp::proto::RSPMessage::kRoute:
+    }
+    if (message.has_route()) {
         hasher.tag(5);
         hashRouteUpdate(hasher, message.route());
-        break;
-    case rsp::proto::RSPMessage::kError:
+    }
+    if (message.has_error()) {
         hasher.tag(6);
         hashError(hasher, message.error());
-        break;
-    case rsp::proto::RSPMessage::kPingRequest:
+    }
+    if (message.has_ping_request()) {
         hasher.tag(7);
         hashPingRequest(hasher, message.ping_request());
-        break;
-    case rsp::proto::RSPMessage::kPingReply:
+    }
+    if (message.has_ping_reply()) {
         hasher.tag(8);
         hashPingReply(hasher, message.ping_reply());
-        break;
-    case rsp::proto::RSPMessage::kResourceAdvertisement:
+    }
+
+    // fields 16–17: core_message oneof (resource_advertisement, resource_query)
+    if (message.has_resource_advertisement()) {
         hasher.tag(16);
         hashResourceAdvertisement(hasher, message.resource_advertisement());
-        break;
-    case rsp::proto::RSPMessage::kResourceQuery:
+    }
+    if (message.has_resource_query()) {
         hasher.tag(17);
         hashResourceQuery(hasher, message.resource_query());
-        break;
-    case rsp::proto::RSPMessage::kEndorsementNeeded:
-        hasher.tag(23);
-        hashEndorsementNeeded(hasher, message.endorsement_needed());
-        break;
-    case rsp::proto::RSPMessage::CORE_MESSAGE_NOT_SET:
-        break;
     }
 
-    // Service-specific payload (google.protobuf.Any): hash type_url then hash
-    // the inner message field-by-field using reflection so the result matches
-    // the canonical hash the JS/Python clients produce from their JSON schemas.
-    if (message.has_service_message()) {
-        hasher.tag(200);
-        const auto& any = message.service_message();
-        hasher.feedBytes(any.type_url());
-
-        // Resolve the concrete message type from the linked-in descriptor pool
-        const std::string& typeUrl = any.type_url();
-        const auto slashPos = typeUrl.rfind('/');
-        const std::string fullName = slashPos != std::string::npos
-                                         ? typeUrl.substr(slashPos + 1)
-                                         : typeUrl;
-        const auto* descriptor = google::protobuf::DescriptorPool::generated_pool()
-                                     ->FindMessageTypeByName(fullName);
-        if (descriptor != nullptr) {
-            const auto* prototype = google::protobuf::MessageFactory::generated_factory()
-                                        ->GetPrototype(descriptor);
-            if (prototype != nullptr) {
-                std::unique_ptr<google::protobuf::Message> inner(prototype->New());
-                if (any.UnpackTo(inner.get())) {
-                    hashMessageReflective(hasher, *inner);
-                }
-            }
-        }
-    }
-
+    // field 22: nonce (not in oneof)
     if (message.has_nonce()) {
         hasher.tag(22);
         hashUuid(hasher, message.nonce());
     }
 
+    // field 23: core_message oneof (endorsement_needed)
+    if (message.has_endorsement_needed()) {
+        hasher.tag(23);
+        hashEndorsementNeeded(hasher, message.endorsement_needed());
+    }
+
+    // field 24: trace (not in oneof)
+    if (message.has_trace()) {
+        hasher.tag(24);
+        hasher.feedBool(message.trace().value());
+    }
+
+    // fields 25–26: core_message oneof (schema_request, schema_reply)
+    if (message.has_schema_request()) {
+        hasher.tag(25);
+        hashMessageReflective(hasher, message.schema_request());
+    }
+    if (message.has_schema_reply()) {
+        hasher.tag(26);
+        hashMessageReflective(hasher, message.schema_reply());
+    }
+
+    // field 100: endorsements (repeated — always hash count)
     hasher.tag(100);
     hasher.feedUint32(static_cast<uint32_t>(message.endorsements_size()));
     for (int index = 0; index < message.endorsements_size(); ++index) {
         hashEndorsement(hasher, message.endorsements(index));
     }
 
+    // field 101: identities (repeated — always hash count)
     hasher.tag(101);
     hasher.feedUint32(static_cast<uint32_t>(message.identities_size()));
     for (int index = 0; index < message.identities_size(); ++index) {
         hashIdentity(hasher, message.identities(index));
+    }
+
+    // field 200: service_message (google.protobuf.Any)
+    if (message.has_service_message()) {
+        hasher.tag(200);
+        hashServiceMessage(hasher, message.service_message());
     }
 }
 
