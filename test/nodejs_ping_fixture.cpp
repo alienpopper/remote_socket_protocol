@@ -55,15 +55,20 @@ void signalHandler(int) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Optional first argument: the IP address to advertise in the readiness JSON
+    // for remote clients.  Defaults to 127.0.0.1 (loopback only).
+    const std::string advertisedIp = (argc >= 2) ? std::string(argv[1]) : "127.0.0.1";
+
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
     try {
         std::cerr << "[fixture] startup" << std::endl;
         auto serverTransport = std::make_shared<rsp::transport::TcpTransport>();
-        require(serverTransport->listen("127.0.0.1:0"), "failed to start the RM TCP listener");
-        std::cerr << "[fixture] RM listening on tcp:127.0.0.1:" << serverTransport->listenedPort() << std::endl;
+        require(serverTransport->listen("0.0.0.0:0"), "failed to start the RM TCP listener");
+        const uint16_t port = serverTransport->listenedPort();
+        std::cerr << "[fixture] RM listening on tcp:0.0.0.0:" << port << std::endl;
 
         TestResourceManager resourceManager({serverTransport});
         std::cerr << "[fixture] RM created" << std::endl;
@@ -80,16 +85,17 @@ int main() {
         const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
         auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
 
-        const std::string transportSpec = std::string("tcp:127.0.0.1:") + std::to_string(serverTransport->listenedPort());
+        const std::string internalSpec = std::string("tcp:127.0.0.1:") + std::to_string(port);
+        const std::string advertisedSpec = std::string("tcp:") + advertisedIp + ":" + std::to_string(port);
 
         const auto endorsementConnectionId =
-            endorsementService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            endorsementService->connectToResourceManager(internalSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cerr << "[fixture] ES connected" << std::endl;
         const auto clientConnectionId =
-            clientService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            clientService->connectToResourceManager(internalSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cerr << "[fixture] C++ client connected" << std::endl;
         const auto resourceServiceConnectionId =
-            resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            resourceService->connectToResourceManager(internalSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cerr << "[fixture] RS connected" << std::endl;
 
         require(endorsementService->hasConnection(endorsementConnectionId),
@@ -104,7 +110,7 @@ int main() {
         std::cerr << "[fixture] all 3 encodings authenticated" << std::endl;
 
         std::cout << "{"
-                  << "\"transport_spec\":\"" << transportSpec << "\","
+                  << "\"transport_spec\":\"" << advertisedSpec << "\","
                   << "\"resource_manager_node_id\":\"" << resourceManager.nodeId().toString() << "\","
                   << "\"endorsement_service_node_id\":\"" << endorsementServiceNodeId.toString() << "\","
                   << "\"resource_service_node_id\":\"" << resourceServiceNodeId.toString() << "\","
