@@ -117,8 +117,12 @@ free_port() {
 RM_PORT=$(free_port)
 RM_LISTEN="0.0.0.0:$RM_PORT"
 RM_ADVERTISE="$MACOS_ADDR:$RM_PORT"
+RM_CONF="$WORK/rm.conf.json"
+cat >"$RM_CONF" <<EOF
+{"transports": ["tcp:$RM_LISTEN"]}
+EOF
 log "Starting RM on $RM_LISTEN (advertised as $RM_ADVERTISE)"
-"$RM_BIN" "$RM_LISTEN" >"$RM_LOG" 2>&1 &
+"$RM_BIN" --config "$RM_CONF" >"$RM_LOG" 2>&1 &
 RM_PID=$!
 wait_for_file_line "$RM_LOG" "listening on" 10 \
     || { echo "FAIL: RM did not start"; cat "$RM_LOG"; exit 1; }
@@ -126,7 +130,7 @@ log "RM up (pid=$RM_PID)"
 
 # ── start ES ─────────────────────────────────────────────────────────────────
 log "Starting ES"
-"$ES_BIN" "tcp:$RM_LISTEN" >"$ES_LOG" 2>&1 &
+"$ES_BIN" "tcp:127.0.0.1:$RM_PORT" >"$ES_LOG" 2>&1 &
 ES_PID=$!
 wait_for_file_line "$ES_LOG" "node ID:" 15 \
     || { echo "FAIL: ES did not emit node ID"; cat "$ES_LOG"; exit 1; }
@@ -191,7 +195,7 @@ EOF
 # ── start rsp_sshd on the Linux box ──────────────────────────────────────────
 log "Starting rsp_sshd on $LINUX_HOST"
 ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$LINUX_USER@$LINUX_HOST" \
-    "setsid $LINUX_SSHD_BIN $LINUX_WORK/rsp_sshd.conf.json \
+    "nohup $LINUX_SSHD_BIN $LINUX_WORK/rsp_sshd.conf.json \
          > $LINUX_WORK/rsp_sshd.log 2>&1 & echo \$! > $LINUX_WORK/rsp_sshd.pid"
 
 wait_for_remote_log_line "Node ID:" 30 \
@@ -213,7 +217,7 @@ log "rsp_sshd up on Linux (node=$SSHD_NODE_ID)"
 # ── rsp_ssh client config (on this macOS box) ─────────────────────────────────
 cat >"$RSP_SSH_CONF" <<EOF
 {
-  "rsp_transport": "tcp:$RM_LISTEN",
+  "rsp_transport": "tcp:127.0.0.1:$RM_PORT",
   "resource_service_node_id": "$SSHD_NODE_ID",
   "endorsement_node_id": "$ES_NODE_ID",
   "host_port": "127.0.0.1:22",

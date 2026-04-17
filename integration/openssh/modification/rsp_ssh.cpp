@@ -194,13 +194,12 @@ int main(int argc, char* argv[]) {
     }
 
     const rsp::NodeID rsNodeId{cfg.resourceServiceNodeId};
-    const auto sockFd = client->connectTCPSocket(
-        rsNodeId, cfg.hostPort, cfg.connectTimeoutMs, cfg.connectRetries);
+    const auto sockFd = client->connectSshdSocket(rsNodeId, cfg.connectTimeoutMs);
     if (!sockFd.has_value() || !rsp::os::isValidSocket(*sockFd)) {
-        log("Failed to connect RSP socket to " + cfg.hostPort);
+        log("Failed to connect RSP sshd socket");
         return 1;
     }
-    log("RSP socket connected to " + cfg.hostPort);
+    log("RSP sshd socket connected");
 
     const int fd = static_cast<int>(*sockFd);
     gSocketFd.store(fd);

@@ -145,6 +145,18 @@ public:
                                                                         uint32_t timeoutMilliseconds = 0,
                                                                         uint32_t retries = 0,
                                                                         uint32_t retryMilliseconds = 0);
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> connectSshdEx(rsp::NodeID nodeId,
+                                                                        uint32_t timeoutMilliseconds = 0,
+                                                                        bool asyncData = false,
+                                                                        bool shareSocket = false,
+                                                                        bool useSocket = false);
+    RSPCLIENT_API std::optional<rsp::GUID> connectSshd(rsp::NodeID nodeId,
+                                                        uint32_t timeoutMilliseconds = 0,
+                                                        bool asyncData = false,
+                                                        bool shareSocket = false,
+                                                        bool useSocket = false);
+    RSPCLIENT_API std::optional<rsp::os::SocketHandle> connectSshdSocket(rsp::NodeID nodeId,
+                                                                          uint32_t timeoutMilliseconds = 0);
     RSPCLIENT_API bool streamSend(const rsp::GUID& socketId, const std::string& data);
     RSPCLIENT_API std::optional<rsp::proto::StreamReply> streamRecvEx(const rsp::GUID& socketId,
                                                                          uint32_t maxBytes = 4096,

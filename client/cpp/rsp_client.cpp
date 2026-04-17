@@ -7,6 +7,7 @@
 #include "common/service_message.hpp"
 
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
+#include "resource_service/sshd/sshd.pb.h"
 #include "name_service/name_service.pb.h"
 
 #include <chrono>
@@ -877,6 +878,96 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectTCPSocket(rsp::NodeID nod
 
     return applicationSocket;
 }
+
+std::optional<rsp::proto::StreamReply> RSPClient::connectSshdEx(rsp::NodeID nodeId,
+                                                                  uint32_t timeoutMilliseconds,
+                                                                  bool asyncData,
+                                                                  bool shareSocket,
+                                                                  bool useSocket) {
+    const rsp::GUID socketId;
+    rsp::proto::RSPMessage request;
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    rsp::proto::ConnectSshd connectReq;
+    *connectReq.mutable_stream_id() = toProtoStreamId(socketId);
+    connectReq.set_use_socket(useSocket);
+    if (timeoutMilliseconds > 0) {
+        connectReq.set_timeout_ms(timeoutMilliseconds);
+    }
+    if (asyncData) {
+        connectReq.set_async_data(true);
+    }
+    if (shareSocket) {
+        connectReq.set_share_socket(true);
+    }
+    rsp::packServiceMessage(request, connectReq);
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingConnects_[socketId] = PendingConnectState{};
+    }
+
+    if (!messageClient_->send(request)) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        pendingConnects_.erase(socketId);
+        return std::nullopt;
+    }
+
+    std::unique_lock<std::mutex> lock(stateMutex_);
+    const bool replied = stateChanged_.wait_for(lock, std::chrono::seconds(5), [this, &socketId]() {
+        const auto iterator = pendingConnects_.find(socketId);
+        return stopping_ || (iterator != pendingConnects_.end() && iterator->second.completed);
+    });
+    const auto iterator = pendingConnects_.find(socketId);
+    if (!replied || stopping_ || iterator == pendingConnects_.end()) {
+        pendingConnects_.erase(socketId);
+        return std::nullopt;
+    }
+
+    auto reply = iterator->second.reply;
+    pendingConnects_.erase(iterator);
+    if (reply.has_value() && reply->error() == rsp::proto::SUCCESS) {
+        if (!reply->has_stream_id()) {
+            *reply->mutable_stream_id() = toProtoStreamId(socketId);
+        }
+        streamRoutes_[socketId] = nodeId;
+    }
+
+    return reply;
+}
+
+std::optional<rsp::GUID> RSPClient::connectSshd(rsp::NodeID nodeId,
+                                                  uint32_t timeoutMilliseconds,
+                                                  bool asyncData,
+                                                  bool shareSocket,
+                                                  bool useSocket) {
+    const auto reply = connectSshdEx(nodeId, timeoutMilliseconds, asyncData, shareSocket, useSocket);
+    if (!reply.has_value() || reply->error() != rsp::proto::SUCCESS || !reply->has_stream_id()) {
+        return std::nullopt;
+    }
+    return fromProtoStreamId(reply->stream_id());
+}
+
+std::optional<rsp::os::SocketHandle> RSPClient::connectSshdSocket(rsp::NodeID nodeId,
+                                                                    uint32_t timeoutMilliseconds) {
+    rsp::os::SocketHandle applicationSocket = rsp::os::invalidSocket();
+    rsp::os::SocketHandle bridgeSocket = rsp::os::invalidSocket();
+    if (!rsp::os::createSocketPair(applicationSocket, bridgeSocket)) {
+        return std::nullopt;
+    }
+
+    const auto socketId = connectSshd(nodeId, timeoutMilliseconds, true, false, false);
+    if (!socketId.has_value()) {
+        rsp::os::closeSocket(applicationSocket);
+        rsp::os::closeSocket(bridgeSocket);
+        return std::nullopt;
+    }
+
+    const auto bridgeState = attachNativeStreamBridge(*socketId, bridgeSocket);
+    startNativeStreamBridgeWorker(*socketId, bridgeState);
+
+    return applicationSocket;
+}
+
 
 std::shared_ptr<RSPClient::NativeStreamBridgeState> RSPClient::attachNativeStreamBridge(
     const rsp::GUID& socketId,
