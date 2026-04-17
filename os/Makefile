@@ -19,5 +19,8 @@ else
 		OS_COMMON_SOURCE := os/linux/os_fileops.cpp
 		OS_SOCKET_SOURCE := os/linux/os_socket.cpp
 		OS_SOURCE := os/linux/os_random.cpp
+		# abseil inline constinit variables appear in both the combined protobuf
+		# archive and our own TUs; GNU ld rejects this unless we allow it.
+		OS_SYSTEM_LIBS += -Wl,--allow-multiple-definition
 	endif
 endif
