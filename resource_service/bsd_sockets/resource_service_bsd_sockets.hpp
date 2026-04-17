@@ -62,6 +62,8 @@ protected:
     static rsp::proto::StreamID toProtoStreamId(const rsp::GUID& socketId);
     static std::optional<rsp::GUID> fromProtoStreamId(const rsp::proto::StreamID& socketId);
 
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
+
 private:
     struct ManagedSocketState {
         rsp::transport::TransportHandle transport;
@@ -90,8 +92,6 @@ private:
         std::condition_variable acceptedChanged;
         std::deque<rsp::transport::ConnectionHandle> acceptedConnections;
     };
-
-    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
 
     bool handleConnectTCPRequest(const rsp::proto::RSPMessage& message);
     bool handleAcceptTCP(const rsp::proto::RSPMessage& message);
