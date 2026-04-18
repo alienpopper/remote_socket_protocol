@@ -1,0 +1,9 @@
+{
+  "name": "rsp-client-full",
+  "version": "1.0.0",
+  "description": "Full RSP Node.js client with protobuf support and pluggable transports/encodings",
+  "main": "rsp_client.js",
+  "dependencies": {
+    "protobufjs": "^7.4.0"
+  }
+}
