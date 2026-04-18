@@ -604,6 +604,10 @@ $(RSP_CLI_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB)
 
 RSP_SSHD_OBJECTS := \
 	$(FULL_CLIENT_LIBRARY_OBJECTS) \
+	$(OBJ_DIR)/common/endorsement/endorsement.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
+	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
+	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
 	$(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o
@@ -691,6 +695,8 @@ test-openssh-stress: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMEN
 test-remote-sshd: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 	bash test/remote_sshd_integration.sh $(BIN_DIR)
 
+test-remote-sshd-ns: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(NAME_SERVICE_TARGET)
+	bash test/remote_sshd_ns_integration.sh $(BIN_DIR)
 
 test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 	node test/python_http_server_integration.js $(NODEJS_PING_FIXTURE_TARGET)

@@ -1,17 +1,30 @@
 #include "name_service/name_service.hpp"
 
+#include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
 #include "resource_service/schema_helpers.hpp"
 
 #include "name_service/name_service.pb.h"
 #include "name_service/name_service_desc.hpp"
 
+#include <cstring>
 #include <iostream>
 #include <utility>
 
 namespace rsp::name_service {
 
 namespace {
+
+rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
+    rsp::proto::NodeId protoNodeId;
+    std::string value(16, '\0');
+    const uint64_t high = nodeId.high();
+    const uint64_t low = nodeId.low();
+    std::memcpy(value.data(), &high, sizeof(high));
+    std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
+    protoNodeId.set_value(value);
+    return protoNodeId;
+}
 
 using RecordKey = std::tuple<std::string, std::string, std::string>;
 
@@ -114,7 +127,11 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::proto::RSPMessage response;
-    *response.mutable_destination() = message.source();
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
 }
@@ -146,7 +163,11 @@ bool NameService::handleReadRequest(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::proto::RSPMessage response;
-    *response.mutable_destination() = message.source();
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
 }
@@ -175,7 +196,11 @@ bool NameService::handleUpdateRequest(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::proto::RSPMessage response;
-    *response.mutable_destination() = message.source();
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
 }
@@ -204,7 +229,11 @@ bool NameService::handleDeleteRequest(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::proto::RSPMessage response;
-    *response.mutable_destination() = message.source();
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
 }
@@ -240,7 +269,11 @@ bool NameService::handleQueryRequest(const rsp::proto::RSPMessage& message) {
     }
 
     rsp::proto::RSPMessage response;
-    *response.mutable_destination() = message.source();
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
 }

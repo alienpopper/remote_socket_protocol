@@ -106,7 +106,8 @@ int main(int argc, char** argv) {
     try {
         nameService->connectToResourceManager(rmTransportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cout << "rsp_name_service: connected to " << rmTransportSpec
-                  << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n';
+                  << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n'
+                  << std::flush;
         return nameService->run();
     } catch (const std::exception& exception) {
         std::cerr << "rsp_name_service failed: " << exception.what() << '\n';

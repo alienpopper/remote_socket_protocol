@@ -17,7 +17,9 @@
 #include "client/cpp/rsp_client.hpp"
 #include "common/endorsement/well_known_endorsements.h"
 #include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "os/os_socket.hpp"
+#include "resource_service/sshd/resource_service_sshd.hpp"
 #include "third_party/json/single_include/nlohmann/json.hpp"
 
 #include <atomic>
@@ -52,7 +54,8 @@ void signalHandler(int) {
 
 struct Config {
     std::string rspTransport;
-    std::string resourceServiceNodeId;
+    std::string resourceServiceNodeId;   // direct node ID (mutually exclusive with resourceServiceName)
+    std::string resourceServiceName;     // name to look up in NS (mutually exclusive with resourceServiceNodeId)
     std::string endorsementNodeId;   // optional
     std::string hostPort = "127.0.0.1:22";
     uint32_t    connectTimeoutMs = 5000;
@@ -69,8 +72,17 @@ Config loadConfig(const std::string& path) {
     file >> j;
 
     Config cfg;
-    cfg.rspTransport          = j.at("rsp_transport").get<std::string>();
-    cfg.resourceServiceNodeId = j.at("resource_service_node_id").get<std::string>();
+    cfg.rspTransport = j.at("rsp_transport").get<std::string>();
+
+    if (j.contains("resource_service_node_id")) {
+        cfg.resourceServiceNodeId = j["resource_service_node_id"].get<std::string>();
+    }
+    if (j.contains("resource_service_name")) {
+        cfg.resourceServiceName = j["resource_service_name"].get<std::string>();
+    }
+    if (cfg.resourceServiceNodeId.empty() && cfg.resourceServiceName.empty()) {
+        throw std::runtime_error("Config must specify resource_service_node_id or resource_service_name");
+    }
 
     if (j.contains("endorsement_node_id")) {
         cfg.endorsementNodeId = j["endorsement_node_id"].get<std::string>();
@@ -193,7 +205,58 @@ int main(int argc, char* argv[]) {
         log("Endorsements acquired");
     }
 
-    const rsp::NodeID rsNodeId{cfg.resourceServiceNodeId};
+    // Resolve the sshd node ID — either from config or via name lookup.
+    rsp::NodeID rsNodeId;
+    if (!cfg.resourceServiceNodeId.empty()) {
+        rsNodeId = rsp::NodeID{cfg.resourceServiceNodeId};
+    } else {
+        // Discover NS nodes via RM, then look up the configured service name.
+        const auto rmNodeIdOpt = client->peerNodeID(connId);
+        if (!rmNodeIdOpt.has_value()) {
+            log("Failed to get RM node ID for name lookup");
+            return 1;
+        }
+        const auto queryResult = client->resourceList(*rmNodeIdOpt, "");
+        if (!queryResult.has_value()) {
+            log("Resource list query failed");
+            return 1;
+        }
+        bool resolved = false;
+        for (const auto& svc : queryResult->services()) {
+            bool isNS = false;
+            for (const auto& url : svc.schema().accepted_type_urls()) {
+                if (url == "type.rsp/rsp.proto.NameCreateRequest") {
+                    isNS = true;
+                    break;
+                }
+            }
+            if (!isNS) continue;
+
+            const auto nsNodeIdOpt = rsp::nodeIdFromSourceField(svc.node_id());
+            if (!nsNodeIdOpt.has_value()) continue;
+
+            log("Querying NS " + nsNodeIdOpt->toString() + " for name '" + cfg.resourceServiceName + "'");
+            const auto nameReply = client->nameQuery(
+                *nsNodeIdOpt,
+                cfg.resourceServiceName,
+                std::nullopt,
+                rsp::resource_service::kSshdNameType);
+            if (!nameReply.has_value() || nameReply->records().empty()) continue;
+
+            const auto ownerNodeIdOpt = rsp::nodeIdFromSourceField(nameReply->records(0).owner());
+            if (!ownerNodeIdOpt.has_value()) continue;
+
+            rsNodeId = *ownerNodeIdOpt;
+            log("Resolved '" + cfg.resourceServiceName + "' to node " + rsNodeId.toString());
+            resolved = true;
+            break;
+        }
+        if (!resolved) {
+            log("Name lookup failed for '" + cfg.resourceServiceName + "'");
+            return 1;
+        }
+    }
+
     const auto sockFd = client->connectSshdSocket(rsNodeId, cfg.connectTimeoutMs);
     if (!sockFd.has_value() || !rsp::os::isValidSocket(*sockFd)) {
         log("Failed to connect RSP sshd socket");

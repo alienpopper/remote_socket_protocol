@@ -14,8 +14,12 @@
 
 #include "resource_service/sshd/resource_service_sshd.hpp"
 
+#define RSPCLIENT_STATIC
+#include "client/cpp/rsp_client.hpp"
+
 #include "common/keypair.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
 #include "common/transport/transport.hpp"
 #include "resource_service/schema_helpers.hpp"
@@ -71,6 +75,7 @@ SshdConfig loadSshdConfig(const std::string& path) {
     if (j.contains("sshd_path"))   cfg.sshdPath   = j["sshd_path"].get<std::string>();
     if (j.contains("sshd_config")) cfg.sshdConfig = j["sshd_config"].get<std::string>();
     if (j.contains("sshd_debug"))  cfg.sshdDebug  = j["sshd_debug"].get<bool>();
+    if (j.contains("ns_hostname")) cfg.nsHostname  = j["ns_hostname"].get<std::string>();
     return cfg;
 }
 
@@ -303,18 +308,93 @@ int main(int argc, char* argv[]) {
 
     auto rs = rsp::resource_service::SshdResourceService::create(cfg);
 
+    log("Connecting to RSP transport: " + cfg.rspTransport);
     const auto connId = rs->connectToResourceManager(
         cfg.rspTransport, rsp::message_queue::kAsciiHandshakeEncoding);
     if (connId == rsp::GUID{}) {
-        std::cerr << "[rsp-sshd] Failed to connect to resource manager: " << cfg.rspTransport << '\n';
+        log("Failed to connect to resource manager: " + cfg.rspTransport);
         return 1;
     }
-    std::cerr << "[rsp-sshd] Connected to RSP transport: " << cfg.rspTransport << '\n';
-    std::cerr << "[rsp-sshd] Node ID: " << rs->nodeId().toString() << '\n';
-    std::cerr << "[rsp-sshd] Registered as ResourceService — ready to accept SSH connections\n";
+    log("Connected to RSP transport: " + cfg.rspTransport);
+    log("Node ID: " + rs->nodeId().toString());
+    log("Registered as ResourceService — ready to accept SSH connections");
+
+    // If a hostname is configured, register with the name service in the background.
+    // This runs in a separate thread so sshd can immediately accept connections
+    // while the second RM connection (and its authn handshake) completes asynchronously.
+    std::thread nsThread;
+    if (!cfg.nsHostname.empty()) {
+        const std::string transport = cfg.rspTransport;
+        const std::string hostname  = cfg.nsHostname;
+        const rsp::NodeID sshdNodeId = rs->nodeId();
+
+        nsThread = std::thread([transport, hostname, sshdNodeId]() {
+            auto nsClient = rsp::client::RSPClient::create();
+            try {
+                const auto nsConnId = nsClient->connectToResourceManager(
+                    transport, rsp::message_queue::kAsciiHandshakeEncoding);
+                if (nsConnId == rsp::GUID{}) {
+                    std::cerr << "[rsp-sshd] Warning: could not open NS discovery connection\n";
+                    return;
+                }
+                const auto rmNodeIdOpt = nsClient->peerNodeID(nsConnId);
+                if (!rmNodeIdOpt.has_value()) {
+                    std::cerr << "[rsp-sshd] Warning: could not get RM node ID for NS\n";
+                    return;
+                }
+                std::cerr << "[rsp-sshd] Querying RM " << rmNodeIdOpt->toString()
+                          << " for name service nodes\n";
+                const auto queryResult = nsClient->resourceList(*rmNodeIdOpt, "");
+                if (!queryResult.has_value()) {
+                    std::cerr << "[rsp-sshd] Warning: resource list query timed out\n";
+                    return;
+                }
+                std::cerr << "[rsp-sshd] Resource list returned "
+                          << queryResult->services_size() << " service(s)\n";
+                int nsCount = 0;
+                for (const auto& svc : queryResult->services()) {
+                    bool isNS = false;
+                    for (const auto& url : svc.schema().accepted_type_urls()) {
+                        if (url == "type.rsp/rsp.proto.NameCreateRequest") {
+                            isNS = true;
+                            break;
+                        }
+                    }
+                    if (!isNS) continue;
+
+                    const auto nsNodeIdOpt = rsp::nodeIdFromSourceField(svc.node_id());
+                    if (!nsNodeIdOpt.has_value()) continue;
+
+                    const auto reply = nsClient->nameCreate(
+                        *nsNodeIdOpt,
+                        hostname,
+                        sshdNodeId,
+                        rsp::resource_service::kSshdNameType,
+                        sshdNodeId);
+                    if (reply.has_value()) {
+                        std::cerr << "[rsp-sshd] Registered hostname '" << hostname
+                                  << "' with NS node " << nsNodeIdOpt->toString() << '\n';
+                        ++nsCount;
+                    } else {
+                        std::cerr << "[rsp-sshd] Warning: nameCreate failed for NS "
+                                  << nsNodeIdOpt->toString() << '\n';
+                    }
+                }
+                if (nsCount == 0) {
+                    std::cerr << "[rsp-sshd] Warning: no name servers found; hostname not registered\n";
+                }
+            } catch (const std::exception& ex) {
+                std::cerr << "[rsp-sshd] Warning: NS registration failed: " << ex.what() << '\n';
+            }
+        });
+    }
 
     while (!gStopRequested.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    if (nsThread.joinable()) {
+        nsThread.join();
     }
 
     std::cerr << "[rsp-sshd] Shutting down\n";
