@@ -344,6 +344,7 @@ class RSPClient extends EventEmitter {
         this._endorsementCache = new Map();    // `${nodeId}:${typeHex}` -> endorsement
 
         this._pendingResourceAdvertisements = [];
+        this._pendingResourceQueryReplies = [];
         this._pendingResourceList = null;       // {resolve, reject, timer}
         this._pendingNameReply = null;          // {resolve, reject, timer}
         this._identityCache = new Map();       // nodeId -> publicKeyPem
@@ -647,15 +648,19 @@ class RSPClient extends EventEmitter {
             this.emit('endorsement_needed', msg.endorsement_needed);
         } else if (hasField(msg, 'resource_advertisement')) {
             trace('received resource_advertisement');
+            this._pendingResourceAdvertisements.push(msg.resource_advertisement);
+            this.emit('resource_advertisement', msg.resource_advertisement);
+        } else if (hasField(msg, 'resource_query_reply')) {
+            trace('received resource_query_reply');
             if (this._pendingResourceList) {
                 const {resolve, timer} = this._pendingResourceList;
                 this._pendingResourceList = null;
                 clearTimeout(timer);
-                resolve(msg.resource_advertisement);
+                resolve(msg.resource_query_reply);
             } else {
-                this._pendingResourceAdvertisements.push(msg.resource_advertisement);
+                this._pendingResourceQueryReplies.push(msg.resource_query_reply);
             }
-            this.emit('resource_advertisement', msg.resource_advertisement);
+            this.emit('resource_query_reply', msg.resource_query_reply);
         } else {
             const keys = Object.keys(msg || {}).join(',');
             if (hasField(msg, 'error')) {
@@ -1207,6 +1212,15 @@ class RSPClient extends EventEmitter {
 
     pendingResourceAdvertisementCount() {
         return this._pendingResourceAdvertisements.length;
+    }
+
+    tryDequeueResourceQueryReply() {
+        return this._pendingResourceQueryReplies.length > 0
+            ? this._pendingResourceQueryReplies.shift() : null;
+    }
+
+    pendingResourceQueryReplyCount() {
+        return this._pendingResourceQueryReplies.length;
     }
 
     // --- Route registration ---

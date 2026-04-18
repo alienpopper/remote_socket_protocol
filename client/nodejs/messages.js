@@ -805,6 +805,43 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "DiscoveredService": {
+            "fields": [
+                {
+                    "name": "node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "schema",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "ServiceSchema",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "ResourceQueryReply": {
+            "fields": [
+                {
+                    "name": "services",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "DiscoveredService",
+                    "repeated": true,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
         "Error": {
             "fields": [
                 {
@@ -2048,6 +2085,15 @@ const SCHEMA = {
                     "oneof": "core_message"
                 },
                 {
+                    "name": "resource_query_reply",
+                    "number": 27,
+                    "kind": "message",
+                    "type": "ResourceQueryReply",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
                     "name": "signature",
                     "number": 99,
                     "kind": "message",
@@ -2098,7 +2144,8 @@ const SCHEMA = {
                         "resource_query",
                         "endorsement_needed",
                         "schema_request",
-                        "schema_reply"
+                        "schema_reply",
+                        "resource_query_reply"
                     ]
                 }
             ]
@@ -2843,10 +2890,6 @@ function normalizeFieldValue(field, value, path) {
     case "enum":
         return normalizeEnum(field.type, value, path);
     case "message":
-        if (field.type === "Any") {
-            // google.protobuf.Any is not a fixed schema type — pass it through unchanged.
-            return value;
-        }
         return normalizeMessage(field.type, value, path);
     default:
         fail(path, `unsupported field kind ${field.kind}`);
@@ -2978,31 +3021,31 @@ class MessageHasher {
 function hashScalar(field, value, hasher) {
     switch (field.type) {
     case "bool":
-        hasher.feedBool(value || false);
+        hasher.feedBool(value);
         return;
     case "string":
-        hasher.feedBytes(Buffer.from(value || "", "utf8"));
+        hasher.feedBytes(Buffer.from(value, "utf8"));
         return;
     case "bytes":
-        hasher.feedBytes(value != null ? Buffer.from(value, "base64") : Buffer.alloc(0));
+        hasher.feedBytes(Buffer.from(value, "base64"));
         return;
     case "uint32":
     case "fixed32":
-        hasher.feedUint32(value || 0);
+        hasher.feedUint32(value);
         return;
     case "int32":
     case "sint32":
     case "sfixed32":
-        hasher.feedInt32(value || 0);
+        hasher.feedInt32(value);
         return;
     case "uint64":
     case "fixed64":
-        hasher.feedUint64(BigInt(value || 0));
+        hasher.feedUint64(BigInt(value));
         return;
     case "int64":
     case "sint64":
     case "sfixed64":
-        hasher.feedUint64(BigInt.asUintN(64, BigInt(value || 0)));
+        hasher.feedUint64(BigInt.asUintN(64, BigInt(value)));
         return;
     default:
         fail(field.type, "unsupported scalar type for hashing");

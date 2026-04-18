@@ -61,6 +61,7 @@ std::string messageKind(const rsp::proto::RSPMessage& message) {
     if (message.has_challenge_request()) return "challenge_request";
     if (message.has_endorsement_needed()) return "endorsement_needed";
     if (message.has_resource_query()) return "resource_query";
+    if (message.has_resource_query_reply()) return "resource_query_reply";
     if (message.has_resource_advertisement()) return "resource_advertisement";
     if (message.has_error()) return "error";
     if (message.has_service_message()) return rsp::typeNameFromUrl(message.service_message().type_url());

@@ -56,7 +56,7 @@ public:
     RSPCLIENT_API bool queryResources(rsp::NodeID nodeId,
                                       const std::string& query = std::string(),
                                       uint32_t maxRecords = 0);
-    RSPCLIENT_API std::optional<rsp::proto::ResourceAdvertisement> resourceList(
+    RSPCLIENT_API std::optional<rsp::proto::ResourceQueryReply> resourceList(
         rsp::NodeID nodeId,
         const std::string& query = std::string(),
         uint32_t maxRecords = 0);
@@ -169,6 +169,8 @@ public:
     RSPCLIENT_API std::size_t pendingStreamReplyCount() const;
     RSPCLIENT_API bool tryDequeueResourceAdvertisement(rsp::proto::ResourceAdvertisement& advertisement);
     RSPCLIENT_API std::size_t pendingResourceAdvertisementCount() const;
+    RSPCLIENT_API bool tryDequeueResourceQueryReply(rsp::proto::ResourceQueryReply& reply);
+    RSPCLIENT_API std::size_t pendingResourceQueryReplyCount() const;
     RSPCLIENT_API bool querySchemas(rsp::NodeID nodeId,
                                     const std::string& protoFileName = std::string(),
                                     const std::string& schemaHash = std::string());
@@ -220,6 +222,7 @@ private:
     void handleEndorsementDone(const rsp::proto::RSPMessage& message);
     void handleStreamReply(const rsp::proto::RSPMessage& message);
     void handleResourceAdvertisement(const rsp::proto::RSPMessage& message);
+    void handleResourceQueryReply(const rsp::proto::RSPMessage& message);
     void handleSchemaReply(const rsp::proto::RSPMessage& message);
     void handleNameServiceReply(const rsp::proto::RSPMessage& message);
     bool sendIdentity(rsp::NodeID nodeId);
@@ -253,8 +256,9 @@ private:
     std::map<rsp::GUID, PendingConnectState> pendingListens_;
     std::deque<rsp::proto::StreamReply> pendingStreamReplies_;
     std::deque<rsp::proto::ResourceAdvertisement> pendingResourceAdvertisements_;
+    std::deque<rsp::proto::ResourceQueryReply> pendingResourceQueryReplies_;
     bool resourceListPending_ = false;
-    std::optional<rsp::proto::ResourceAdvertisement> resourceListResult_;
+    std::optional<rsp::proto::ResourceQueryReply> resourceListResult_;
     bool nameReplyPending_ = false;
     std::optional<rsp::proto::RSPMessage> nameReplyMessage_;
     std::deque<rsp::proto::SchemaReply> pendingSchemaReplies_;

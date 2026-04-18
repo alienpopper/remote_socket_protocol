@@ -378,6 +378,14 @@ void hashResourceQuery(MessageHasher& hasher, const rsp::proto::ResourceQuery& m
     hasher.feedUint32(message.max_records());
 }
 
+void hashResourceQueryReply(MessageHasher& hasher, const rsp::proto::ResourceQueryReply& message) {
+    hasher.tag(1);
+    hasher.feedUint32(static_cast<uint32_t>(message.services_size()));
+    for (int index = 0; index < message.services_size(); ++index) {
+        hashMessageReflective(hasher, message.services(index));
+    }
+}
+
 void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementNeeded& message) {
     if (message.has_message_nonce()) {
         hasher.tag(1);
@@ -498,6 +506,10 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
     if (message.has_schema_reply()) {
         hasher.tag(26);
         hashMessageReflective(hasher, message.schema_reply());
+    }
+    if (message.has_resource_query_reply()) {
+        hasher.tag(27);
+        hashResourceQueryReply(hasher, message.resource_query_reply());
     }
 
     // field 100: endorsements (repeated — always hash count)

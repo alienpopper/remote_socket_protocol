@@ -357,6 +357,7 @@ RESOURCE_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
+	$(OBJ_DIR)/name_service/name_service.o \
 	$(OBJ_DIR)/test/resource_service_test.o
 
 RESOURCE_SERVICE_JSON_TEST_OBJECTS := \

@@ -8,11 +8,15 @@
 #include "os/os_random.hpp"
 
 #include <cstring>
+#include <cctype>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace rsp::resource_manager {
@@ -62,6 +66,393 @@ std::string randomMessageNonce() {
     std::string nonce(16, '\0');
     rsp::os::randomFill(reinterpret_cast<uint8_t*>(nonce.data()), static_cast<uint32_t>(nonce.size()));
     return nonce;
+}
+
+std::string bytesToHex(const std::string& bytes) {
+    std::ostringstream stream;
+    stream << std::hex << std::setfill('0');
+    for (const unsigned char byte : bytes) {
+        stream << std::setw(2) << static_cast<unsigned int>(byte);
+    }
+    return stream.str();
+}
+
+enum class QueryTokenType {
+    Identifier,
+    String,
+    Integer,
+    Equal,
+    NotEqual,
+    Has,
+    And,
+    Or,
+    Not,
+    LeftParen,
+    RightParen,
+    End,
+};
+
+struct QueryToken {
+    QueryTokenType type = QueryTokenType::End;
+    std::string text;
+};
+
+class QueryLexer {
+public:
+    explicit QueryLexer(std::string_view input) : input_(input) {}
+
+    QueryToken next() {
+        skipWhitespace();
+        if (position_ >= input_.size()) {
+            return {QueryTokenType::End, std::string()};
+        }
+
+        const char current = input_[position_];
+        if (current == '(') {
+            ++position_;
+            return {QueryTokenType::LeftParen, "("};
+        }
+        if (current == ')') {
+            ++position_;
+            return {QueryTokenType::RightParen, ")"};
+        }
+        if (current == '=') {
+            ++position_;
+            return {QueryTokenType::Equal, "="};
+        }
+        if (current == '!' && position_ + 1 < input_.size() && input_[position_ + 1] == '=') {
+            position_ += 2;
+            return {QueryTokenType::NotEqual, "!="};
+        }
+        if (current == '"') {
+            return readString();
+        }
+        if (std::isdigit(static_cast<unsigned char>(current)) != 0) {
+            return readInteger();
+        }
+        if (std::isalpha(static_cast<unsigned char>(current)) != 0 || current == '_') {
+            return readIdentifier();
+        }
+
+        throw std::runtime_error("invalid character in resource query");
+    }
+
+private:
+    std::string_view input_;
+    std::size_t position_ = 0;
+
+    void skipWhitespace() {
+        while (position_ < input_.size() && std::isspace(static_cast<unsigned char>(input_[position_])) != 0) {
+            ++position_;
+        }
+    }
+
+    QueryToken readString() {
+        ++position_;
+        std::string value;
+        while (position_ < input_.size()) {
+            const char current = input_[position_++];
+            if (current == '"') {
+                return {QueryTokenType::String, value};
+            }
+            if (current == '\\') {
+                if (position_ >= input_.size()) {
+                    throw std::runtime_error("unterminated escape in resource query string");
+                }
+                value.push_back(input_[position_++]);
+                continue;
+            }
+            value.push_back(current);
+        }
+
+        throw std::runtime_error("unterminated string in resource query");
+    }
+
+    QueryToken readInteger() {
+        const std::size_t start = position_;
+        while (position_ < input_.size() && std::isdigit(static_cast<unsigned char>(input_[position_])) != 0) {
+            ++position_;
+        }
+        return {QueryTokenType::Integer, std::string(input_.substr(start, position_ - start))};
+    }
+
+    QueryToken readIdentifier() {
+        const std::size_t start = position_;
+        while (position_ < input_.size()) {
+            const char current = input_[position_];
+            if (std::isalnum(static_cast<unsigned char>(current)) == 0 && current != '_' && current != '.') {
+                break;
+            }
+            ++position_;
+        }
+
+        const std::string value(input_.substr(start, position_ - start));
+        std::string upper;
+        upper.reserve(value.size());
+        for (const char current : value) {
+            upper.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(current))));
+        }
+
+        if (upper == "AND") return {QueryTokenType::And, value};
+        if (upper == "OR") return {QueryTokenType::Or, value};
+        if (upper == "NOT") return {QueryTokenType::Not, value};
+        if (upper == "HAS") return {QueryTokenType::Has, value};
+        return {QueryTokenType::Identifier, value};
+    }
+};
+
+enum class QueryOperator {
+    Equal,
+    NotEqual,
+    Has,
+};
+
+struct QueryValue {
+    bool isInteger = false;
+    std::string stringValue;
+    uint32_t integerValue = 0;
+};
+
+struct QueryExpression {
+    enum class Kind {
+        Empty,
+        Comparison,
+        And,
+        Or,
+        Not,
+    } kind = Kind::Empty;
+
+    std::string field;
+    QueryOperator comparison = QueryOperator::Equal;
+    QueryValue value;
+    std::unique_ptr<QueryExpression> left;
+    std::unique_ptr<QueryExpression> right;
+};
+
+class QueryParser {
+public:
+    explicit QueryParser(std::string_view input) : lexer_(input), current_(lexer_.next()) {}
+
+    std::unique_ptr<QueryExpression> parse() {
+        auto expression = parseOr();
+        if (current_.type != QueryTokenType::End) {
+            throw std::runtime_error("unexpected token at end of resource query");
+        }
+        return expression;
+    }
+
+private:
+    QueryLexer lexer_;
+    QueryToken current_;
+
+    void consume(QueryTokenType expected) {
+        if (current_.type != expected) {
+            throw std::runtime_error("unexpected token in resource query");
+        }
+        current_ = lexer_.next();
+    }
+
+    std::unique_ptr<QueryExpression> parseOr() {
+        auto expression = parseAnd();
+        while (current_.type == QueryTokenType::Or) {
+            consume(QueryTokenType::Or);
+            auto combined = std::make_unique<QueryExpression>();
+            combined->kind = QueryExpression::Kind::Or;
+            combined->left = std::move(expression);
+            combined->right = parseAnd();
+            expression = std::move(combined);
+        }
+        return expression;
+    }
+
+    std::unique_ptr<QueryExpression> parseAnd() {
+        auto expression = parseUnary();
+        while (current_.type == QueryTokenType::And) {
+            consume(QueryTokenType::And);
+            auto combined = std::make_unique<QueryExpression>();
+            combined->kind = QueryExpression::Kind::And;
+            combined->left = std::move(expression);
+            combined->right = parseUnary();
+            expression = std::move(combined);
+        }
+        return expression;
+    }
+
+    std::unique_ptr<QueryExpression> parseUnary() {
+        if (current_.type == QueryTokenType::Not) {
+            consume(QueryTokenType::Not);
+            auto expression = std::make_unique<QueryExpression>();
+            expression->kind = QueryExpression::Kind::Not;
+            expression->left = parseUnary();
+            return expression;
+        }
+        return parsePrimary();
+    }
+
+    std::unique_ptr<QueryExpression> parsePrimary() {
+        if (current_.type == QueryTokenType::LeftParen) {
+            consume(QueryTokenType::LeftParen);
+            auto expression = parseOr();
+            consume(QueryTokenType::RightParen);
+            return expression;
+        }
+        return parseComparison();
+    }
+
+    std::unique_ptr<QueryExpression> parseComparison() {
+        if (current_.type != QueryTokenType::Identifier) {
+            throw std::runtime_error("expected field name in resource query");
+        }
+
+        auto expression = std::make_unique<QueryExpression>();
+        expression->kind = QueryExpression::Kind::Comparison;
+        expression->field = current_.text;
+        consume(QueryTokenType::Identifier);
+
+        switch (current_.type) {
+        case QueryTokenType::Equal:
+            expression->comparison = QueryOperator::Equal;
+            consume(QueryTokenType::Equal);
+            break;
+        case QueryTokenType::NotEqual:
+            expression->comparison = QueryOperator::NotEqual;
+            consume(QueryTokenType::NotEqual);
+            break;
+        case QueryTokenType::Has:
+            expression->comparison = QueryOperator::Has;
+            consume(QueryTokenType::Has);
+            break;
+        default:
+            throw std::runtime_error("expected operator in resource query");
+        }
+
+        if (current_.type == QueryTokenType::String) {
+            expression->value.stringValue = current_.text;
+            consume(QueryTokenType::String);
+            return expression;
+        }
+
+        if (current_.type == QueryTokenType::Integer) {
+            expression->value.isInteger = true;
+            expression->value.integerValue = static_cast<uint32_t>(std::stoul(current_.text));
+            consume(QueryTokenType::Integer);
+            return expression;
+        }
+
+        throw std::runtime_error("expected literal in resource query");
+    }
+};
+
+struct ServiceCandidate {
+    rsp::NodeID nodeId;
+    const rsp::proto::ServiceSchema* schema = nullptr;
+};
+
+bool stringComparisonMatches(const std::string& actual, QueryOperator op, const std::string& expected) {
+    switch (op) {
+    case QueryOperator::Equal:
+        return actual == expected;
+    case QueryOperator::NotEqual:
+        return actual != expected;
+    case QueryOperator::Has:
+        return false;
+    }
+    return false;
+}
+
+bool integerComparisonMatches(uint32_t actual, QueryOperator op, uint32_t expected) {
+    switch (op) {
+    case QueryOperator::Equal:
+        return actual == expected;
+    case QueryOperator::NotEqual:
+        return actual != expected;
+    case QueryOperator::Has:
+        return false;
+    }
+    return false;
+}
+
+bool matchesComparison(const QueryExpression& expression, const ServiceCandidate& candidate) {
+    const auto& schema = *candidate.schema;
+    if (expression.field == "node.id") {
+        if (expression.value.isInteger) {
+            return false;
+        }
+        return stringComparisonMatches(candidate.nodeId.toString(), expression.comparison,
+                                       expression.value.stringValue);
+    }
+    if (expression.field == "service.proto_file_name") {
+        if (expression.value.isInteger) {
+            return false;
+        }
+        return stringComparisonMatches(schema.proto_file_name(), expression.comparison,
+                                       expression.value.stringValue);
+    }
+    if (expression.field == "service.schema_hash") {
+        if (expression.value.isInteger) {
+            return false;
+        }
+        return stringComparisonMatches(bytesToHex(schema.schema_hash()), expression.comparison,
+                                       expression.value.stringValue);
+    }
+    if (expression.field == "service.schema_version") {
+        if (!expression.value.isInteger) {
+            return false;
+        }
+        return integerComparisonMatches(schema.schema_version(), expression.comparison,
+                                        expression.value.integerValue);
+    }
+    if (expression.field == "service.accepted_type_urls") {
+        if (expression.value.isInteger) {
+            return false;
+        }
+        switch (expression.comparison) {
+        case QueryOperator::Has:
+        case QueryOperator::Equal:
+            for (const auto& typeUrl : schema.accepted_type_urls()) {
+                if (typeUrl == expression.value.stringValue) {
+                    return true;
+                }
+            }
+            return false;
+        case QueryOperator::NotEqual:
+            for (const auto& typeUrl : schema.accepted_type_urls()) {
+                if (typeUrl == expression.value.stringValue) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool matchesExpression(const QueryExpression& expression, const ServiceCandidate& candidate) {
+    switch (expression.kind) {
+    case QueryExpression::Kind::Empty:
+        return true;
+    case QueryExpression::Kind::Comparison:
+        return matchesComparison(expression, candidate);
+    case QueryExpression::Kind::And:
+        return expression.left != nullptr && expression.right != nullptr &&
+               matchesExpression(*expression.left, candidate) &&
+               matchesExpression(*expression.right, candidate);
+    case QueryExpression::Kind::Or:
+        return expression.left != nullptr && expression.right != nullptr &&
+               (matchesExpression(*expression.left, candidate) ||
+                matchesExpression(*expression.right, candidate));
+    case QueryExpression::Kind::Not:
+        return expression.left != nullptr && !matchesExpression(*expression.left, candidate);
+    }
+    return false;
+}
+
+std::unique_ptr<QueryExpression> parseQueryExpression(const std::string& query) {
+    if (query.empty()) {
+        return std::make_unique<QueryExpression>();
+    }
+    QueryParser parser(query);
+    return parser.parse();
 }
 
 class IncomingMessageQueue : public rsp::RSPMessageQueue {
@@ -295,7 +686,8 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
             return false;
         }
 
-        if (message.resource_advertisement().records_size() == 0) {
+        if (message.resource_advertisement().records_size() == 0 &&
+            message.resource_advertisement().schemas_size() == 0) {
             eraseResourceAdvertisement(*nodeId);
             return true;
         }
@@ -346,16 +738,43 @@ bool ResourceManager::handleNodeSpecificMessage(const rsp::proto::RSPMessage& me
             return false;
         }
 
+        std::unique_ptr<QueryExpression> queryExpression;
+        try {
+            queryExpression = parseQueryExpression(message.resource_query().query());
+        } catch (const std::exception& exception) {
+            rsp::proto::RSPMessage errorReply;
+            *errorReply.mutable_destination() = toProtoNodeId(*requesterNodeId);
+            errorReply.mutable_error()->set_error_code(rsp::proto::UNIMPLEMENTED);
+            errorReply.mutable_error()->set_message(
+                std::string("invalid resource query: ") + exception.what());
+            const auto queue = outputQueue();
+            return queue != nullptr && queue->push(std::move(errorReply));
+        }
+
         rsp::proto::RSPMessage reply;
         *reply.mutable_destination() = toProtoNodeId(*requesterNodeId);
+        uint32_t matchedCount = 0;
+        const uint32_t maxRecords = message.resource_query().max_records();
 
         {
             std::lock_guard<std::mutex> lock(resourceAdvertisementsMutex_);
             for (const auto& [nodeId, advertisement] : resourceAdvertisements_) {
-                for (const auto& record : advertisement.records()) {
-                    auto* replyRecord = reply.mutable_resource_advertisement()->add_records();
-                    *replyRecord = record;
-                    setNodeIdIfPresent(replyRecord, nodeId);
+                for (const auto& schema : advertisement.schemas()) {
+                    const ServiceCandidate candidate{nodeId, &schema};
+                    if (!matchesExpression(*queryExpression, candidate)) {
+                        continue;
+                    }
+
+                    auto* service = reply.mutable_resource_query_reply()->add_services();
+                    *service->mutable_node_id() = toProtoNodeId(nodeId);
+                    *service->mutable_schema() = schema;
+                    ++matchedCount;
+                    if (maxRecords > 0 && matchedCount >= maxRecords) {
+                        break;
+                    }
+                }
+                if (maxRecords > 0 && matchedCount >= maxRecords) {
+                    break;
                 }
             }
         }

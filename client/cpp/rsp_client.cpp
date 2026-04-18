@@ -171,6 +171,11 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
         return true;
     }
 
+    if (message.has_resource_query_reply()) {
+        handleResourceQueryReply(message);
+        return true;
+    }
+
     if (message.has_schema_reply()) {
         handleSchemaReply(message);
         return true;
@@ -378,7 +383,7 @@ bool RSPClient::queryResources(rsp::NodeID nodeId, const std::string& query, uin
     return messageClient_->send(request);
 }
 
-std::optional<rsp::proto::ResourceAdvertisement> RSPClient::resourceList(
+std::optional<rsp::proto::ResourceQueryReply> RSPClient::resourceList(
         rsp::NodeID nodeId, const std::string& query, uint32_t maxRecords) {
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -1208,6 +1213,22 @@ std::size_t RSPClient::pendingResourceAdvertisementCount() const {
     return pendingResourceAdvertisements_.size();
 }
 
+bool RSPClient::tryDequeueResourceQueryReply(rsp::proto::ResourceQueryReply& reply) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (pendingResourceQueryReplies_.empty()) {
+        return false;
+    }
+
+    reply = pendingResourceQueryReplies_.front();
+    pendingResourceQueryReplies_.pop_front();
+    return true;
+}
+
+std::size_t RSPClient::pendingResourceQueryReplyCount() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return pendingResourceQueryReplies_.size();
+}
+
 bool RSPClient::querySchemas(rsp::NodeID nodeId,
                              const std::string& protoFileName,
                              const std::string& schemaHash) {
@@ -1242,6 +1263,17 @@ std::size_t RSPClient::pendingSchemaReplyCount() const {
 void RSPClient::handleSchemaReply(const rsp::proto::RSPMessage& message) {
     std::lock_guard<std::mutex> lock(stateMutex_);
     pendingSchemaReplies_.push_back(message.schema_reply());
+    stateChanged_.notify_all();
+}
+
+void RSPClient::handleResourceQueryReply(const rsp::proto::RSPMessage& message) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (resourceListPending_) {
+        resourceListResult_ = message.resource_query_reply();
+        resourceListPending_ = false;
+    } else {
+        pendingResourceQueryReplies_.push_back(message.resource_query_reply());
+    }
     stateChanged_.notify_all();
 }
 
@@ -1441,12 +1473,7 @@ void RSPClient::handleStreamReply(const rsp::proto::RSPMessage& message) {
 
 void RSPClient::handleResourceAdvertisement(const rsp::proto::RSPMessage& message) {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    if (resourceListPending_) {
-        resourceListResult_ = message.resource_advertisement();
-        resourceListPending_ = false;
-    } else {
-        pendingResourceAdvertisements_.push_back(message.resource_advertisement());
-    }
+    pendingResourceAdvertisements_.push_back(message.resource_advertisement());
     stateChanged_.notify_all();
 }
 

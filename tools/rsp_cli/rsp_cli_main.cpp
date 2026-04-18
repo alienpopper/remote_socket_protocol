@@ -111,6 +111,27 @@ void printRecord(const rsp::proto::ResourceRecord& record) {
     }
 }
 
+void printDiscoveredService(const rsp::proto::DiscoveredService& service) {
+    std::cout << "  service";
+    if (service.has_node_id()) {
+        std::cout << "  node=" << formatNodeId(service.node_id());
+    }
+    if (service.has_schema()) {
+        const auto& schema = service.schema();
+        std::cout << "  proto=" << schema.proto_file_name();
+        std::cout << "  version=" << schema.schema_version();
+        if (schema.accepted_type_urls_size() > 0) {
+            std::cout << "  accepts=[";
+            for (int index = 0; index < schema.accepted_type_urls_size(); ++index) {
+                if (index > 0) std::cout << ", ";
+                std::cout << schema.accepted_type_urls(index);
+            }
+            std::cout << "]";
+        }
+    }
+    std::cout << "\n";
+}
+
 int resourceList(const std::string& transport) {
     auto client = rsp::client::RSPClientMessage::create();
 
@@ -140,20 +161,20 @@ int resourceList(const std::string& transport) {
         }
     }
 
-    if (!reply.has_resource_advertisement()) {
-        std::cerr << "error: no resource advertisement received from resource manager\n";
+    if (!reply.has_resource_query_reply()) {
+        std::cerr << "error: no resource query reply received from resource manager\n";
         return 1;
     }
 
-    const auto& advertisement = reply.resource_advertisement();
-    if (advertisement.records_size() == 0) {
-        std::cout << "no resources advertised\n";
+    const auto& queryReply = reply.resource_query_reply();
+    if (queryReply.services_size() == 0) {
+        std::cout << "no services discovered\n";
         return 0;
     }
 
-    std::cout << advertisement.records_size() << " resource record(s):\n";
-    for (const auto& record : advertisement.records()) {
-        printRecord(record);
+    std::cout << queryReply.services_size() << " discovered service(s):\n";
+    for (const auto& service : queryReply.services()) {
+        printDiscoveredService(service);
     }
 
     return 0;

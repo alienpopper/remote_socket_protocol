@@ -2,6 +2,7 @@
 
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
+#include "name_service/name_service.hpp"
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
@@ -174,6 +175,23 @@ std::optional<rsp::NodeID> findTcpConnectNodeId(const rsp::proto::ResourceAdvert
         }
 
         const auto nodeId = fromProtoNodeId(record.tcp_connect().node_id());
+        if (nodeId.has_value()) {
+            return nodeId;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<rsp::NodeID> findServiceNodeIdByProto(const rsp::proto::ResourceQueryReply& reply,
+                                                    const std::string& protoFileName) {
+    for (const auto& service : reply.services()) {
+        if (!service.has_node_id() || !service.has_schema() ||
+            service.schema().proto_file_name() != protoFileName) {
+            continue;
+        }
+
+        const auto nodeId = fromProtoNodeId(service.node_id());
         if (nodeId.has_value()) {
             return nodeId;
         }
@@ -565,56 +583,22 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
     rsp::proto::RSPMessage reply;
     require(client->tryDequeueMessage(reply),
             "client should dequeue the resource advertisement reply");
-    require(reply.has_resource_advertisement(),
-            "resource query reply should contain a resource advertisement");
+        require(reply.has_resource_query_reply(),
+            "resource query reply should contain discovered services");
 
-    const auto& advertisement = reply.resource_advertisement();
-    require(advertisement.records_size() == 2,
-            "resource query should return the resource service TCP connect and listen records");
-
-    const auto expectedAddresses = expectedAdvertisedAddresses();
-    bool sawTcpConnect = false;
-    bool sawTcpListen = false;
-    for (const auto& record : advertisement.records()) {
-        if (record.has_tcp_connect()) {
-            sawTcpConnect = true;
-            require(record.tcp_connect().has_node_id(),
-                    "resource manager should stamp TCP connect records with the owning node id");
-            const auto nodeId = fromProtoNodeId(record.tcp_connect().node_id());
-            require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
-                    "resource manager should identify the resource service on TCP connect records");
-
-            std::set<std::string> advertisedAddresses;
-            for (const auto& address : record.tcp_connect().source_addresses()) {
-                advertisedAddresses.insert(normalizeAddress(address));
-            }
-            require(advertisedAddresses == expectedAddresses,
-                    "resource query should return all advertised TCP connect addresses");
-        }
-
-        if (record.has_tcp_listen()) {
-            sawTcpListen = true;
-            require(record.tcp_listen().has_node_id(),
-                    "resource manager should stamp TCP listen records with the owning node id");
-            const auto nodeId = fromProtoNodeId(record.tcp_listen().node_id());
-            require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
-                    "resource manager should identify the resource service on TCP listen records");
-
-            std::set<std::string> advertisedAddresses;
-            for (const auto& address : record.tcp_listen().listen_address()) {
-                advertisedAddresses.insert(normalizeAddress(address));
-            }
-            require(advertisedAddresses == expectedAddresses,
-                    "resource query should return all advertised TCP listen addresses");
-            require(record.tcp_listen().has_allowed_range() &&
-                        record.tcp_listen().allowed_range().start_port() == 0 &&
-                        record.tcp_listen().allowed_range().end_port() == 0,
-                    "resource query should preserve the unrestricted listen port range");
-        }
-    }
-
-    require(sawTcpConnect, "resource query reply should include a TCP connect record");
-    require(sawTcpListen, "resource query reply should include a TCP listen record");
+        const auto& queryReply = reply.resource_query_reply();
+        require(queryReply.services_size() == 1,
+            "resource query should return one discovered service schema for the resource service");
+        require(queryReply.services(0).has_node_id(),
+            "resource query should report the node id for the discovered service");
+        const auto nodeId = fromProtoNodeId(queryReply.services(0).node_id());
+        require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
+            "resource query should identify the resource service node");
+        require(queryReply.services(0).has_schema() &&
+            queryReply.services(0).schema().proto_file_name() == "bsd_sockets.proto",
+            "resource query should return the bsd_sockets service schema");
+        require(queryReply.services(0).schema().accepted_type_urls_size() >= 2,
+            "resource query should preserve accepted type urls for the discovered service schema");
 
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its discovery test connection");
@@ -623,6 +607,57 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 
     serverTransport->stop();
 }
+
+    void testClientDiscoversNameServiceThroughResourceQuery() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        rsp::KeyPair nameServiceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID nameServiceNodeId = nameServiceKeyPair.nodeID();
+
+        const std::string memoryChannel = "rm-test-" + std::to_string(rsp::GUID().high()) + "-" + std::to_string(rsp::GUID().low());
+        require(serverTransport->listen(memoryChannel), "memory transport listener should start");
+        const std::string transportSpec = "memory:" + memoryChannel;
+
+        auto nameService = rsp::name_service::NameService::create(std::move(nameServiceKeyPair));
+        auto client = rsp::client::RSPClient::create();
+
+        const auto nameServiceConnectionId =
+        nameService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate the name service and client for discovery test");
+        require(waitForCondition([&resourceManager, &nameServiceNodeId]() {
+            return resourceManager.hasResourceAdvertisement(nameServiceNodeId);
+            }),
+            "resource manager should store the name service schema-only advertisement");
+
+        const auto resourceManagerNodeId = client->peerNodeID(clientConnectionId);
+        require(resourceManagerNodeId.has_value(),
+            "client should discover the resource manager node id from its authenticated connection");
+        require(client->queryResources(*resourceManagerNodeId,
+                       "service.proto_file_name = \"name_service.proto\""),
+            "client should query the resource manager for name service schemas");
+        require(waitForCondition([&client]() { return client->pendingResourceQueryReplyCount() == 1; }),
+            "client should receive a resource query reply for the name service query");
+
+        rsp::proto::ResourceQueryReply queryReply;
+        require(client->tryDequeueResourceQueryReply(queryReply),
+            "client should dequeue the discovered name service reply");
+        require(queryReply.services_size() == 1,
+            "name service query should return one matching discovered service");
+        const auto discoveredNameServiceNodeId = findServiceNodeIdByProto(queryReply, "name_service.proto");
+        require(discoveredNameServiceNodeId.has_value() && *discoveredNameServiceNodeId == nameServiceNodeId,
+            "name service query should identify the name service node");
+
+        require(nameService->removeConnection(nameServiceConnectionId),
+            "name service should remove its discovery test connection");
+        require(client->removeConnection(clientConnectionId),
+            "client should remove its discovery test connection");
+
+        serverTransport->stop();
+    }
 
     void testClientDiscoversTcpConnectResourceAndExchangesData() {
         auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
@@ -647,17 +682,18 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         const auto resourceManagerNodeId = client->peerNodeID(clientConnectionId);
         require(resourceManagerNodeId.has_value(),
             "client should discover the resource manager node id from its authenticated connection");
-        require(client->queryResources(*resourceManagerNodeId, "tcp connect"),
-            "client should query the resource manager for TCP connect resources");
-        require(waitForCondition([&client]() { return client->pendingResourceAdvertisementCount() == 1; }),
-            "client should receive a resource advertisement response for the TCP connect query");
+        require(client->queryResources(*resourceManagerNodeId,
+                                       "service.accepted_type_urls HAS \"type.rsp/rsp.proto.ConnectTCPRequest\""),
+            "client should query the resource manager for TCP connect-capable services");
+        require(waitForCondition([&client]() { return client->pendingResourceQueryReplyCount() == 1; }),
+            "client should receive a resource query response for the TCP connect query");
 
-        rsp::proto::ResourceAdvertisement advertisement;
-        require(client->tryDequeueResourceAdvertisement(advertisement),
-            "client should dequeue the discovered TCP connect advertisement");
-        const auto discoveredResourceServiceNodeId = findTcpConnectNodeId(advertisement);
+        rsp::proto::ResourceQueryReply queryReply;
+        require(client->tryDequeueResourceQueryReply(queryReply),
+            "client should dequeue the discovered TCP connect service reply");
+        const auto discoveredResourceServiceNodeId = findServiceNodeIdByProto(queryReply, "bsd_sockets.proto");
         require(discoveredResourceServiceNodeId.has_value(),
-            "client should discover a resource service node id from a TCP connect advertisement record");
+            "client should discover a resource service node id from a schema-based query reply");
 
         TestSocketServer socketServer;
         const std::string greeting = "discover-connect-greeting";
@@ -1351,6 +1387,7 @@ int main() {
         testEmptyResourceAdvertisementClearsStoredResourceServiceRecords();
         testFailedRouteClearsStoredResourceServiceRecords();
         testClientDiscoversResourceServiceThroughResourceQuery();
+        testClientDiscoversNameServiceThroughResourceQuery();
         testClientDiscoversTcpConnectResourceAndExchangesData();
         testClientExchangesTcpDataThroughResourceService();
         testClientReceivesAsyncSocketDataThroughResourceService();
