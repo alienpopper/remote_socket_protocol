@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package rsp.proto;
+
+import "messages.proto";
+
+// ConnectHttp requests a raw byte-stream connection to an HTTP or HTTPS server
+// registered with the RSP resource manager.
+//
+// The RSP layer is intentionally unaware of the HTTP protocol — once the stream
+// is established, all subsequent traffic (HTTP/1.1 request lines, headers, body,
+// HTTPS TLS records, etc.) flows as opaque bytes over StreamSend / StreamRecv
+// messages, exactly as it does for SSH connections via ConnectSshd.
+//
+// A production integration (e.g. with Express, nginx, or any other web server)
+// should register an HttpdResourceService, override createHttpConnection() to
+// return a socket connected to the actual server process, and then retire the
+// built-in test server.
+message ConnectHttp {
+    // The RSP stream ID the client wants to use for this connection.
+    StreamID stream_id = 2;
+
+    // Optional virtual-host name the client intends to send in the HTTP Host
+    // header (or TLS SNI extension).  The service may use this for routing when
+    // hosting multiple vhosts on the same node.  Leave unset for single-host
+    // deployments.
+    optional string virtual_host = 3;
+
+    // If true, the client expects a TLS-wrapped connection (HTTPS).  The service
+    // must terminate or pass through TLS accordingly.  Defaults to false.
+    optional bool tls = 4;
+
+    // Maximum milliseconds to wait for the upstream server to accept the
+    // connection before returning CONNECT_TIMEOUT.
+    optional uint32 timeout_ms = 5;
+
+    // If true, the stream will deliver data asynchronously via StreamData
+    // replies pushed from the service rather than requiring explicit StreamRecv
+    // polls from the client.
+    optional bool async_data = 8;
+
+    // If true, multiple node IDs may share this stream.  Mutually exclusive
+    // with async_data.
+    optional bool share_socket = 10;
+}

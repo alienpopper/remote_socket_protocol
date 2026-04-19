@@ -157,6 +157,20 @@ public:
                                                         bool useSocket = false);
     RSPCLIENT_API std::optional<rsp::os::SocketHandle> connectSshdSocket(rsp::NodeID nodeId,
                                                                           uint32_t timeoutMilliseconds = 0);
+
+    // Connect to an HTTP(S) server registered as an HttpdResourceService.
+    // Returns the full StreamReply so callers can inspect error details.
+    // On success the stream is registered in streamRoutes_ and subsequent
+    // streamSend / streamRecv / streamClose calls work as normal.
+    RSPCLIENT_API std::optional<rsp::proto::StreamReply> connectHttpEx(rsp::NodeID nodeId,
+                                                                        uint32_t timeoutMilliseconds = 0,
+                                                                        bool asyncData = false,
+                                                                        bool shareSocket = false);
+    // Convenience wrapper: returns the chosen stream GUID on success, nullopt on failure.
+    RSPCLIENT_API std::optional<rsp::GUID> connectHttp(rsp::NodeID nodeId,
+                                                        uint32_t timeoutMilliseconds = 0,
+                                                        bool asyncData = false,
+                                                        bool shareSocket = false);
     RSPCLIENT_API bool streamSend(const rsp::GUID& socketId, const std::string& data);
     RSPCLIENT_API std::optional<rsp::proto::StreamReply> streamRecvEx(const rsp::GUID& socketId,
                                                                          uint32_t maxBytes = 4096,
