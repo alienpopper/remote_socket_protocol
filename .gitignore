@@ -15,3 +15,9 @@ bin/esp_rm
 bin/esp_rm.exe
 bin/esp_es
 bin/esp_es.exe
+bin/rsp_rm
+bin/rsp_rm.exe
+bin/rsp_es
+bin/rsp_es.exe
+bin/rsp_bsd_sockets
+bin/rsp_bsd_sockets.exe
