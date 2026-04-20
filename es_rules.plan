@@ -1,0 +1,321 @@
+# ES Rules Pull Plan
+
+## Motivation
+
+Resource services (bsd_sockets, httpd, sshd, etc.) currently hard-code their
+policy — what endorsements a requester needs, what ports are allowed, etc.
+There is no runtime mechanism for an Endorsement Service to govern these nodes.
+
+This plan introduces a pull-based rules distribution flow where a resource
+service fetches its policy from a configured ES at startup and applies it before
+serving any requests.  A push path is defined but left for future implementation.
+
+## Definitions
+
+A **rule** is an operation name paired with an `ERDAbstractSyntaxTree` that
+describes what endorsements an incoming message must carry before the service
+will honour the request.  For example:
+
+    operation: "tcp_connect"
+    required_endorsements: AND(ETYPE_ACCESS=EVALUE_ACCESS_NETWORK, ETYPE_ROLE=EVALUE_ROLE_CLIENT)
+
+A **RuleSet** is the signed, versioned collection of rules for one service node
+issued by a specific ES.
+
+## Startup Sequence
+
+    1. Service connects to RM (existing flow)
+    2. Service authenticates to RM (existing challenge/identity flow)
+    3. [optional] Service performs endorsement login to ES
+          - Uses BeginEndorsementRequest (existing flow, optionally over
+            EncryptedPayload once encrypted_transfer is implemented)
+    4. Service resolves ES node
+          a. If ES NodeID is configured directly, use it
+          b. Otherwise issue ResourceQuery for EVALUE_ROLE_ENDORSEMENT_SERVICE
+             and use the first result
+    5. Service sends GetRulesRequest to ES (service message)
+    6. ES replies with GetRulesReply containing a signed RuleSet
+    7. Service validates RuleSet signature against ES public key
+    8. Service installs RuleSet into its PolicyEngine
+    9. Service sends ResourceAdvertisement and begins serving
+   10. If ES is unavailable at step 5, service retries every retry_interval_ms
+       (default 30 s) indefinitely; it does NOT serve until rules are in place
+       unless running in no-ES mode (ES NodeID not configured)
+
+## Runtime Push (future)
+
+When the ES needs to update policy, it sends a RulesPushUpdate service message
+to the service node.  The service validates the signature, checks version >
+current, and atomically replaces its PolicyEngine rules.  This is defined in
+proto now so clients can be written to handle it, but the ES-side push trigger
+is deferred.
+
+---
+
+## Proto Changes
+
+### New file: endorsement_service/endorsement_service.proto
+
+    syntax = "proto3";
+    package rsp.proto;
+    import "messages.proto";
+
+    // One rule: an operation name and the endorsement tree that must be satisfied.
+    message ServiceRule {
+        string    operation_name          = 1;  // e.g. "tcp_connect", "tcp_listen"
+        ERDAbstractSyntaxTree required    = 2;
+    }
+
+    // Signed, versioned policy issued by an ES for one service node.
+    message RuleSet {
+        repeated ServiceRule rules        = 1;
+        uint64   version                  = 2;  // monotonically increasing
+        DateTime valid_until              = 3;  // ES signs with expiry
+        NodeId   issuer_node_id           = 4;  // ES that signed this
+        NodeId   subject_node_id          = 5;  // which service node this applies to
+        bytes    signature                = 6;  // ECDSA-P256 over canonical hash of fields 1-5
+    }
+
+    // Request sent by a service node to the ES (as google.protobuf.Any service_message).
+    message GetRulesRequest {
+        string   service_type             = 1;  // e.g. "bsd_sockets", "httpd", "sshd"
+        uint64   current_version          = 2;  // 0 = "I have nothing"; ES may reply
+                                                //   with NOT_MODIFIED if version is current
+    }
+
+    // Reply from ES.
+    message GetRulesReply {
+        enum Status {
+            OK           = 0;
+            NOT_MODIFIED = 1;  // current_version is already up to date
+            NOT_FOUND    = 2;  // no rules configured for this service type
+            ERROR        = 3;
+        }
+        Status   status                   = 1;
+        RuleSet  rules                    = 2;  // populated when status == OK
+        string   error_message            = 3;
+    }
+
+    // Future: ES pushes a new rule set without waiting for a pull.
+    // Service validates and applies atomically.
+    message RulesPushUpdate {
+        RuleSet  rules                    = 1;
+    }
+
+### Canonical hash (mq_signing.cpp)
+
+Add hashRuleSet() following the existing hashEndorsement pattern so that
+RuleSet.signature can be verified offline without a proto library.
+
+---
+
+## New C++ Components
+
+### common/policy/policy_engine.hpp + policy_engine.cpp
+
+PolicyEngine stores the active RuleSet and evaluates incoming messages.
+
+    class PolicyEngine {
+    public:
+        // Returns true if no rules are loaded (ES not configured = open policy).
+        bool isOpen() const;
+
+        // Returns false until rules have been loaded at least once.
+        bool isLoaded() const;
+
+        // Atomically replace rules; thread-safe.
+        void update(const rsp::proto::RuleSet& ruleSet);
+
+        // Check whether a message satisfies the rule for the named operation.
+        // Returns true if:
+        //   - Engine is open (no ES configured), OR
+        //   - operation has no rule (default-allow), OR
+        //   - The endorsement tree is satisfied by the message's endorsements.
+        // Returns false and fills out_tree with the unsatisfied requirement if denied.
+        bool checkRequest(const std::string& operation,
+                          const rsp::proto::RSPMessage& message,
+                          rsp::proto::ERDAbstractSyntaxTree* out_tree = nullptr) const;
+
+        uint64_t version() const;
+    private:
+        mutable std::shared_mutex mutex_;
+        std::optional<rsp::proto::RuleSet> rules_;
+    };
+
+### common/es_rules/es_rules_client.hpp + es_rules_client.cpp
+
+Mixin that any RSPClient subclass can inherit alongside its primary base to
+get the pull/retry loop for free.
+
+    class ESRulesClient {
+    public:
+        struct Config {
+            std::optional<rsp::NodeID> es_node_id;  // empty = discover via ResourceQuery
+            uint32_t retry_interval_ms = 30000;
+        };
+
+        // Start the background fetch loop.  Blocks until rules are loaded or
+        // timeout_ms elapses (0 = return immediately, caller can poll isLoaded()).
+        bool startRulesFetch(Config config, uint32_t timeout_ms = 0);
+
+        // Stop the retry loop (called on shutdown).
+        void stopRulesFetch();
+
+        bool rulesLoaded() const { return engine_.isLoaded(); }
+        const PolicyEngine& policyEngine() const { return engine_; }
+
+    protected:
+        // Called on the fetch thread each time rules are successfully installed.
+        // Override to react (e.g. trigger advertisement).
+        virtual void onRulesLoaded(const rsp::proto::RuleSet& rules) {}
+
+        // Subclass must implement: send a message and return the reply.
+        // Provided because ESRulesClient itself doesn't own a transport.
+        virtual bool sendAndAwaitReply(const rsp::proto::RSPMessage& req,
+                                       rsp::proto::RSPMessage& reply,
+                                       uint32_t timeout_ms) = 0;
+
+        PolicyEngine engine_;
+
+    private:
+        void fetchLoop(Config config);
+        bool tryFetch(const Config& config);
+        std::optional<rsp::NodeID> resolveES(const Config& config);
+
+        std::thread fetchThread_;
+        std::atomic<bool> stopping_ = false;
+        std::mutex loadedMutex_;
+        std::condition_variable loadedCv_;
+    };
+
+### resource_service/resource_service.hpp (modified)
+
+Add optional ESRulesClient integration to the ResourceService base:
+
+    // Call before connectToResourceManager to enable ES rules pull.
+    // If not called, service runs with open policy (backwards compatible).
+    void configureESRules(ESRulesClient::Config config, uint32_t startup_timeout_ms = 0);
+
+Modify the existing `sendResourceAdvertisement` call path so that if ES rules
+are configured, advertisement is deferred until `rulesLoaded()` returns true
+(the fetch loop unblocks it).  If startup_timeout_ms > 0, the service logs a
+warning and continues without rules after the timeout (degraded mode).
+
+### ES-side: EndorsementService (modified)
+
+Add handler for GetRulesRequest in `handleNodeSpecificMessage`.
+
+The ES holds a per-service-type rule set configuration loaded from a config
+file or set programmatically via a new API:
+
+    void EndorsementService::setRules(const std::string& service_type,
+                                      const rsp::proto::RuleSet& rules);
+
+On receiving GetRulesRequest:
+- Look up rules by service_type
+- If version matches current_version, reply NOT_MODIFIED
+- Otherwise sign the RuleSet and reply with OK + rules
+
+Rule set config format (JSON, loaded at startup):
+
+    {
+      "bsd_sockets": {
+        "version": 1,
+        "valid_hours": 24,
+        "rules": [
+          {
+            "operation": "tcp_connect",
+            "required": "AND(ETYPE_ACCESS=EVALUE_ACCESS_NETWORK)"
+          },
+          {
+            "operation": "tcp_listen",
+            "required": "AND(ETYPE_ROLE=EVALUE_ROLE_RESOURCE_SERVICE)"
+          }
+        ]
+      }
+    }
+
+The text format uses the existing `endorsement_text.hpp` parser.
+
+---
+
+## Resource Service Integration
+
+### BsdSocketsResourceService
+
+1. Inherit ESRulesClient alongside ResourceService (or hold it as a member).
+2. In handleConnectTCPRequest / handleListenTCPRequest, call
+   `policyEngine().checkRequest("tcp_connect", message)` before dispatching.
+   On deny, send back an `EndorsementNeeded` message with the unsatisfied tree.
+3. Config struct gains `ESRulesClient::Config es_rules`.
+4. `buildResourceAdvertisement()` can optionally include the rule version so
+   clients know which policy version is active.
+
+Same pattern applies to httpd and sshd resource services.
+
+---
+
+## Files to Create / Modify
+
+    endorsement_service/endorsement_service.proto  [NEW]
+        GetRulesRequest, GetRulesReply, RulesPushUpdate, ServiceRule, RuleSet
+
+    common/policy/policy_engine.hpp                [NEW]
+    common/policy/policy_engine.cpp                [NEW]
+
+    common/es_rules/es_rules_client.hpp            [NEW]
+    common/es_rules/es_rules_client.cpp            [NEW]
+
+    common/message_queue/mq_signing.hpp            [MODIFY]
+    common/message_queue/mq_signing.cpp            [MODIFY]
+        Add hashRuleSet()
+
+    endorsement_service/endorsement_service.hpp    [MODIFY]
+        Add setRules(), loadRulesFromFile()
+        Add handler for GetRulesRequest
+
+    endorsement_service/endorsement_service.cpp    [MODIFY]
+
+    resource_service/resource_service.hpp          [MODIFY]
+        Add configureESRules(), deferred advertisement logic
+
+    resource_service/resource_service.cpp          [MODIFY]
+
+    resource_service/bsd_sockets/resource_service_bsd_sockets.hpp  [MODIFY]
+        Inherit/embed ESRulesClient, add policy checks
+
+    resource_service/bsd_sockets/resource_service_bsd_sockets.cpp  [MODIFY]
+
+    Makefile                                       [MODIFY]
+        New proto vars and build rules for endorsement_service.proto
+
+    test/es_rules_test.cpp                         [NEW]
+        - ES configured with rules, service fetches and applies them
+        - Request denied when endorsement tree not satisfied
+        - NOT_MODIFIED when version is current
+        - Retry loop: ES unavailable at first, becomes available, rules pulled
+        - RulesPushUpdate received and applied atomically
+        - Service does NOT advertise before rules loaded
+        - Service with no ES config serves immediately (open policy)
+
+---
+
+## Invariants
+
+- A ResourceService with ES rules configured MUST NOT call sendResourceAdvertisement
+  before rulesLoaded() is true.
+- If a rule references an unknown operation name, the default behaviour is ALLOW
+  (open by default, lock down specific operations).
+- RuleSet signature MUST be verified before rules are applied; a tampered RuleSet
+  is treated as an unavailable ES (retry).
+- The retry loop runs on a background thread and is stopped cleanly on destruction.
+- Encrypted transfer (encrypted_transfer.plan) can be layered on top of this plan:
+  the GetRulesRequest / GetRulesReply are not themselves sensitive, but the ES
+  login step (BeginEndorsementRequest with password) would use EncryptedPayload.
+
+## Out of Scope
+
+- ES-side rule authoring UI or DSL beyond the JSON config file
+- Multi-ES federation (one authoritative ES per service type for now)
+- Rule caching to disk (across restarts)
+- Incremental rule updates (full RuleSet replacement only)
