@@ -3,11 +3,23 @@
 #include "common/transport/transport.hpp"
 #include "os/os_socket.hpp"
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <thread>
 
 namespace rsp::transport {
+
+// Configuration for automatic reconnection retries in TcpTransport.
+// When enabled (the default), reconnect() retries with exponential backoff
+// instead of failing on the first unsuccessful attempt.
+struct ReconnectConfig {
+    bool enabled = true;
+    int initialIntervalMs = 500;
+    int maxIntervalMs = 10000;
+    double backoffMultiplier = 2.0;
+    int maxAttempts = 0;  // 0 = unlimited
+};
 
 class TcpConnection : public Connection {
 public:
@@ -40,6 +52,7 @@ public:
     uint16_t listenedPort() const;
     ConnectionHandle connect(const std::string& parameters) override;
     ConnectionHandle reconnect() override;
+    void setReconnectConfig(const ReconnectConfig& config);
     void stop() override;
     ConnectionHandle connection() const override;
 
@@ -56,6 +69,11 @@ private:
     std::thread acceptThread_;
     std::string lastParameters_;
     ConnectionHandle activeConnection_;
+
+    ReconnectConfig reconnectConfig_;
+    bool stopping_;
+    std::condition_variable stopCondition_;
+    std::mutex stopMutex_;
 };
 
 }  // namespace rsp::transport

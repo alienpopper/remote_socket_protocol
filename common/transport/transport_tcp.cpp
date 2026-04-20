@@ -82,7 +82,7 @@ void TcpConnection::close() {
     }
 }
 
-TcpTransport::TcpTransport() : listener_(rsp::os::invalidSocket()), listening_(false) {
+TcpTransport::TcpTransport() : listener_(rsp::os::invalidSocket()), listening_(false), stopping_(false) {
     if (!rsp::os::initializeSockets()) {
         throw std::runtime_error("failed to initialize socket subsystem");
     }
@@ -142,10 +142,12 @@ ConnectionHandle TcpTransport::connect(const std::string& parameters) {
     }
 
     ConnectionHandle previousConnection;
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    lastParameters_ = parameters;
-    previousConnection = activeConnection_;
-    activeConnection_ = newConnection;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        lastParameters_ = parameters;
+        previousConnection = activeConnection_;
+        activeConnection_ = newConnection;
+    }
 
     if (previousConnection != nullptr && previousConnection != newConnection) {
         previousConnection->close();
@@ -156,20 +158,68 @@ ConnectionHandle TcpTransport::connect(const std::string& parameters) {
 
 ConnectionHandle TcpTransport::reconnect() {
     std::string parameters;
+    ReconnectConfig config;
 
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         parameters = lastParameters_;
+        config = reconnectConfig_;
     }
 
     if (parameters.empty()) {
         return nullptr;
     }
 
-    return connect(parameters);
+    if (!config.enabled) {
+        return connect(parameters);
+    }
+
+    double intervalMs = static_cast<double>(config.initialIntervalMs);
+    int attempts = 0;
+
+    while (true) {
+        {
+            std::lock_guard<std::mutex> lock(stopMutex_);
+            if (stopping_) {
+                return nullptr;
+            }
+        }
+
+        ConnectionHandle conn = connect(parameters);
+        if (conn != nullptr) {
+            return conn;
+        }
+
+        attempts++;
+        if (config.maxAttempts > 0 && attempts >= config.maxAttempts) {
+            return nullptr;
+        }
+
+        const auto delay = std::chrono::milliseconds(static_cast<long long>(intervalMs));
+        {
+            std::unique_lock<std::mutex> lock(stopMutex_);
+            stopCondition_.wait_for(lock, delay, [this] { return stopping_; });
+            if (stopping_) {
+                return nullptr;
+            }
+        }
+
+        intervalMs = std::min(intervalMs * config.backoffMultiplier,
+                              static_cast<double>(config.maxIntervalMs));
+    }
+}
+
+void TcpTransport::setReconnectConfig(const ReconnectConfig& config) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    reconnectConfig_ = config;
 }
 
 void TcpTransport::stop() {
+    {
+        std::lock_guard<std::mutex> lock(stopMutex_);
+        stopping_ = true;
+    }
+    stopCondition_.notify_all();
     stopListening();
     stopConnection();
 }
