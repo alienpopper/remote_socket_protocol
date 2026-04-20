@@ -42,7 +42,9 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGINT,  signalHandler);
+#ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
+#endif
 
     auto rs = rsp::resource_service::HttpdResourceService::create(cfg);
 

@@ -2440,6 +2440,65 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "ConnectHttp": {
+            "fields": [
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "virtual_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "tls",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "timeout_ms",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "async_data",
+                    "number": 8,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "share_socket",
+                    "number": 10,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
         "NameRecord": {
             "fields": [
                 {
