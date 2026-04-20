@@ -374,15 +374,6 @@ bool evaluateMessageTree(const rsp::proto::ERDASTMessageTree& tree,
             }
 
             return false;
-        case rsp::proto::ERDASTMessageTree::kDestination:
-            return tree.destination().has_destination() && message.has_destination() &&
-                   parseNodeId(tree.destination().destination(), "invalid requirement destination length") ==
-                       parseMessageNodeId(message.destination(), "invalid message destination length");
-        case rsp::proto::ERDASTMessageTree::kSource:
-            return tree.source().has_source() && message.has_signature() &&
-                   message.signature().has_signer() &&
-                   parseNodeId(tree.source().source(), "invalid requirement source length") ==
-                       parseSignatureSignerNodeId(message.signature().signer(), "invalid message signer length");
         case rsp::proto::ERDASTMessageTree::kFieldEquals: {
             if (!tree.field_equals().has_path() || !tree.field_equals().has_value()) return false;
             auto resolved = rsp::endorsement::resolveFieldPath(tree.field_equals().path(), message, snap);

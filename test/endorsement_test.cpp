@@ -63,13 +63,20 @@ rsp::proto::ERDAbstractSyntaxTree makeEndorsementSignerEqualsTree(const rsp::Nod
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageDestinationTree(const rsp::NodeID& destination) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination() = toProtoNodeId(destination);
+    auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+    fe->mutable_path()->add_segments("destination");
+    fe->mutable_path()->add_segments("value");
+    *fe->mutable_value()->mutable_bytes_value() = toProtoNodeId(destination).value();
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageSourceTree(const rsp::NodeID& source) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    *tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source() = toProtoNodeId(source);
+    auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+    fe->mutable_path()->add_segments("signature");
+    fe->mutable_path()->add_segments("signer");
+    fe->mutable_path()->add_segments("value");
+    *fe->mutable_value()->mutable_bytes_value() = toProtoNodeId(source).value();
     return tree;
 }
 
@@ -570,7 +577,7 @@ void testMalformedBufferRejection() {
 
         require(reduced.node_type_case() == rsp::proto::ERDAbstractSyntaxTree::kMessage,
             "reduction without a message should preserve message predicates");
-        require(reduced.message().tree().destination().destination().value() == toProtoNodeId(expectedDestination).value(),
+        require(reduced.message().tree().field_equals().value().bytes_value() == toProtoNodeId(expectedDestination).value(),
             "reduction without a message should preserve the original destination bytes");
     }
 

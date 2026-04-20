@@ -255,16 +255,6 @@ void appendMessageTree(const rsp::proto::ERDASTMessageTree& tree, std::string& o
         case rsp::proto::ERDASTMessageTree::kAnyOf:
             appendMesNary("ANYOF", tree.any_of().terms(), out);
             break;
-        case rsp::proto::ERDASTMessageTree::kDestination:
-            out += "DESTINATION(";
-            out += bytesToUUID(tree.destination().destination().value());
-            out += ')';
-            break;
-        case rsp::proto::ERDASTMessageTree::kSource:
-            out += "SOURCE(";
-            out += bytesToUUID(tree.source().source().value());
-            out += ')';
-            break;
         case rsp::proto::ERDASTMessageTree::kFieldEquals:
             out += "FIELD_EQ(";
             appendFieldPath(tree.field_equals().path(), out);
@@ -748,17 +738,26 @@ struct Parser {
         if (startsWith("DESTINATION(", 12)) {
             pos += 12;
             skipWhitespace();
-            tree.mutable_destination()->mutable_destination()->set_value(parseUUIDBytes());
+            const std::string bytes = parseUUIDBytes();
             skipWhitespace();
             expect(')');
+            auto* fe = tree.mutable_field_equals();
+            fe->mutable_path()->add_segments("destination");
+            fe->mutable_path()->add_segments("value");
+            fe->mutable_value()->set_bytes_value(bytes);
             return tree;
         }
         if (startsWith("SOURCE(", 7)) {
             pos += 7;
             skipWhitespace();
-            tree.mutable_source()->mutable_source()->set_value(parseUUIDBytes());
+            const std::string bytes = parseUUIDBytes();
             skipWhitespace();
             expect(')');
+            auto* fe = tree.mutable_field_equals();
+            fe->mutable_path()->add_segments("signature");
+            fe->mutable_path()->add_segments("signer");
+            fe->mutable_path()->add_segments("value");
+            fe->mutable_value()->set_bytes_value(bytes);
             return tree;
         }
         if (startsWith("FIELD_EQ(", 9)) {
@@ -881,17 +880,26 @@ struct Parser {
         if (startsWith("DESTINATION(", 12)) {
             pos += 12;
             skipWhitespace();
-            tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination()->set_value(parseUUIDBytes());
+            const std::string bytes = parseUUIDBytes();
             skipWhitespace();
             expect(')');
+            auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+            fe->mutable_path()->add_segments("destination");
+            fe->mutable_path()->add_segments("value");
+            fe->mutable_value()->set_bytes_value(bytes);
             return tree;
         }
         if (startsWith("SOURCE(", 7)) {
             pos += 7;
             skipWhitespace();
-            tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(parseUUIDBytes());
+            const std::string bytes = parseUUIDBytes();
             skipWhitespace();
             expect(')');
+            auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+            fe->mutable_path()->add_segments("signature");
+            fe->mutable_path()->add_segments("signer");
+            fe->mutable_path()->add_segments("value");
+            fe->mutable_value()->set_bytes_value(bytes);
             return tree;
         }
         if (startsWithCI("TRUE", 4)) {

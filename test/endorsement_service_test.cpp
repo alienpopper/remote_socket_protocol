@@ -73,7 +73,11 @@ protected:
         for (int shift = 56; shift >= 0; shift -= 8) {
             value.push_back(static_cast<char>((allowedSigner_.low() >> shift) & 0xFFULL));
         }
-        tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(value);
+        auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+        fe->mutable_path()->add_segments("signature");
+        fe->mutable_path()->add_segments("signer");
+        fe->mutable_path()->add_segments("value");
+        *fe->mutable_value()->mutable_bytes_value() = value;
         return tree;
     }
 
@@ -497,7 +501,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
             "authorization failure should include the required endorsement tree");
         require(secondReply.endorsement_needed().tree().has_message(),
             "authorization failure tree should require message");
-        require(secondReply.endorsement_needed().tree().message().tree().has_source(),
+        require(secondReply.endorsement_needed().tree().message().tree().has_field_equals(),
             "authorization failure tree should require message_source");
         std::string expectedSignerValue;
         expectedSignerValue.reserve(16);
@@ -507,7 +511,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
         for (int shift = 56; shift >= 0; shift -= 8) {
             expectedSignerValue.push_back(static_cast<char>((firstEsNodeId.low() >> shift) & 0xFFULL));
         }
-        require(secondReply.endorsement_needed().tree().message().tree().source().source().value() ==
+        require(secondReply.endorsement_needed().tree().message().tree().field_equals().value().bytes_value() ==
             expectedSignerValue,
             "authorization failure tree should name the first endorsement service as the allowed signer");
         require(secondReply.endorsement_needed().has_message_nonce(),

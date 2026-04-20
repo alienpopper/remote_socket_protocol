@@ -51,13 +51,20 @@ rsp::proto::ERDAbstractSyntaxTree makeEndorsementSignerEquals(const std::string&
 
 rsp::proto::ERDAbstractSyntaxTree makeDestinationEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_message()->mutable_tree()->mutable_destination()->mutable_destination()->set_value(uuidBytes(uuidStr));
+    auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+    fe->mutable_path()->add_segments("destination");
+    fe->mutable_path()->add_segments("value");
+    fe->mutable_value()->set_bytes_value(uuidBytes(uuidStr));
     return tree;
 }
 
 rsp::proto::ERDAbstractSyntaxTree makeMessageSourceEquals(const std::string& uuidStr) {
     rsp::proto::ERDAbstractSyntaxTree tree;
-    tree.mutable_message()->mutable_tree()->mutable_source()->mutable_source()->set_value(uuidBytes(uuidStr));
+    auto* fe = tree.mutable_message()->mutable_tree()->mutable_field_equals();
+    fe->mutable_path()->add_segments("signature");
+    fe->mutable_path()->add_segments("signer");
+    fe->mutable_path()->add_segments("value");
+    fe->mutable_value()->set_bytes_value(uuidBytes(uuidStr));
     return tree;
 }
 
@@ -164,22 +171,28 @@ void testRoundTripDestinationEquals() {
     const std::string uuid = "12345678-90ab-cdef-0123-456789abcdef";
     const auto tree = makeDestinationEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "MESSAGE(DESTINATION(12345678-90ab-cdef-0123-456789abcdef))", "DESTINATION text mismatch: " + text);
+    require(text == "MESSAGE(FIELD_EQ(destination.value, 0x1234567890abcdef0123456789abcdef))",
+            "DESTINATION text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_message(), "parsed should have message");
-    require(parsed.message().tree().destination().destination().value() == uuidBytes(uuid), "DESTINATION uuid bytes mismatch");
+    require(parsed.message().tree().has_field_equals(), "parsed message tree should be field_equals");
+    require(parsed.message().tree().field_equals().value().bytes_value() == uuidBytes(uuid),
+            "DESTINATION uuid bytes mismatch");
 }
 
 void testRoundTripMessageSourceEquals() {
     const std::string uuid = "fedcba98-7654-3210-fedc-ba9876543210";
     const auto tree = makeMessageSourceEquals(uuid);
     const std::string text = rsp::erd_text::toString(tree);
-    require(text == "MESSAGE(SOURCE(fedcba98-7654-3210-fedc-ba9876543210))", "SOURCE text mismatch: " + text);
+    require(text == "MESSAGE(FIELD_EQ(signature.signer.value, 0xfedcba9876543210fedcba9876543210))",
+            "SOURCE text mismatch: " + text);
 
     const auto parsed = rsp::erd_text::fromString(text);
     require(parsed.has_message(), "parsed should have message");
-    require(parsed.message().tree().source().source().value() == uuidBytes(uuid), "SOURCE uuid bytes mismatch");
+    require(parsed.message().tree().has_field_equals(), "parsed message tree should be field_equals");
+    require(parsed.message().tree().field_equals().value().bytes_value() == uuidBytes(uuid),
+            "SOURCE uuid bytes mismatch");
 }
 
 void testRoundTripTrue() {

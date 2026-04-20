@@ -364,15 +364,6 @@ message ERDASTMesAnyOf {
     repeated ERDASTMessageTree terms = 1;
 }
 
-
-message ERDASTMesDestination {
-    NodeId destination = 1;
-}
-
-message ERDASTMesSource {
-    NodeId source = 1;
-}
-
 // A dot-separated path into a message, expressed as repeated segments.
 // Examples:
 //   ["destination", "value"]           – the bytes of the destination NodeId
@@ -423,9 +414,6 @@ message ERDASTMessageTree{
         ERDASTFalse false_value = 10;
         ERDASTMesAllOf all_of = 11;
         ERDASTMesAnyOf any_of = 12;
-        // Legacy leaves (kept for backward compatibility)
-        ERDASTMesDestination destination = 100;
-        ERDASTMesSource source = 101;
         // Generic field-path leaves
         ERDASTFieldEquals field_equals = 200;
         ERDASTFieldExists field_exists = 201;
