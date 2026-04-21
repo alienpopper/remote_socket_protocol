@@ -33,6 +33,22 @@ const SCHEMA = {
             "SIGNATURE_FAILED": 2,
             "UNIMPLEMENTED": 3
         },
+        "LOG_LEVEL": {
+            "LOG_LEVEL_UNSPECIFIED": 0,
+            "LOG_LEVEL_TRACE": 1,
+            "LOG_LEVEL_DEBUG": 2,
+            "LOG_LEVEL_INFO": 3,
+            "LOG_LEVEL_WARN": 4,
+            "LOG_LEVEL_ERROR": 5,
+            "LOG_LEVEL_FATAL": 6
+        },
+        "LOG_SUBSCRIPTION_STATUS": {
+            "LOG_SUBSCRIPTION_STATUS_UNSPECIFIED": 0,
+            "LOG_SUBSCRIPTION_STATUS_ACCEPTED": 1,
+            "LOG_SUBSCRIPTION_STATUS_REMOVED": 2,
+            "LOG_SUBSCRIPTION_STATUS_INVALID": 3,
+            "LOG_SUBSCRIPTION_STATUS_NOT_FOUND": 4
+        },
         "ENSDORSMENT_STATUS": {
             "ENDORSEMENT_SUCCESS": 0,
             "ENDORSEMENT_FAILED": 1,
@@ -938,6 +954,166 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "LogSubscribeRequest": {
+            "fields": [
+                {
+                    "name": "payload_type_url",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "filter",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "duration_ms",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "uint64",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogSubscribeReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "LOG_SUBSCRIPTION_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "subscription_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "expires_at",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "DateTime",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "message",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogUnsubscribeRequest": {
+            "fields": [
+                {
+                    "name": "subscription_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogUnsubscribeReply": {
+            "fields": [
+                {
+                    "name": "status",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "LOG_SUBSCRIPTION_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "subscription_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "message",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogRecord": {
+            "fields": [
+                {
+                    "name": "subscription_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "producer_node_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "time_created",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "DateTime",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "payload",
+                    "number": 4,
+                    "kind": "message",
+                    "type": "Any",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
         "BeginEndorsementRequest": {
             "fields": [
                 {
@@ -1678,6 +1854,368 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "LogASTFieldPath": {
+            "fields": [
+                {
+                    "name": "segments",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": true,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTFieldValue": {
+            "fields": [
+                {
+                    "name": "bytes_value",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "string_value",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "int_value",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "int64",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "uint_value",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint64",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "bool_value",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                },
+                {
+                    "name": "enum_value",
+                    "number": 6,
+                    "kind": "scalar",
+                    "type": "int32",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "value"
+                }
+            ],
+            "oneofs": [
+                {
+                    "name": "value",
+                    "fields": [
+                        "bytes_value",
+                        "string_value",
+                        "int_value",
+                        "uint_value",
+                        "bool_value",
+                        "enum_value"
+                    ]
+                }
+            ]
+        },
+        "LogASTFieldEquals": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTFieldValue",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTFieldExists": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTFieldContains": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "sub_path",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "LogASTFieldValue",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMesEquals": {
+            "fields": [
+                {
+                    "name": "lhs",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "rhs",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMesAnd": {
+            "fields": [
+                {
+                    "name": "lhs",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "rhs",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMesOr": {
+            "fields": [
+                {
+                    "name": "lhs",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "rhs",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMesAllOf": {
+            "fields": [
+                {
+                    "name": "terms",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": true,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMesAnyOf": {
+            "fields": [
+                {
+                    "name": "terms",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMessageTree",
+                    "repeated": true,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogASTMessageTree": {
+            "fields": [
+                {
+                    "name": "equals",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "LogASTMesEquals",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "and",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "LogASTMesAnd",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "or",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "LogASTMesOr",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "true_value",
+                    "number": 9,
+                    "kind": "message",
+                    "type": "ERDASTTrue",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "false_value",
+                    "number": 10,
+                    "kind": "message",
+                    "type": "ERDASTFalse",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "all_of",
+                    "number": 11,
+                    "kind": "message",
+                    "type": "LogASTMesAllOf",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "any_of",
+                    "number": 12,
+                    "kind": "message",
+                    "type": "LogASTMesAnyOf",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "field_equals",
+                    "number": 200,
+                    "kind": "message",
+                    "type": "LogASTFieldEquals",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "field_exists",
+                    "number": 201,
+                    "kind": "message",
+                    "type": "LogASTFieldExists",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                },
+                {
+                    "name": "field_contains",
+                    "number": 202,
+                    "kind": "message",
+                    "type": "LogASTFieldContains",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "node_type"
+                }
+            ],
+            "oneofs": [
+                {
+                    "name": "node_type",
+                    "fields": [
+                        "equals",
+                        "and",
+                        "or",
+                        "true_value",
+                        "false_value",
+                        "all_of",
+                        "any_of",
+                        "field_equals",
+                        "field_exists",
+                        "field_contains"
+                    ]
+                }
+            ]
+        },
         "ERDASTMessageTree": {
             "fields": [
                 {
@@ -2094,6 +2632,51 @@ const SCHEMA = {
                     "oneof": "core_message"
                 },
                 {
+                    "name": "log_subscribe_request",
+                    "number": 28,
+                    "kind": "message",
+                    "type": "LogSubscribeRequest",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
+                    "name": "log_subscribe_reply",
+                    "number": 29,
+                    "kind": "message",
+                    "type": "LogSubscribeReply",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
+                    "name": "log_unsubscribe_request",
+                    "number": 30,
+                    "kind": "message",
+                    "type": "LogUnsubscribeRequest",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
+                    "name": "log_unsubscribe_reply",
+                    "number": 31,
+                    "kind": "message",
+                    "type": "LogUnsubscribeReply",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
+                    "name": "log_record",
+                    "number": 32,
+                    "kind": "message",
+                    "type": "LogRecord",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message"
+                },
+                {
                     "name": "signature",
                     "number": 99,
                     "kind": "message",
@@ -2145,7 +2728,12 @@ const SCHEMA = {
                         "endorsement_needed",
                         "schema_request",
                         "schema_reply",
-                        "resource_query_reply"
+                        "resource_query_reply",
+                        "log_subscribe_request",
+                        "log_subscribe_reply",
+                        "log_unsubscribe_request",
+                        "log_unsubscribe_reply",
+                        "log_record"
                     ]
                 }
             ]
@@ -2383,6 +2971,475 @@ const SCHEMA = {
                     "number": 6,
                     "kind": "scalar",
                     "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsConnectFailedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_port",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_endpoint",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 6,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "attempts",
+                    "number": 7,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsConnectEstablishedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_port",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "remote_endpoint",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 6,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsListenFailedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_port",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_endpoint",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 6,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsListenStartedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_port",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "bind_endpoint",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 6,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsConnectionAcceptedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "listen_stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "child_stream_id",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsAsyncConnectionAcceptedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "listen_stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "child_stream_id",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsSendFailedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 3,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsRecvFailedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 3,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "async_mode",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsPeerClosedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "status",
+                    "number": 3,
+                    "kind": "enum",
+                    "type": "STREAM_STATUS",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "async_mode",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsListenClosedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "BsdSocketsSocketClosedLog": {
+            "fields": [
+                {
+                    "name": "requester_node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
                     "oneof": null
@@ -2801,6 +3858,75 @@ const SCHEMA = {
                     "type": "NameRecord",
                     "repeated": true,
                     "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogText": {
+            "fields": [
+                {
+                    "name": "message",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "tags",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": true,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogCounterSample": {
+            "fields": [
+                {
+                    "name": "name",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "value",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "int64",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                },
+                {
+                    "name": "unit",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "LogDeliveryFailure": {
+            "fields": [
+                {
+                    "name": "reason",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
                     "oneof": null
                 }
             ],

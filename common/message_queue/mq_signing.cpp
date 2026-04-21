@@ -386,6 +386,26 @@ void hashResourceQueryReply(MessageHasher& hasher, const rsp::proto::ResourceQue
     }
 }
 
+void hashLogSubscribeRequest(MessageHasher& hasher, const rsp::proto::LogSubscribeRequest& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashLogSubscribeReply(MessageHasher& hasher, const rsp::proto::LogSubscribeReply& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashLogUnsubscribeRequest(MessageHasher& hasher, const rsp::proto::LogUnsubscribeRequest& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashLogUnsubscribeReply(MessageHasher& hasher, const rsp::proto::LogUnsubscribeReply& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashLogRecord(MessageHasher& hasher, const rsp::proto::LogRecord& message) {
+    hashMessageReflective(hasher, message);
+}
+
 void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementNeeded& message) {
     if (message.has_message_nonce()) {
         hasher.tag(1);
@@ -510,6 +530,26 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
     if (message.has_resource_query_reply()) {
         hasher.tag(27);
         hashResourceQueryReply(hasher, message.resource_query_reply());
+    }
+    if (message.has_log_subscribe_request()) {
+        hasher.tag(28);
+        hashLogSubscribeRequest(hasher, message.log_subscribe_request());
+    }
+    if (message.has_log_subscribe_reply()) {
+        hasher.tag(29);
+        hashLogSubscribeReply(hasher, message.log_subscribe_reply());
+    }
+    if (message.has_log_unsubscribe_request()) {
+        hasher.tag(30);
+        hashLogUnsubscribeRequest(hasher, message.log_unsubscribe_request());
+    }
+    if (message.has_log_unsubscribe_reply()) {
+        hasher.tag(31);
+        hashLogUnsubscribeReply(hasher, message.log_unsubscribe_reply());
+    }
+    if (message.has_log_record()) {
+        hasher.tag(32);
+        hashLogRecord(hasher, message.log_record());
     }
 
     // field 100: endorsements (repeated — always hash count)

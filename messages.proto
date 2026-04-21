@@ -219,6 +219,54 @@ message PingReply {
     DateTime time_replied = 4;
 }
 
+enum LOG_LEVEL {
+    LOG_LEVEL_UNSPECIFIED = 0;
+    LOG_LEVEL_TRACE = 1;
+    LOG_LEVEL_DEBUG = 2;
+    LOG_LEVEL_INFO = 3;
+    LOG_LEVEL_WARN = 4;
+    LOG_LEVEL_ERROR = 5;
+    LOG_LEVEL_FATAL = 6;
+}
+
+enum LOG_SUBSCRIPTION_STATUS {
+    LOG_SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+    LOG_SUBSCRIPTION_STATUS_ACCEPTED = 1;
+    LOG_SUBSCRIPTION_STATUS_REMOVED = 2;
+    LOG_SUBSCRIPTION_STATUS_INVALID = 3;
+    LOG_SUBSCRIPTION_STATUS_NOT_FOUND = 4;
+}
+
+message LogSubscribeRequest {
+    string payload_type_url = 1;
+    LogASTMessageTree filter = 2;
+    uint64 duration_ms = 3;
+}
+
+message LogSubscribeReply {
+    LOG_SUBSCRIPTION_STATUS status = 1;
+    Uuid subscription_id = 2;
+    DateTime expires_at = 3;
+    string message = 4;
+}
+
+message LogUnsubscribeRequest {
+    Uuid subscription_id = 1;
+}
+
+message LogUnsubscribeReply {
+    LOG_SUBSCRIPTION_STATUS status = 1;
+    Uuid subscription_id = 2;
+    string message = 3;
+}
+
+message LogRecord {
+    Uuid subscription_id = 1;
+    NodeId producer_node_id = 2;
+    DateTime time_created = 3;
+    google.protobuf.Any payload = 4;
+}
+
 
 /****Endorsement Server Messages ****/
 enum ENSDORSMENT_STATUS {
@@ -405,6 +453,74 @@ message ERDASTFieldContains {
     ERDASTFieldValue value = 3;
 }
 
+message LogASTFieldPath {
+    repeated string segments = 1;
+}
+
+message LogASTFieldValue {
+    oneof value {
+        bytes   bytes_value   = 1;
+        string  string_value  = 2;
+        int64   int_value     = 3;
+        uint64  uint_value    = 4;
+        bool    bool_value    = 5;
+        int32   enum_value    = 6;
+    }
+}
+
+message LogASTFieldEquals {
+    LogASTFieldPath path = 1;
+    LogASTFieldValue value = 2;
+}
+
+message LogASTFieldExists {
+    LogASTFieldPath path = 1;
+}
+
+message LogASTFieldContains {
+    LogASTFieldPath path = 1;
+    LogASTFieldPath sub_path = 2;
+    LogASTFieldValue value = 3;
+}
+
+message LogASTMesEquals {
+    LogASTMessageTree lhs = 1;
+    LogASTMessageTree rhs = 2;
+}
+
+message LogASTMesAnd {
+    LogASTMessageTree lhs = 1;
+    LogASTMessageTree rhs = 2;
+}
+
+message LogASTMesOr {
+    LogASTMessageTree lhs = 1;
+    LogASTMessageTree rhs = 2;
+}
+
+message LogASTMesAllOf {
+    repeated LogASTMessageTree terms = 1;
+}
+
+message LogASTMesAnyOf {
+    repeated LogASTMessageTree terms = 1;
+}
+
+message LogASTMessageTree {
+    oneof node_type {
+        LogASTMesEquals equals = 1;
+        LogASTMesAnd and = 2;
+        LogASTMesOr or = 3;
+        ERDASTTrue true_value = 9;
+        ERDASTFalse false_value = 10;
+        LogASTMesAllOf all_of = 11;
+        LogASTMesAnyOf any_of = 12;
+        LogASTFieldEquals field_equals = 200;
+        LogASTFieldExists field_exists = 201;
+        LogASTFieldContains field_contains = 202;
+    }
+}
+
 message ERDASTMessageTree{
     oneof node_type{
         ERDASTMesEquals equals = 1;
@@ -467,6 +583,11 @@ message RSPMessage {
       SchemaRequest schema_request = 25;
       SchemaReply schema_reply = 26;
       ResourceQueryReply resource_query_reply = 27;
+      LogSubscribeRequest log_subscribe_request = 28;
+      LogSubscribeReply log_subscribe_reply = 29;
+      LogUnsubscribeRequest log_unsubscribe_request = 30;
+      LogUnsubscribeReply log_unsubscribe_reply = 31;
+      LogRecord log_record = 32;
   }
 
   // Service-specific payload — opaque to RM at compile time.

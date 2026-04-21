@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package rsp.proto;
+
+import "messages.proto";
+
+message BsdSocketsConnectFailedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    string remote_host = 3;
+    uint32 remote_port = 4;
+    string remote_endpoint = 5;
+    STREAM_STATUS status = 6;
+    uint32 attempts = 7;
+}
+
+message BsdSocketsConnectEstablishedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    string remote_host = 3;
+    uint32 remote_port = 4;
+    string remote_endpoint = 5;
+    STREAM_STATUS status = 6;
+}
+
+message BsdSocketsListenFailedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    string bind_host = 3;
+    uint32 bind_port = 4;
+    string bind_endpoint = 5;
+    STREAM_STATUS status = 6;
+}
+
+message BsdSocketsListenStartedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    string bind_host = 3;
+    uint32 bind_port = 4;
+    string bind_endpoint = 5;
+    STREAM_STATUS status = 6;
+}
+
+message BsdSocketsConnectionAcceptedLog {
+    NodeId requester_node_id = 1;
+    StreamID listen_stream_id = 2;
+    StreamID child_stream_id = 3;
+}
+
+message BsdSocketsAsyncConnectionAcceptedLog {
+    NodeId requester_node_id = 1;
+    StreamID listen_stream_id = 2;
+    StreamID child_stream_id = 3;
+}
+
+message BsdSocketsSendFailedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    STREAM_STATUS status = 3;
+}
+
+message BsdSocketsRecvFailedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    STREAM_STATUS status = 3;
+    bool async_mode = 4;
+}
+
+message BsdSocketsPeerClosedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+    STREAM_STATUS status = 3;
+    bool async_mode = 4;
+}
+
+message BsdSocketsListenClosedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+}
+
+message BsdSocketsSocketClosedLog {
+    NodeId requester_node_id = 1;
+    StreamID stream_id = 2;
+}

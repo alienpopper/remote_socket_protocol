@@ -2,16 +2,21 @@
 
 #include "client/cpp/rsp_client.hpp"
 #include "client/cpp/rsp_client_message.hpp"
+#include "common/service_message.hpp"
+#include "logging/logging.pb.h"
 #include "name_service/name_service.hpp"
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
+#include "resource_service/bsd_sockets/bsd_sockets_logging.pb.h"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
 #include "common/transport/transport_tcp.hpp"
 #include "resource_manager/resource_manager.hpp"
+#include "resource_manager/schema_registry.hpp"
 #include "os/os_socket.hpp"
 
 #include <chrono>
+#include <deque>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -199,6 +204,223 @@ std::optional<rsp::NodeID> findServiceNodeIdByProto(const rsp::proto::ResourceQu
 
     return std::nullopt;
 }
+
+rsp::proto::LogASTFieldPath makeFieldPath(std::initializer_list<std::string> segments) {
+    rsp::proto::LogASTFieldPath path;
+    for (const auto& segment : segments) {
+        path.add_segments(segment);
+    }
+    return path;
+}
+
+rsp::proto::LogASTMessageTree makeFieldEqualsString(std::initializer_list<std::string> segments,
+                                                    const std::string& value) {
+    rsp::proto::LogASTMessageTree tree;
+    *tree.mutable_field_equals()->mutable_path() = makeFieldPath(segments);
+    tree.mutable_field_equals()->mutable_value()->set_string_value(value);
+    return tree;
+}
+
+rsp::proto::LogASTMessageTree makeFieldEqualsUint(std::initializer_list<std::string> segments,
+                                                  uint64_t value) {
+    rsp::proto::LogASTMessageTree tree;
+    *tree.mutable_field_equals()->mutable_path() = makeFieldPath(segments);
+    tree.mutable_field_equals()->mutable_value()->set_uint_value(value);
+    return tree;
+}
+
+uint32_t parseEndpointPort(const std::string& endpoint) {
+    const auto separator = endpoint.rfind(':');
+    if (separator == std::string::npos || separator + 1 >= endpoint.size()) {
+        throw std::runtime_error("endpoint is missing a port: " + endpoint);
+    }
+
+    return static_cast<uint32_t>(std::stoul(endpoint.substr(separator + 1)));
+}
+
+class LoggingTestClient : public rsp::client::full::RSPClient {
+public:
+    using Ptr = std::shared_ptr<LoggingTestClient>;
+
+    static Ptr create() {
+        return Ptr(new LoggingTestClient(rsp::KeyPair::generateP256()));
+    }
+
+    bool queryResources(const rsp::NodeID& nodeId, const std::string& query = std::string()) {
+        rsp::proto::RSPMessage message;
+        *message.mutable_destination() = toProtoNodeId(nodeId);
+        auto* resourceQuery = message.mutable_resource_query();
+        if (!query.empty()) {
+            resourceQuery->set_query(query);
+        }
+        return this->send(message);
+    }
+
+    bool querySchemas(const rsp::NodeID& nodeId,
+                      const std::string& protoFileName = std::string(),
+                      const std::string& schemaHash = std::string()) {
+        rsp::proto::RSPMessage message;
+        *message.mutable_destination() = toProtoNodeId(nodeId);
+        auto* schemaRequest = message.mutable_schema_request();
+        if (!protoFileName.empty()) {
+            schemaRequest->set_proto_file_name(protoFileName);
+        }
+        if (!schemaHash.empty()) {
+            schemaRequest->set_schema_hash(schemaHash);
+        }
+        return this->send(message);
+    }
+
+    bool subscribeToLogs(const rsp::NodeID& nodeId, const rsp::proto::LogSubscribeRequest& request) {
+        rsp::proto::RSPMessage message;
+        *message.mutable_destination() = toProtoNodeId(nodeId);
+        *message.mutable_log_subscribe_request() = request;
+        return this->send(message);
+    }
+
+    bool unsubscribeFromLogs(const rsp::NodeID& nodeId, const rsp::proto::LogUnsubscribeRequest& request) {
+        rsp::proto::RSPMessage message;
+        *message.mutable_destination() = toProtoNodeId(nodeId);
+        *message.mutable_log_unsubscribe_request() = request;
+        return this->send(message);
+    }
+
+    bool tryDequeueSubscribeReply(rsp::proto::LogSubscribeReply& reply) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (subscribeReplies_.empty()) {
+            return false;
+        }
+
+        reply = subscribeReplies_.front();
+        subscribeReplies_.pop_front();
+        return true;
+    }
+
+    bool tryDequeueUnsubscribeReply(rsp::proto::LogUnsubscribeReply& reply) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (unsubscribeReplies_.empty()) {
+            return false;
+        }
+
+        reply = unsubscribeReplies_.front();
+        unsubscribeReplies_.pop_front();
+        return true;
+    }
+
+    bool tryDequeueLogRecord(rsp::proto::LogRecord& record) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (records_.empty()) {
+            return false;
+        }
+
+        record = records_.front();
+        records_.pop_front();
+        return true;
+    }
+
+    std::size_t pendingLogRecordCount() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return records_.size();
+    }
+
+    std::size_t pendingSubscribeReplyCount() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return subscribeReplies_.size();
+    }
+
+    bool tryDequeueResourceQueryReply(rsp::proto::ResourceQueryReply& reply) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (resourceQueryReplies_.empty()) {
+            return false;
+        }
+
+        reply = resourceQueryReplies_.front();
+        resourceQueryReplies_.pop_front();
+        return true;
+    }
+
+    std::size_t pendingResourceQueryReplyCount() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return resourceQueryReplies_.size();
+    }
+
+    bool tryDequeueSchemaReply(rsp::proto::SchemaReply& reply) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (schemaReplies_.empty()) {
+            return false;
+        }
+
+        reply = schemaReplies_.front();
+        schemaReplies_.pop_front();
+        return true;
+    }
+
+    std::size_t pendingSchemaReplyCount() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return schemaReplies_.size();
+    }
+
+protected:
+    explicit LoggingTestClient(rsp::KeyPair keyPair) : rsp::client::full::RSPClient(std::move(keyPair)) {}
+
+    bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override {
+        if (message.has_ping_reply()) {
+            return true;
+        }
+
+        if (rsp::hasServiceMessage<rsp::proto::EndorsementDone>(message)) {
+            return true;
+        }
+
+        if (message.has_resource_advertisement()) {
+            return true;
+        }
+
+        if (message.has_resource_query_reply()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            resourceQueryReplies_.push_back(message.resource_query_reply());
+            return true;
+        }
+
+        if (message.has_schema_reply()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            schemaReplies_.push_back(message.schema_reply());
+            return true;
+        }
+
+        if (message.has_log_subscribe_reply()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            subscribeReplies_.push_back(message.log_subscribe_reply());
+            return true;
+        }
+
+        if (message.has_log_unsubscribe_reply()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            unsubscribeReplies_.push_back(message.log_unsubscribe_reply());
+            return true;
+        }
+
+        if (message.has_log_record()) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            records_.push_back(message.log_record());
+            return true;
+        }
+
+        if (message.has_error()) {
+            return true;
+        }
+
+        return rsp::client::full::RSPClient::handleNodeSpecificMessage(message);
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::deque<rsp::proto::ResourceQueryReply> resourceQueryReplies_;
+    std::deque<rsp::proto::SchemaReply> schemaReplies_;
+    std::deque<rsp::proto::LogSubscribeReply> subscribeReplies_;
+    std::deque<rsp::proto::LogUnsubscribeReply> unsubscribeReplies_;
+    std::deque<rsp::proto::LogRecord> records_;
+};
 
 class TestSocketServer {
 public:
@@ -587,18 +809,27 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
             "resource query reply should contain discovered services");
 
         const auto& queryReply = reply.resource_query_reply();
-        require(queryReply.services_size() == 1,
-            "resource query should return one discovered service schema for the resource service");
-        require(queryReply.services(0).has_node_id(),
-            "resource query should report the node id for the discovered service");
-        const auto nodeId = fromProtoNodeId(queryReply.services(0).node_id());
-        require(nodeId.has_value() && *nodeId == resourceServiceNodeId,
-            "resource query should identify the resource service node");
-        require(queryReply.services(0).has_schema() &&
-            queryReply.services(0).schema().proto_file_name() == "bsd_sockets.proto",
-            "resource query should return the bsd_sockets service schema");
-        require(queryReply.services(0).schema().accepted_type_urls_size() >= 2,
-            "resource query should preserve accepted type urls for the discovered service schema");
+        require(queryReply.services_size() >= 2,
+            "resource query should return both advertised service schemas for the resource service node");
+        const auto bsdSocketsNodeId = findServiceNodeIdByProto(queryReply, "bsd_sockets.proto");
+        require(bsdSocketsNodeId.has_value() && *bsdSocketsNodeId == resourceServiceNodeId,
+            "resource query should identify the bsd_sockets schema on the resource service node");
+        const auto loggingNodeId = findServiceNodeIdByProto(
+            queryReply, "resource_service/bsd_sockets/bsd_sockets_logging.proto");
+        require(loggingNodeId.has_value() && *loggingNodeId == resourceServiceNodeId,
+            "resource query should identify the logging schema on the same resource service node");
+
+        bool sawAcceptedTypeUrls = false;
+        for (const auto& service : queryReply.services()) {
+            if (!service.has_schema() || service.schema().proto_file_name() != "bsd_sockets.proto") {
+                continue;
+            }
+
+            sawAcceptedTypeUrls = service.schema().accepted_type_urls_size() >= 2;
+            break;
+        }
+        require(sawAcceptedTypeUrls,
+            "resource query should preserve accepted type urls for the bsd_sockets discovered service schema");
 
     require(resourceService->removeConnection(resourceServiceConnectionId),
             "resource service should remove its discovery test connection");
@@ -1379,6 +1610,169 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             serverTransport->stop();
             }
 
+        void testClientRequestsLoggingSchemaAndReceivesBsdSocketLogs() {
+            auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+            TestResourceManager resourceManager({serverTransport});
+
+            rsp::KeyPair resourceServiceKeyPair = rsp::KeyPair::generateP256();
+            const rsp::NodeID resourceServiceNodeId = resourceServiceKeyPair.nodeID();
+
+            const std::string memoryChannel = "rm-test-" + std::to_string(rsp::GUID().high()) + "-" + std::to_string(rsp::GUID().low());
+            require(serverTransport->listen(memoryChannel), "memory transport listener should start");
+            const std::string transportSpec = "memory:" + memoryChannel;
+            const std::string listenerEndpoint = findAvailableEndpoint(35700, 35800);
+            const std::string refusedEndpoint = findAvailableEndpoint(35800, 35900);
+
+            auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(resourceServiceKeyPair));
+            auto socketClient = rsp::client::RSPClient::create();
+            auto loggingClient = LoggingTestClient::create();
+
+            const auto resourceServiceConnectionId =
+                resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto socketClientConnectionId =
+                socketClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto loggingClientConnectionId =
+                loggingClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+
+            require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
+                "resource manager should authenticate the resource service, socket client, and logging client");
+            require(socketClient->ping(resourceServiceNodeId),
+                "socket client should ping the resource service before requesting logs");
+            const auto resourceManagerNodeId = resourceManager.nodeId();
+            require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
+                return resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
+            }),
+                "resource manager should ingest the bsd_sockets advertisement before logging discovery");
+
+            require(loggingClient->queryResources(resourceManagerNodeId),
+                "logging client should query for services advertising the logging schema");
+            require(waitForCondition([&loggingClient]() { return loggingClient->pendingResourceQueryReplyCount() > 0; }),
+                "logging client should receive a resource query reply for the logging schema");
+
+            rsp::proto::ResourceQueryReply serviceReply;
+            require(loggingClient->tryDequeueResourceQueryReply(serviceReply),
+                "logging client should dequeue the discovered logging service");
+            const auto discoveredLoggingNodeId = findServiceNodeIdByProto(
+                serviceReply, "resource_service/bsd_sockets/bsd_sockets_logging.proto");
+            require(discoveredLoggingNodeId.has_value(),
+                std::string("resource query reply should include the advertised logging schema: ") +
+                serviceReply.DebugString());
+            require(*discoveredLoggingNodeId == resourceServiceNodeId,
+                std::string("logging schema should be advertised by the bsd_sockets resource service node: ") +
+                serviceReply.DebugString());
+
+            require(loggingClient->querySchemas(resourceManagerNodeId,
+                "resource_service/bsd_sockets/bsd_sockets_logging.proto"),
+                "logging client should request the logging proto schema");
+            require(waitForCondition([&loggingClient]() { return loggingClient->pendingSchemaReplyCount() > 0; }),
+                "logging client should receive the logging schema reply");
+
+            rsp::proto::SchemaReply schemaReply;
+            require(loggingClient->tryDequeueSchemaReply(schemaReply),
+                "logging client should dequeue the logging schema reply");
+            require(schemaReply.schemas_size() == 1,
+                "schema request for logging proto should return exactly one schema");
+            require(schemaReply.schemas(0).proto_file_name() == "resource_service/bsd_sockets/bsd_sockets_logging.proto",
+                "schema reply should return the logging proto descriptor set");
+            require(!schemaReply.schemas(0).proto_file_descriptor_set().empty(),
+                "logging proto descriptor set should be populated");
+
+            rsp::resource_manager::SchemaSnapshot loggingSchemaSnapshot({schemaReply.schemas(0)});
+            require(loggingSchemaSnapshot.findMessageDescriptor("rsp.proto.LogRecord") != nullptr,
+                "logging schema should describe LogRecord for client-side filter construction");
+            require(loggingSchemaSnapshot.findMessageDescriptor("rsp.proto.BsdSocketsListenStartedLog") != nullptr,
+                "logging schema should describe listen-started payloads for client-side filter construction");
+            require(loggingSchemaSnapshot.findMessageDescriptor("rsp.proto.BsdSocketsConnectFailedLog") != nullptr,
+                "logging schema should describe connect-failed payloads for client-side filter construction");
+
+            rsp::proto::LogSubscribeRequest lifecycleRequest;
+            lifecycleRequest.set_payload_type_url("type.rsp/rsp.proto.BsdSocketsListenStartedLog");
+            auto* lifecycleTerms = lifecycleRequest.mutable_filter()->mutable_all_of();
+            *lifecycleTerms->add_terms() = makeFieldEqualsUint({"bind_port"}, parseEndpointPort(listenerEndpoint));
+            lifecycleRequest.set_duration_ms(5000);
+            require(loggingClient->subscribeToLogs(*discoveredLoggingNodeId, lifecycleRequest),
+                "logging client should subscribe to bsd_sockets lifecycle logs");
+
+            rsp::proto::LogSubscribeRequest errorRequest;
+            errorRequest.set_payload_type_url("type.rsp/rsp.proto.BsdSocketsConnectFailedLog");
+            auto* errorTerms = errorRequest.mutable_filter()->mutable_all_of();
+            *errorTerms->add_terms() = makeFieldEqualsUint({"remote_port"}, parseEndpointPort(refusedEndpoint));
+            errorRequest.set_duration_ms(5000);
+            require(loggingClient->subscribeToLogs(*discoveredLoggingNodeId, errorRequest),
+                "logging client should subscribe to bsd_sockets error logs");
+
+            require(waitForCondition([&loggingClient]() { return loggingClient->pendingLogRecordCount() == 0; }),
+                "log subscriptions should not emit records before socket activity");
+
+            rsp::proto::LogSubscribeReply lifecycleReply;
+            rsp::proto::LogSubscribeReply errorReply;
+            require(waitForCondition([&loggingClient]() { return loggingClient->pendingSubscribeReplyCount() >= 2; }),
+                "logging client should receive subscribe replies for both requested filters");
+            require(loggingClient->tryDequeueSubscribeReply(lifecycleReply),
+                "logging client should dequeue the lifecycle subscription reply");
+            require(loggingClient->tryDequeueSubscribeReply(errorReply),
+                "logging client should dequeue the error subscription reply");
+            require(lifecycleReply.status() == rsp::proto::LOG_SUBSCRIPTION_STATUS_ACCEPTED,
+                "lifecycle log subscription should be accepted");
+            require(errorReply.status() == rsp::proto::LOG_SUBSCRIPTION_STATUS_ACCEPTED,
+                "error log subscription should be accepted");
+
+            const auto listenSocketId = socketClient->listenTCP(resourceServiceNodeId, listenerEndpoint);
+            require(listenSocketId.has_value(),
+                "socket client should obtain a listening socket so the service emits lifecycle logs");
+
+            const auto refusedSocketId = socketClient->connectTCP(resourceServiceNodeId, refusedEndpoint);
+            require(!refusedSocketId.has_value(),
+                "socket client should observe a refused TCP connect so the service emits an error log");
+
+            require(waitForCondition([&loggingClient]() { return loggingClient->pendingLogRecordCount() >= 2; }),
+                "logging client should receive the matching lifecycle and error log records");
+
+            std::vector<rsp::proto::LogRecord> records;
+            rsp::proto::LogRecord record;
+            while (loggingClient->tryDequeueLogRecord(record)) {
+                records.push_back(record);
+            }
+
+            require(records.size() == 2,
+                "logging client should receive exactly the two matching log records");
+
+            bool sawLifecycleRecord = false;
+            bool sawErrorRecord = false;
+            for (const auto& current : records) {
+                if (current.payload().type_url() == "type.rsp/rsp.proto.BsdSocketsListenStartedLog") {
+                    rsp::proto::BsdSocketsListenStartedLog payload;
+                    require(current.payload().UnpackTo(&payload),
+                        "listen-started log records should unpack to the typed bsd_sockets payload");
+                    sawLifecycleRecord = payload.bind_port() == parseEndpointPort(listenerEndpoint) &&
+                                         current.subscription_id().value() == lifecycleReply.subscription_id().value();
+                }
+                if (current.payload().type_url() == "type.rsp/rsp.proto.BsdSocketsConnectFailedLog") {
+                    rsp::proto::BsdSocketsConnectFailedLog payload;
+                    require(current.payload().UnpackTo(&payload),
+                        "connect-failed log records should unpack to the typed bsd_sockets payload");
+                    sawErrorRecord = payload.remote_port() == parseEndpointPort(refusedEndpoint) &&
+                                     current.subscription_id().value() == errorReply.subscription_id().value();
+                }
+            }
+
+            require(sawLifecycleRecord,
+                "logging client should receive the subscribed typed listen-started record");
+            require(sawErrorRecord,
+                "logging client should receive the subscribed typed connect-failed record");
+            require(socketClient->streamClose(*listenSocketId),
+                "socket client should close the listening socket after receiving test logs");
+
+            require(resourceService->removeConnection(resourceServiceConnectionId),
+                "resource service should remove its logging integration test connection");
+            require(socketClient->removeConnection(socketClientConnectionId),
+                "socket client should remove its logging integration test connection");
+            require(loggingClient->removeConnection(loggingClientConnectionId),
+                "logging client should remove its logging integration test connection");
+
+            serverTransport->stop();
+        }
+
 }  // namespace
 
 int main() {
@@ -1395,6 +1789,7 @@ int main() {
         testClientAcceptsTcpConnectionThroughResourceService();
         testClientReceivesAsyncAcceptedTcpConnectionThroughResourceService();
         testClientAcceptsTcpConnectionThroughNativeSocketBridge();
+        testClientRequestsLoggingSchemaAndReceivesBsdSocketLogs();
         testClientListensWithNativeSocketBridgeAndAcceptsBidirectionalTraffic();
         testSocketOwnershipByNodeIdThroughResourceService();
         testSharedSocketRejectsUnsupportedOptions();

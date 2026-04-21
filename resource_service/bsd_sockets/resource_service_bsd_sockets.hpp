@@ -3,6 +3,8 @@
 #include "resource_service/resource_service.hpp"
 #include "common/message_queue/mq.hpp"
 
+#include <google/protobuf/message.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -47,6 +49,7 @@ protected:
     bool registerConnectedSocket(const rsp::proto::RSPMessage& message,
                                  TCPConnectionResult&& tcpResult,
                                  const rsp::GUID& socketId,
+                                 const std::string& hostPort,
                                  bool asyncData, bool shareSocket);
 
     rsp::proto::RSPMessage makeStreamReplyMessage(const rsp::proto::RSPMessage& request,
@@ -109,11 +112,13 @@ private:
     void stopManagedSocket(const std::shared_ptr<ManagedSocketState>& socketState);
     void stopManagedListener(const std::shared_ptr<ManagedListenerState>& listenerState);
     void closeAllManagedSockets();
+    bool publishLogPayload(const google::protobuf::Message& payload);
 
     mutable std::mutex socketsMutex_;
     std::map<rsp::GUID, std::shared_ptr<ManagedSocketState>> managedSockets_;
     std::map<rsp::GUID, std::shared_ptr<ManagedListenerState>> managedListeningSockets_;
     std::shared_ptr<rsp::RSPMessageQueue> connectQueue_;
+    rsp::resource_manager::SchemaSnapshot loggingSchemaSnapshot_;
 };
 
 }  // namespace rsp::resource_service

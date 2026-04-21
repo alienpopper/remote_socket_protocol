@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 
+#include "common/logging/logging.hpp"
 #include "common/keypair.hpp"
 #include "common/message_queue/mq.hpp"
 
@@ -68,6 +69,8 @@ protected:
     virtual bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) = 0;
     virtual void handleOutputMessage(rsp::proto::RSPMessage message) = 0;
     void stopNodeQueues();
+    bool publishLogRecord(const rsp::proto::LogRecord& record,
+                          const rsp::resource_manager::SchemaSnapshot* schemaSnapshot);
 
     const std::array<uint8_t, 16>& instanceSeed() const;
     const KeyPair& keyPair() const;
@@ -83,6 +86,7 @@ private:
     rsp::MessageQueueHandle inputQueue_;
     rsp::MessageQueueHandle outputQueue_;
     mutable IdentityCache identityCache_;
+    rsp::logging::SubscriptionManager loggingSubscriptions_;
 };
 
 }  // namespace rsp

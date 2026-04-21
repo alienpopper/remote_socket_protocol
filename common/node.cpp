@@ -201,6 +201,44 @@ void IdentityCache::trimToLimitLocked() {
 }
 
 void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState&) {
+    if (message.has_log_subscribe_request()) {
+        const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+        if (!requesterNodeId.has_value()) {
+            return;
+        }
+
+        rsp::proto::RSPMessage response;
+        *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
+        rsp::copyMessageTrace(message, response);
+        *response.mutable_log_subscribe_reply() = owner_.loggingSubscriptions_.subscribe(
+            *requesterNodeId, message.log_subscribe_request(), rsp::DateTime());
+
+        const auto queue = owner_.outputQueue();
+        if (queue == nullptr || !queue->push(std::move(response))) {
+            std::cerr << "RSPNode failed to enqueue log subscribe reply on the output queue" << std::endl;
+        }
+        return;
+    }
+
+    if (message.has_log_unsubscribe_request()) {
+        const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+        if (!requesterNodeId.has_value()) {
+            return;
+        }
+
+        rsp::proto::RSPMessage response;
+        *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
+        rsp::copyMessageTrace(message, response);
+        *response.mutable_log_unsubscribe_reply() = owner_.loggingSubscriptions_.unsubscribe(
+            *requesterNodeId, message.log_unsubscribe_request());
+
+        const auto queue = owner_.outputQueue();
+        if (queue == nullptr || !queue->push(std::move(response))) {
+            std::cerr << "RSPNode failed to enqueue log unsubscribe reply on the output queue" << std::endl;
+        }
+        return;
+    }
+
     if (owner_.handleNodeSpecificMessage(message)) {
         return;
     }
@@ -242,10 +280,11 @@ RSPNode::RSPNode() : RSPNode(KeyPair::generateP256()) {
 RSPNode::RSPNode(KeyPair keyPair)
     : keyPair_(std::move(keyPair)),
       inputQueue_(std::make_shared<NodeInputQueue>(*this)),
-            outputQueue_(std::make_shared<NodeOutputQueue>(*this)),
-            identityCache_(keyPair_.nodeID(), [this](rsp::proto::RSPMessage message) {
-                    return outputQueue_ != nullptr && outputQueue_->push(std::move(message));
-            }) {
+      outputQueue_(std::make_shared<NodeOutputQueue>(*this)),
+      identityCache_(keyPair_.nodeID(), [this](rsp::proto::RSPMessage message) {
+          return outputQueue_ != nullptr && outputQueue_->push(std::move(message));
+      }),
+            loggingSubscriptions_(keyPair_.nodeID()) {
     rsp::os::randomFill(instanceSeed_.data(), static_cast<uint32_t>(instanceSeed_.size()));
     inputQueue_->setWorkerCount(1);
     inputQueue_->start();
@@ -306,6 +345,27 @@ IdentityCache& RSPNode::identityCache() {
 
 const IdentityCache& RSPNode::identityCache() const {
     return identityCache_;
+}
+
+bool RSPNode::publishLogRecord(const rsp::proto::LogRecord& record,
+                               const rsp::resource_manager::SchemaSnapshot* schemaSnapshot) {
+    if (loggingSubscriptions_.subscriptionCount() == 0) {
+        return true;
+    }
+
+    const auto queue = outputQueue();
+    if (queue == nullptr) {
+        return false;
+    }
+
+    loggingSubscriptions_.publish(
+        record,
+        [queue](const rsp::proto::RSPMessage& message) {
+            return queue->push(message);
+        },
+        schemaSnapshot,
+        rsp::DateTime());
+    return true;
 }
 
 }  // namespace rsp

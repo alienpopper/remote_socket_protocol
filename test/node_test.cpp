@@ -102,6 +102,15 @@ rsp::proto::RSPMessage makeUnsupportedMessage() {
     return message;
 }
 
+rsp::proto::RSPMessage makeLogSubscribeRequest(const rsp::NodeID& requesterNodeId) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_source() = toProtoNodeId(requesterNodeId);
+    message.mutable_log_subscribe_request()->set_payload_type_url("type.rsp/rsp.proto.LogText");
+    message.mutable_log_subscribe_request()->mutable_filter()->mutable_true_value();
+    message.mutable_log_subscribe_request()->set_duration_ms(5000);
+    return message;
+}
+
 void testPingProducesReply() {
     TestNode node;
     node.pauseOutputQueue();
@@ -137,6 +146,27 @@ void testUnsupportedMessageProducesError() {
     require(reply.destination().value() == "requester-node", "error reply should target the original sender");
 }
 
+void testLogSubscribeProducesReply() {
+    TestNode node;
+    node.pauseOutputQueue();
+    const rsp::NodeID requesterNodeId = rsp::KeyPair::generateP256().nodeID();
+
+    require(node.enqueueInput(makeLogSubscribeRequest(requesterNodeId)),
+        "node should accept a log subscribe request on its input queue");
+    require(waitForCondition([&node]() { return node.pendingOutputCount() == 1; }),
+        "node should enqueue a log subscribe reply on the output queue");
+
+    rsp::proto::RSPMessage reply;
+    require(node.tryPopOutput(reply), "node should allow inspection of the generated log subscribe reply");
+    require(reply.has_log_subscribe_reply(), "node should produce a log subscribe reply for a log request");
+    require(reply.destination().value() == toProtoNodeId(requesterNodeId).value(),
+        "log subscribe reply should target the original sender");
+    require(reply.log_subscribe_reply().status() == rsp::proto::LOG_SUBSCRIPTION_STATUS_ACCEPTED,
+        "node should accept valid log subscriptions in the base handler");
+    require(reply.log_subscribe_reply().has_subscription_id(),
+        "log subscribe reply should include a subscription id");
+}
+
 void testIdentityMessagesAreCachedByNodeId() {
     TestNode node;
     rsp::KeyPair identityKey = rsp::KeyPair::generateP256();
@@ -150,8 +180,8 @@ void testIdentityMessagesAreCachedByNodeId() {
     require(cachedIdentity.has_value(), "node should expose cached identities");
     require(cachedIdentity->public_key().public_key() == identityKey.publicKey().public_key(),
             "cached identity should preserve the public key payload");
-        require(!cachedIdentity->has_nonce(),
-            "node identity cache should not retain the identity nonce");
+    require(!cachedIdentity->has_nonce(),
+        "node identity cache should not retain the identity nonce");
 }
 
 void testIdentityCacheEvictsLeastRecentlyUsedEntries() {
@@ -200,6 +230,7 @@ int main() {
     try {
         testPingProducesReply();
         testUnsupportedMessageProducesError();
+        testLogSubscribeProducesReply();
         testIdentityMessagesAreCachedByNodeId();
         testIdentityCacheEvictsLeastRecentlyUsedEntries();
         testIdentityCacheCanSendChallengeRequests();

@@ -1,6 +1,7 @@
 #include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
 
+#include "logging/logging.pb.h"
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 
 #include <iostream>
@@ -201,6 +202,24 @@ static void test_endorsement_challenge() {
     CHECK(computeMessageHash(mk(1, "abc")) == computeMessageHash(mk(1, "abc")));
 }
 
+static void test_logging_message_hash() {
+    auto mk = [](const std::string& textMessage) {
+        rsp::proto::RSPMessage msg;
+        msg.mutable_source()->set_value(std::string(16, '\x01'));
+
+        auto* record = msg.mutable_log_record();
+
+        rsp::proto::LogText text;
+        text.set_message(textMessage);
+        text.add_tags("hash");
+        record->mutable_payload()->PackFrom(text, rsp::kTypeUrlPrefix);
+        return msg;
+    };
+
+        CHECK(computeMessageHash(mk("one")) != computeMessageHash(mk("two")));
+        CHECK(computeMessageHash(mk("one")) == computeMessageHash(mk("one")));
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -220,6 +239,7 @@ int main() {
     run("connect_tcp_request",            test_connect_tcp_request);
     run("route_update",                   test_route_update);
     run("endorsement_challenge",          test_endorsement_challenge);
+    run("logging_message_hash",           test_logging_message_hash);
 
     std::cout << "\n" << g_passed << "/" << (g_passed + g_failed) << " tests passed\n";
     return g_failed > 0 ? 1 : 0;

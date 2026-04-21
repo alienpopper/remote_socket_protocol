@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package rsp.proto;
+
+import "messages.proto";
+
+message LogText {
+    string message = 1;
+    repeated string tags = 2;
+}
+
+message LogCounterSample {
+    string name = 1;
+    int64 value = 2;
+    string unit = 3;
+}
+
+message LogDeliveryFailure {
+    string reason = 1;
+}

@@ -7,12 +7,15 @@
 
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 #include "resource_service/bsd_sockets/bsd_sockets_desc.hpp"
+#include "resource_service/bsd_sockets/bsd_sockets_logging.pb.h"
+#include "resource_service/bsd_sockets/bsd_sockets_logging_desc.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -20,6 +23,67 @@
 namespace rsp::resource_service {
 
 namespace {
+
+bool parsePort(const std::string& text, uint16_t& port) {
+    if (text.empty()) {
+        return false;
+    }
+
+    unsigned long value = 0;
+    for (const char current : text) {
+        if (current < '0' || current > '9') {
+            return false;
+        }
+
+        value = (value * 10UL) + static_cast<unsigned long>(current - '0');
+        if (value > std::numeric_limits<uint16_t>::max()) {
+            return false;
+        }
+    }
+
+    port = static_cast<uint16_t>(value);
+    return true;
+}
+
+bool parseEndpoint(const std::string& endpoint, std::string& host, uint16_t& port) {
+    const size_t separator = endpoint.rfind(':');
+    if (separator == std::string::npos || separator == 0 || separator + 1 >= endpoint.size()) {
+        return false;
+    }
+
+    host = endpoint.substr(0, separator);
+    return parsePort(endpoint.substr(separator + 1), port);
+}
+
+rsp::proto::ServiceSchema buildBsdSocketsLoggingSchema() {
+    return buildServiceSchema(
+        "resource_service/bsd_sockets/bsd_sockets_logging.proto",
+        rsp::schema::kBsdSocketsLoggingDescriptor,
+        rsp::schema::kBsdSocketsLoggingDescriptorSize,
+        1,
+        {
+            "type.rsp/rsp.proto.BsdSocketsConnectFailedLog",
+            "type.rsp/rsp.proto.BsdSocketsConnectEstablishedLog",
+            "type.rsp/rsp.proto.BsdSocketsListenFailedLog",
+            "type.rsp/rsp.proto.BsdSocketsListenStartedLog",
+            "type.rsp/rsp.proto.BsdSocketsConnectionAcceptedLog",
+            "type.rsp/rsp.proto.BsdSocketsAsyncConnectionAcceptedLog",
+            "type.rsp/rsp.proto.BsdSocketsSendFailedLog",
+            "type.rsp/rsp.proto.BsdSocketsRecvFailedLog",
+            "type.rsp/rsp.proto.BsdSocketsPeerClosedLog",
+            "type.rsp/rsp.proto.BsdSocketsListenClosedLog",
+            "type.rsp/rsp.proto.BsdSocketsSocketClosedLog",
+        });
+}
+
+rsp::resource_manager::SchemaSnapshot buildBsdSocketsLoggingSchemaSnapshot() {
+    rsp::proto::ServiceSchema schema;
+    schema.set_proto_file_name("resource_service/bsd_sockets/bsd_sockets_logging.proto");
+    schema.set_proto_file_descriptor_set(
+        std::string(reinterpret_cast<const char*>(rsp::schema::kBsdSocketsLoggingDescriptor),
+                    rsp::schema::kBsdSocketsLoggingDescriptorSize));
+    return rsp::resource_manager::SchemaSnapshot({schema});
+}
 
 std::string readBufferToString(const rsp::Buffer& buffer, uint32_t length) {
     return std::string(reinterpret_cast<const char*>(buffer.data()), length);
@@ -57,6 +121,7 @@ BsdSocketsResourceService::Ptr BsdSocketsResourceService::create(KeyPair keyPair
 
 BsdSocketsResourceService::BsdSocketsResourceService(KeyPair keyPair)
     : ResourceService(std::move(keyPair)),
+            loggingSchemaSnapshot_(buildBsdSocketsLoggingSchemaSnapshot()),
       connectQueue_(std::make_shared<ConnectTCPQueue>(
           [this](const rsp::proto::RSPMessage& message) { return handleConnectTCPRequest(message); })) {
     connectQueue_->setWorkerCount(8);
@@ -101,6 +166,7 @@ rsp::proto::ResourceAdvertisement BsdSocketsResourceService::buildResourceAdvert
             "type.rsp/rsp.proto.StreamRecv",
             "type.rsp/rsp.proto.StreamClose",
         });
+    *advertisement.add_schemas() = buildBsdSocketsLoggingSchema();
 
     return advertisement;
 }
@@ -132,7 +198,6 @@ bool BsdSocketsResourceService::handleNodeSpecificMessage(const rsp::proto::RSPM
 
     return false;
 }
-
 BsdSocketsResourceService::TCPConnectionResult BsdSocketsResourceService::createTCPConnection(
     const std::string& hostPort,
     uint32_t totalAttempts,
@@ -198,10 +263,23 @@ bool BsdSocketsResourceService::handleConnectTCPRequest(const rsp::proto::RSPMes
     auto tcpResult = createTCPConnection(request.host_port(), totalAttempts, retryDelayMilliseconds);
 
     if (tcpResult.connection == nullptr) {
+        rsp::proto::BsdSocketsConnectFailedLog log;
+        *log.mutable_requester_node_id() = toProtoNodeId(*requesterNodeId);
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        log.set_remote_endpoint(request.host_port());
+        std::string remoteHost;
+        uint16_t remotePort = 0;
+        if (parseEndpoint(request.host_port(), remoteHost, remotePort)) {
+            log.set_remote_host(remoteHost);
+            log.set_remote_port(remotePort);
+        }
+        log.set_status(rsp::proto::CONNECT_REFUSED);
+        log.set_attempts(totalAttempts);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::CONNECT_REFUSED, "tcp connect failed", &*socketId));
     }
 
-    return registerConnectedSocket(message, std::move(tcpResult), *socketId,
+    return registerConnectedSocket(message, std::move(tcpResult), *socketId, request.host_port(),
                                    request.has_async_data() && request.async_data(),
                                    request.has_share_socket() && request.share_socket());
 }
@@ -210,6 +288,7 @@ bool BsdSocketsResourceService::registerConnectedSocket(
     const rsp::proto::RSPMessage& message,
     TCPConnectionResult&& tcpResult,
     const rsp::GUID& socketId,
+    const std::string& hostPort,
     bool asyncData, bool shareSocket) {
 
     const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
@@ -237,6 +316,19 @@ bool BsdSocketsResourceService::registerConnectedSocket(
         stopManagedSocket(socketState);
         return false;
     }
+
+    rsp::proto::BsdSocketsConnectEstablishedLog log;
+    *log.mutable_requester_node_id() = toProtoNodeId(*requesterNodeId);
+    *log.mutable_stream_id() = toProtoStreamId(socketId);
+    log.set_remote_endpoint(hostPort);
+    std::string remoteHost;
+    uint16_t remotePort = 0;
+    if (parseEndpoint(hostPort, remoteHost, remotePort)) {
+        log.set_remote_host(remoteHost);
+        log.set_remote_port(remotePort);
+    }
+    log.set_status(rsp::proto::SUCCESS);
+    publishLogPayload(log);
 
     if (socketState->asyncData) {
         socketState->readThread = std::thread([this, socketState]() {
@@ -320,6 +412,18 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
 
     if (!tcpTransport->listen(request.host_port())) {
         tcpTransport->stop();
+        rsp::proto::BsdSocketsListenFailedLog log;
+        *log.mutable_requester_node_id() = toProtoNodeId(*requesterNodeId);
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        log.set_bind_endpoint(request.host_port());
+        std::string bindHost;
+        uint16_t bindPort = 0;
+        if (parseEndpoint(request.host_port(), bindHost, bindPort)) {
+            log.set_bind_host(bindHost);
+            log.set_bind_port(bindPort);
+        }
+        log.set_status(rsp::proto::STREAM_ERROR);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "tcp listen failed", &*socketId));
     }
 
@@ -335,6 +439,19 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
         stopManagedListener(listenerState);
         return false;
     }
+
+    rsp::proto::BsdSocketsListenStartedLog log;
+    *log.mutable_requester_node_id() = toProtoNodeId(*requesterNodeId);
+    *log.mutable_stream_id() = toProtoStreamId(*socketId);
+    log.set_bind_endpoint(request.host_port());
+    std::string bindHost;
+    uint16_t bindPort = 0;
+    if (parseEndpoint(request.host_port(), bindHost, bindPort)) {
+        log.set_bind_host(bindHost);
+        log.set_bind_port(bindPort);
+    }
+    log.set_status(rsp::proto::SUCCESS);
+    publishLogPayload(log);
 
     return true;
 }
@@ -449,6 +566,12 @@ bool BsdSocketsResourceService::handleAcceptTCP(const rsp::proto::RSPMessage& me
         return false;
     }
 
+    rsp::proto::BsdSocketsConnectionAcceptedLog log;
+    *log.mutable_requester_node_id() = toProtoNodeId(*rsp::senderNodeIdFromMessage(message));
+    *log.mutable_listen_stream_id() = toProtoStreamId(*listenSocketId);
+    *log.mutable_child_stream_id() = toProtoStreamId(*childSocketId);
+    publishLogPayload(log);
+
     if (socketState->asyncData) {
         socketState->readThread = std::thread([this, socketState]() {
             runAsyncReadLoop(socketState);
@@ -510,6 +633,11 @@ bool BsdSocketsResourceService::handleStreamSend(const rsp::proto::RSPMessage& m
         if (effectiveTrace) {
             std::cerr << "[resource_service] socket_send sendAll failed id=" << socketId->toString() << std::endl;
         }
+        rsp::proto::BsdSocketsSendFailedLog log;
+        *log.mutable_requester_node_id() = socketState->requesterNodeId;
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        log.set_status(rsp::proto::STREAM_ERROR);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "socket send failed"));
     }
 
@@ -557,10 +685,22 @@ bool BsdSocketsResourceService::handleStreamRecv(const rsp::proto::RSPMessage& m
     rsp::Buffer buffer(maxBytes);
     const int bytesRead = socketState == nullptr || socketState->connection == nullptr ? -1 : socketState->connection->recv(buffer);
     if (bytesRead < 0) {
+        rsp::proto::BsdSocketsRecvFailedLog log;
+        *log.mutable_requester_node_id() = socketState->requesterNodeId;
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        log.set_status(rsp::proto::STREAM_ERROR);
+        log.set_async_mode(false);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::STREAM_ERROR, "socket recv failed"));
     }
 
     if (bytesRead == 0) {
+        rsp::proto::BsdSocketsPeerClosedLog log;
+        *log.mutable_requester_node_id() = socketState->requesterNodeId;
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        log.set_status(rsp::proto::STREAM_CLOSED);
+        log.set_async_mode(false);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::STREAM_CLOSED, "socket closed"));
     }
 
@@ -604,6 +744,10 @@ bool BsdSocketsResourceService::handleStreamClose(const rsp::proto::RSPMessage& 
         }
 
         stopManagedListener(removedListener);
+        rsp::proto::BsdSocketsListenClosedLog log;
+        *log.mutable_requester_node_id() = removedListener->requesterNodeId;
+        *log.mutable_stream_id() = toProtoStreamId(*socketId);
+        publishLogPayload(log);
         return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS, std::string(), &*socketId));
     }
 
@@ -627,6 +771,10 @@ bool BsdSocketsResourceService::handleStreamClose(const rsp::proto::RSPMessage& 
     }
 
     stopManagedSocket(removedSocket);
+    rsp::proto::BsdSocketsSocketClosedLog log;
+    *log.mutable_requester_node_id() = removedSocket->requesterNodeId;
+    *log.mutable_stream_id() = toProtoStreamId(*socketId);
+    publishLogPayload(log);
 
     return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS));
 }
@@ -681,6 +829,12 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
         return;
     }
 
+    rsp::proto::BsdSocketsAsyncConnectionAcceptedLog log;
+    *log.mutable_requester_node_id() = listenerState->requesterNodeId;
+    *log.mutable_listen_stream_id() = toProtoStreamId(listenerState->socketId);
+    *log.mutable_child_stream_id() = toProtoStreamId(socketState->socketId);
+    publishLogPayload(log);
+
     if (socketState->asyncData) {
         socketState->readThread = std::thread([this, socketState]() {
             runAsyncReadLoop(socketState);
@@ -706,6 +860,12 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
         }
         if (bytesRead < 0) {
             if (!socketState->stopping.load()) {
+                rsp::proto::BsdSocketsRecvFailedLog log;
+                *log.mutable_requester_node_id() = socketState->requesterNodeId;
+                *log.mutable_stream_id() = toProtoStreamId(socketState->socketId);
+                log.set_status(rsp::proto::STREAM_ERROR);
+                log.set_async_mode(true);
+                publishLogPayload(log);
                 const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
                                                           rsp::proto::STREAM_ERROR,
                                                           "socket recv failed",
@@ -722,6 +882,12 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
 
         if (bytesRead == 0) {
             if (!socketState->stopping.load()) {
+                rsp::proto::BsdSocketsPeerClosedLog log;
+                *log.mutable_requester_node_id() = socketState->requesterNodeId;
+                *log.mutable_stream_id() = toProtoStreamId(socketState->socketId);
+                log.set_status(rsp::proto::STREAM_CLOSED);
+                log.set_async_mode(true);
+                publishLogPayload(log);
                 const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
                                                           rsp::proto::STREAM_CLOSED,
                                                           "socket closed",
@@ -759,6 +925,12 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
     if (socketState->traceEnabled) {
         std::cerr << "[resource_service] async_read_loop end id=" << socketState->socketId.toString() << std::endl;
     }
+}
+
+bool BsdSocketsResourceService::publishLogPayload(const google::protobuf::Message& payload) {
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(payload, rsp::kTypeUrlPrefix);
+    return publishLogRecord(record, &loggingSchemaSnapshot_);
 }
 
 bool BsdSocketsResourceService::validateSocketAccess(const rsp::proto::RSPMessage& message,
