@@ -1,0 +1,48 @@
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+index 0487fb8722..329719f5c7 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -709,6 +709,7 @@ bool IsCommandForOpenLink(int id) {
+   return id == IDC_CONTENT_CONTEXT_OPENLINKNEWTAB ||
+          id == IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW ||
+          id == IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD ||
++         id == IDC_CONTENT_CONTEXT_OPENLINKRSPTAB ||
+          id == IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW ||
+          (id >= IDC_OPEN_LINK_IN_PROFILE_FIRST &&
+           id <= IDC_OPEN_LINK_IN_PROFILE_LAST);
+@@ -1843,6 +1844,10 @@ void RenderViewContextMenu::AppendLinkItems() {
+                  : IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
+     }
+ 
++    // RSP tab item — always show when a link is present.
++    menu_model_.AddItem(IDC_CONTENT_CONTEXT_OPENLINKRSPTAB,
++                        u"Open Link in New RSP Tab");
++
+     AppendOpenInWebAppLinkItems();
+     AppendOpenWithLinkItems();
+ 
+@@ -3109,6 +3114,9 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+       return navigation_allowed &&
+              IsOpenLinkOTREnabled(GetProfile(), params_.link_url);
+ 
++    case IDC_CONTENT_CONTEXT_OPENLINKRSPTAB:
++      return navigation_allowed && !params_.link_url.is_empty();
++
+     case IDC_PRINT:
+       return IsPrintPreviewEnabled();
+ 
+@@ -3352,6 +3360,14 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
+           /*started_from_context_menu=*/true);
+       break;
+ 
++    case IDC_CONTENT_CONTEXT_OPENLINKRSPTAB: {
++      Browser* const rsp_browser = GetBrowser();
++      if (rsp_browser) {
++        chrome::NewRspTab(rsp_browser);
++      }
++      break;
++    }
++
+     case IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP:
+       ExecOpenWebApp();
+       break;
