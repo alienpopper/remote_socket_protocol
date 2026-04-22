@@ -21,3 +21,4 @@ bin/rsp_es
 bin/rsp_es.exe
 bin/rsp_bsd_sockets
 bin/rsp_bsd_sockets.exe
+**/.DS_Store
