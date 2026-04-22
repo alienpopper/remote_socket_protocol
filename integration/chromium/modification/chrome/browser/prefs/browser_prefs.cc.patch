@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 7da5166f6f..2a049fdfda 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/prefs/browser_prefs.h"
++#include "chrome/browser/rsp/rsp_prefs.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1682,6 +1683,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
++  rsp::prefs::RegisterProfilePrefs(registry);
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+   accessibility_annotator::prefs::RegisterProfilePrefs(registry);

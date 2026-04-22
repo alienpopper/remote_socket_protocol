@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 17a00488bc..826c882d60 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -61,6 +61,7 @@
+ #include "chrome/browser/ui/webui/settings/about_handler.h"
+ #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
+ #include "chrome/browser/ui/webui/settings/appearance_handler.h"
++#include "chrome/browser/rsp/rsp_settings_handler.h"
+ #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/downloads_handler.h"
+ #include "chrome/browser/ui/webui/settings/font_handler.h"
+@@ -233,6 +234,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "worker-src blob: chrome://resources 'self';");
+ 
+   AddSettingsPageUIHandler(std::make_unique<AppearanceHandler>(web_ui));
++  AddSettingsPageUIHandler(std::make_unique<RspSettingsHandler>());
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
