@@ -285,7 +285,7 @@ void testTcpAsciiHandshake() {
 
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
     const rsp::client::RSPClientMessage::ClientConnectionID connectionId =
-        client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
     require(client->hasConnections(), "client should track created connections");
     require(client->hasConnection(connectionId), "client should track the new connection id");
     require(client->connectionCount() == 1, "client should track one live connection");
@@ -423,9 +423,9 @@ ClientToClientPingResults testClientToClientRouting() {
     rsp::client::RSPClient::Ptr secondClient = rsp::client::RSPClient::create(std::move(secondClientKeyPair));
 
     const rsp::client::RSPClient::ClientConnectionID firstConnectionId =
-        firstClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        firstClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
     const rsp::client::RSPClient::ClientConnectionID secondConnectionId =
-        secondClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        secondClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(firstClient->hasConnections(), "high-level client should track created connections");
     require(firstClient->hasConnection(firstConnectionId), "high-level client should expose existing connection ids");
@@ -487,21 +487,11 @@ int main() {
         rsp::client::RSPClientMessage::Ptr secondReference = client;
         require(secondReference.use_count() >= 2, "client should support shared ownership");
 
-        bool invalidTransportThrown = false;
-        try {
-            static_cast<void>(client->connectToResourceManager("invalid-transport-spec", "protobuf"));
-        } catch (const std::invalid_argument&) {
-            invalidTransportThrown = true;
-        }
-        require(invalidTransportThrown, "client should reject malformed transport specifications");
+        require(!client->connectToResourceManager("invalid-transport-spec", "protobuf").has_value(),
+                "client should reject malformed transport specifications");
 
-        bool unsupportedTransportThrown = false;
-        try {
-            static_cast<void>(client->connectToResourceManager("udp:127.0.0.1:5555", "protobuf"));
-        } catch (const std::invalid_argument&) {
-            unsupportedTransportThrown = true;
-        }
-        require(unsupportedTransportThrown, "client should reject unsupported transport names");
+        require(!client->connectToResourceManager("udp:127.0.0.1:5555", "protobuf").has_value(),
+                "client should reject unsupported transport names");
 
         testTcpAsciiHandshake();
         testFullClientUsesQueuedHandshakeAndSigningPipeline();

@@ -205,6 +205,20 @@ std::optional<rsp::NodeID> findServiceNodeIdByProto(const rsp::proto::ResourceQu
     return std::nullopt;
 }
 
+std::optional<rsp::NodeID> findServiceNodeIdByProto(const rsp::client::ResourceQueryResult& reply,
+                                                    const std::string& protoFileName) {
+    for (const auto& service : reply.services) {
+        if (service.protoFileName != protoFileName) {
+            continue;
+        }
+        if (service.nodeId == rsp::NodeID{}) {
+            continue;
+        }
+        return service.nodeId;
+    }
+    return std::nullopt;
+}
+
 rsp::proto::LogASTFieldPath makeFieldPath(std::initializer_list<std::string> segments) {
     rsp::proto::LogASTFieldPath path;
     for (const auto& segment : segments) {
@@ -724,7 +738,7 @@ void testClientExchangesTcpDataThroughResourceService() {
 
     const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(resourceService->hasConnection(resourceServiceConnectionId),
             "resource service should stay connected to the resource manager");
@@ -783,7 +797,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 
     const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate the resource service and client for discovery test");
@@ -855,7 +869,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 
         const auto nameServiceConnectionId =
         nameService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate the name service and client for discovery test");
@@ -873,10 +887,10 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         require(waitForCondition([&client]() { return client->pendingResourceQueryReplyCount() == 1; }),
             "client should receive a resource query reply for the name service query");
 
-        rsp::proto::ResourceQueryReply queryReply;
+        rsp::client::ResourceQueryResult queryReply;
         require(client->tryDequeueResourceQueryReply(queryReply),
             "client should dequeue the discovered name service reply");
-        require(queryReply.services_size() == 1,
+        require(queryReply.services.size() == 1,
             "name service query should return one matching discovered service");
         const auto discoveredNameServiceNodeId = findServiceNodeIdByProto(queryReply, "name_service.proto");
         require(discoveredNameServiceNodeId.has_value() && *discoveredNameServiceNodeId == nameServiceNodeId,
@@ -903,7 +917,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
 
         const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate the resource service and client for discovery-driven connect test");
@@ -919,7 +933,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         require(waitForCondition([&client]() { return client->pendingResourceQueryReplyCount() == 1; }),
             "client should receive a resource query response for the TCP connect query");
 
-        rsp::proto::ResourceQueryReply queryReply;
+        rsp::client::ResourceQueryResult queryReply;
         require(client->tryDequeueResourceQueryReply(queryReply),
             "client should dequeue the discovered TCP connect service reply");
         const auto discoveredResourceServiceNodeId = findServiceNodeIdByProto(queryReply, "bsd_sockets.proto");
@@ -1050,7 +1064,7 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
 
     const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async socket test");
@@ -1072,21 +1086,21 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
     std::string receivedStream;
     const auto recvReply = client->streamRecvEx(*socketId, 32);
     require(recvReply.has_value(), "client should receive a socket reply when socket_recv is used on an async socket");
-    if (recvReply->error() == rsp::proto::ASYNC_STREAM) {
+    if (recvReply->status == rsp::client::StreamStatus::Async) {
         sawAsyncStreamReply = true;
-    } else if (recvReply->error() == rsp::proto::STREAM_DATA && recvReply->has_data()) {
-        receivedStream += recvReply->data();
+    } else if (recvReply->status == rsp::client::StreamStatus::Data && !recvReply->data.empty()) {
+        receivedStream += recvReply->data;
     }
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while ((!sawAsyncStreamReply || receivedStream.size() < expectedStream.size()) &&
            std::chrono::steady_clock::now() < deadline) {
-        rsp::proto::StreamReply reply;
-        if (client->tryDequeueStreamReply(reply)) {
-            if (reply.error() == rsp::proto::ASYNC_STREAM) {
+        rsp::client::StreamResult reply;
+        if (client->tryDequeueStreamResult(reply)) {
+            if (reply.status == rsp::client::StreamStatus::Async) {
                 sawAsyncStreamReply = true;
-            } else if (reply.error() == rsp::proto::STREAM_DATA && reply.has_data()) {
-                receivedStream += reply.data();
+            } else if (reply.status == rsp::client::StreamStatus::Data && !reply.data.empty()) {
+                receivedStream += reply.data;
             }
             continue;
         }
@@ -1125,7 +1139,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
     const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native socket bridge test");
@@ -1179,7 +1193,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for listen/accept test");
@@ -1238,7 +1252,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async accept test");
@@ -1250,7 +1264,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto acceptReply = client->acceptTCPEx(*listenSocketId, std::nullopt, 10);
         require(acceptReply.has_value(), "accept on an async listener should receive a reply");
-        require(acceptReply->error() == rsp::proto::ASYNC_STREAM,
+        require(acceptReply->status == rsp::client::StreamStatus::Async,
             "accept on an async listener should return ASYNC_STREAM");
 
         TestSocketClientPeer peer;
@@ -1259,42 +1273,39 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         const std::string response = "async-accept-response";
         peer.start(listenerEndpoint, greeting, clientPayload, response);
 
-        rsp::proto::StreamReply newConnectionReply;
+        rsp::client::StreamResult newConnectionReply;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         bool receivedNewConnection = false;
         while (std::chrono::steady_clock::now() < deadline) {
-        if (!client->tryDequeueStreamReply(newConnectionReply)) {
+        if (!client->tryDequeueStreamResult(newConnectionReply)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 
-        if (newConnectionReply.error() == rsp::proto::NEW_CONNECTION &&
-            newConnectionReply.has_stream_id() &&
-            newConnectionReply.has_new_stream_id()) {
-            const auto replyListenSocketId = fromProtoStreamId(newConnectionReply.stream_id());
-            if (replyListenSocketId.has_value() && *replyListenSocketId == *listenSocketId) {
+        if (newConnectionReply.status == rsp::client::StreamStatus::NewConnection &&
+            newConnectionReply.hasNewStreamId &&
+            newConnectionReply.streamId == *listenSocketId) {
             receivedNewConnection = true;
             break;
-            }
         }
         }
 
         require(receivedNewConnection, "client should receive a NEW_CONNECTION reply for async accept");
-        const auto childSocketId = fromProtoStreamId(newConnectionReply.new_stream_id());
-        require(childSocketId.has_value(), "NEW_CONNECTION reply should include a child socket id");
+        const rsp::GUID childSocketId = newConnectionReply.newStreamId;
+        require(newConnectionReply.hasNewStreamId, "NEW_CONNECTION reply should include a child socket id");
 
-        const auto receivedGreeting = client->streamRecv(*childSocketId, static_cast<uint32_t>(greeting.size()));
+        const auto receivedGreeting = client->streamRecv(childSocketId, static_cast<uint32_t>(greeting.size()));
         require(receivedGreeting.has_value(), "async accepted socket should receive greeting bytes from the peer");
         require(*receivedGreeting == greeting, "async accepted socket should receive the expected greeting bytes");
 
-        require(client->streamSend(*childSocketId, clientPayload),
+        require(client->streamSend(childSocketId, clientPayload),
             "async accepted socket should send payload bytes to the peer");
 
-        const auto receivedResponse = client->streamRecv(*childSocketId, static_cast<uint32_t>(response.size()));
+        const auto receivedResponse = client->streamRecv(childSocketId, static_cast<uint32_t>(response.size()));
         require(receivedResponse.has_value(), "async accepted socket should receive response bytes from the peer");
         require(*receivedResponse == response, "async accepted socket should receive the expected response bytes");
 
-        require(client->streamClose(*childSocketId), "client should close the async accepted child socket");
+        require(client->streamClose(childSocketId), "client should close the async accepted child socket");
         require(client->streamClose(*listenSocketId), "client should close the async listening socket");
         peer.wait();
 
@@ -1323,7 +1334,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto resourceServiceConnectionId =
             resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native accept bridge test");
@@ -1382,8 +1393,8 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto resourceServiceConnectionId =
         resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto ownerConnectionId = ownerClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto otherConnectionId = otherClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto ownerConnectionId = ownerClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+        const auto otherConnectionId = otherClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
             "resource manager should authenticate the resource service and both clients");
@@ -1404,7 +1415,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto mismatchReply = otherClient->streamRecvEx(*exclusiveSocketId, 64);
         require(mismatchReply.has_value(), "second client should receive a reply for exclusive socket recv");
-        require(mismatchReply->error() == rsp::proto::NODEID_MISMATCH,
+        require(mismatchReply->status == rsp::client::StreamStatus::NodeIdMismatch,
             "exclusive socket recv from a different node id should return NODEID_MISMATCH");
 
         const auto ownerGreeting = ownerClient->streamRecv(*exclusiveSocketId, static_cast<uint32_t>(exclusiveGreeting.size()));
@@ -1432,17 +1443,17 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto sharedGreetingReply = otherClient->streamRecvEx(*sharedSocketId, 64);
         require(sharedGreetingReply.has_value(), "second client should receive a reply for shared socket recv");
-        require(sharedGreetingReply->error() == rsp::proto::STREAM_DATA,
+        require(sharedGreetingReply->status == rsp::client::StreamStatus::Data,
             "shared socket recv from a different node id should succeed");
-        require(sharedGreetingReply->has_data() && sharedGreetingReply->data() == sharedGreeting,
+        require(!sharedGreetingReply->data.empty() && sharedGreetingReply->data == sharedGreeting,
             "second client should receive the shared socket greeting");
         require(otherClient->streamSend(*sharedSocketId, sharedPayload),
             "second client should be able to send on a shared socket");
         const auto sharedResponseReply = otherClient->streamRecvEx(*sharedSocketId, 64);
         require(sharedResponseReply.has_value(), "second client should receive the shared socket response");
-        require(sharedResponseReply->error() == rsp::proto::STREAM_DATA,
+        require(sharedResponseReply->status == rsp::client::StreamStatus::Data,
             "shared socket response should succeed for a different node id");
-        require(sharedResponseReply->has_data() && sharedResponseReply->data() == sharedResponse,
+        require(!sharedResponseReply->data.empty() && sharedResponseReply->data == sharedResponse,
             "second client should receive the shared socket response");
         require(otherClient->streamClose(*sharedSocketId), "second client should be able to close a shared socket");
         sharedSocketServer.wait();
@@ -1474,7 +1485,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         const auto resourceServiceConnectionId =
             resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native listen bridge test");
@@ -1537,7 +1548,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
             const auto resourceServiceConnectionId =
             resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for shared socket option validation");
@@ -1547,13 +1558,13 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             const auto sharedAsyncReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, true, true);
             require(sharedAsyncReply.has_value(),
                 "share_socket combined with async_data should receive a reply");
-            require(sharedAsyncReply->error() == rsp::proto::INVALID_FLAGS,
+            require(sharedAsyncReply->status == rsp::client::StreamStatus::InvalidFlags,
                 "share_socket combined with async_data should return INVALID_FLAGS");
 
             const auto sharedUseStreamReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, false, true, true);
             require(sharedUseStreamReply.has_value(),
                 "share_socket combined with use_socket should receive a reply");
-            require(sharedUseStreamReply->error() == rsp::proto::INVALID_FLAGS,
+            require(sharedUseStreamReply->status == rsp::client::StreamStatus::InvalidFlags,
                 "share_socket combined with use_socket should return INVALID_FLAGS");
 
             require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -1581,7 +1592,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
             const auto resourceServiceConnectionId =
                 resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+            const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for listening option validation");
@@ -1592,14 +1603,14 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
                 client->listenTCPEx(resourceServiceNodeId, listenerEndpoint, 0, false, false, true);
             require(sharedChildrenReply.has_value(),
                 "share_child_sockets without async_accept should receive a reply");
-            require(sharedChildrenReply->error() == rsp::proto::INVALID_FLAGS,
+            require(sharedChildrenReply->status == rsp::client::StreamStatus::InvalidFlags,
                 "share_child_sockets without async_accept should return INVALID_FLAGS");
 
             const auto asyncChildrenReply =
                 client->listenTCPEx(resourceServiceNodeId, listenerEndpoint, 0, false, false, false, false, true);
             require(asyncChildrenReply.has_value(),
                 "children_async_data without async_accept should receive a reply");
-            require(asyncChildrenReply->error() == rsp::proto::INVALID_FLAGS,
+            require(asyncChildrenReply->status == rsp::client::StreamStatus::InvalidFlags,
                 "children_async_data without async_accept should return INVALID_FLAGS");
 
             require(resourceService->removeConnection(resourceServiceConnectionId),
@@ -1630,7 +1641,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             const auto resourceServiceConnectionId =
                 resourceService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
             const auto socketClientConnectionId =
-                socketClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+                socketClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
             const auto loggingClientConnectionId =
                 loggingClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 

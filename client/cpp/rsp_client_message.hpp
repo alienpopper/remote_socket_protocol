@@ -34,7 +34,7 @@ public:
 
     RSPCLIENT_API int run() const;
 
-    RSPCLIENT_API ClientConnectionID connectToResourceManager(const std::string& transport, const std::string& encoding);
+    RSPCLIENT_API std::optional<ClientConnectionID> connectToResourceManager(const std::string& transport, const std::string& encoding);
     RSPCLIENT_API bool send(const rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API bool sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API bool hasConnections() const;

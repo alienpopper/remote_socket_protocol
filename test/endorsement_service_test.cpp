@@ -250,7 +250,7 @@ void testClientPingsEndorsementService() {
     auto client = rsp::client::RSPClient::create();
 
     const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(es->hasConnection(esConnectionId),
             "endorsement service should stay connected to the resource manager");
@@ -288,7 +288,7 @@ void testClientRequestsNetworkAccessEndorsement() {
     auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
 
     const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both the client and endorsement service before endorsement requests");
@@ -299,11 +299,11 @@ void testClientRequestsNetworkAccessEndorsement() {
         ETYPE_ACCESS,
         stringToBuffer(EVALUE_ACCESS_NETWORK.toString()));
     require(reply.has_value(), "client should receive an endorsement response from the endorsement service");
-    require(reply->status() == rsp::proto::ENDORSEMENT_SUCCESS,
+    require(reply->status == rsp::client::EndorsementResult::Status::Success,
             "endorsement service should accept a valid network access endorsement request");
-    require(reply->has_new_endorsement(), "successful endorsement responses should include a signed endorsement");
+    require(reply->newEndorsement.has_value(), "successful endorsement responses should include a signed endorsement");
 
-    const rsp::Endorsement issuedEndorsement = parseEndorsement(reply->new_endorsement());
+    const rsp::Endorsement issuedEndorsement = *reply->newEndorsement;
     require(issuedEndorsement.subject() == clientNodeId,
             "issued endorsement should target the requesting client");
     require(issuedEndorsement.endorsementService() == esNodeId,
@@ -345,7 +345,7 @@ void testClientRequestsNetworkAccessEndorsement() {
         auto client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
 
         const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both participants before raw endorsement requests");

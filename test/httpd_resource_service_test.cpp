@@ -129,8 +129,8 @@ void testClientDiscoversHttpdThroughResourceQuery() {
 
     auto client = rsp::client::RSPClient::create();
     const auto clientConnId = client->connectToResourceManager(
-        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    require(clientConnId != rsp::GUID{}, "client should connect");
+        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+    require(client->hasConnection(clientConnId), "client should connect");
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both connections");
@@ -147,18 +147,18 @@ void testClientDiscoversHttpdThroughResourceQuery() {
     require(waitForCondition([&client]() { return client->pendingResourceQueryReplyCount() == 1; }),
             "client should receive a resource query reply");
 
-    rsp::proto::ResourceQueryReply queryReply;
+    rsp::client::ResourceQueryResult queryReply;
     require(client->tryDequeueResourceQueryReply(queryReply),
             "client should dequeue the httpd resource query reply");
-    require(queryReply.services_size() == 1,
+    require(queryReply.services.size() == 1,
             "httpd query should return exactly one service");
 
-    const auto& svc = queryReply.services(0);
-    require(svc.has_schema() && svc.schema().proto_file_name() == "httpd.proto",
+    const auto& svc = queryReply.services[0];
+    require(svc.protoFileName == "httpd.proto",
             "discovered service should identify itself via httpd.proto");
 
     bool hasConnectHttp = false;
-    for (const auto& url : svc.schema().accepted_type_urls()) {
+    for (const auto& url : svc.acceptedTypeUrls) {
         if (url == "type.rsp/rsp.proto.ConnectHttp") {
             hasConnectHttp = true;
             break;
@@ -166,8 +166,7 @@ void testClientDiscoversHttpdThroughResourceQuery() {
     }
     require(hasConnectHttp, "httpd schema should list ConnectHttp as an accepted type");
 
-    const auto discoveredNodeId = fromProtoNodeId(svc.node_id());
-    require(discoveredNodeId.has_value() && *discoveredNodeId == httpdNodeId,
+    require(svc.nodeId == httpdNodeId,
             "discovered httpd node id should match the service");
 
     httpdService->removeConnection(httpdConnId);
@@ -213,8 +212,8 @@ void testClientConnectsToHttpdAndExchangesData() {
 
     auto client = rsp::client::RSPClient::create();
     const auto clientConnId = client->connectToResourceManager(
-        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-    require(clientConnId != rsp::GUID{}, "client should connect");
+        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+    require(client->hasConnection(clientConnId), "client should connect");
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both connections");
@@ -226,17 +225,12 @@ void testClientConnectsToHttpdAndExchangesData() {
     // --- Send ConnectHttp ---
     const auto connectReply = client->connectHttpEx(httpdNodeId);
     require(connectReply.has_value(), "client should receive a stream reply for ConnectHttp");
-    require(connectReply->error() == rsp::proto::SUCCESS,
+    require(connectReply->status == rsp::client::StreamStatus::Success,
             "ConnectHttp should succeed: " +
-                (connectReply->has_message() ? connectReply->message() : "(no message)"));
+                (!connectReply->message.empty() ? connectReply->message : "(no message)"));
 
     // Extract the stream ID assigned by the client.
-    require(connectReply->has_stream_id() && connectReply->stream_id().value().size() == 16,
-            "ConnectHttp reply should contain a 16-byte stream id");
-    uint64_t streamHigh = 0, streamLow = 0;
-    std::memcpy(&streamHigh, connectReply->stream_id().value().data(), sizeof(streamHigh));
-    std::memcpy(&streamLow,  connectReply->stream_id().value().data() + sizeof(streamHigh), sizeof(streamLow));
-    const rsp::GUID streamId(streamHigh, streamLow);
+    const rsp::GUID streamId = connectReply->streamId;
 
     // --- Send a raw HTTP/1.1 GET request over the stream ---
     const std::string httpRequest =
@@ -251,12 +245,12 @@ void testClientConnectsToHttpdAndExchangesData() {
     // --- Read the response ---
     const auto recvReply = client->streamRecvEx(streamId, 4096, 2000);
     require(recvReply.has_value(), "client should receive a stream reply for streamRecv");
-    require(recvReply->error() == rsp::proto::SUCCESS ||
-                recvReply->error() == rsp::proto::STREAM_DATA,
+    require(recvReply->status == rsp::client::StreamStatus::Success ||
+                recvReply->status == rsp::client::StreamStatus::Data,
             "streamRecv reply should indicate success or stream data");
-    require(recvReply->has_data(), "streamRecv reply should contain response data");
+    require(!recvReply->data.empty(), "streamRecv reply should contain response data");
 
-    const std::string responseData(recvReply->data().begin(), recvReply->data().end());
+    const std::string responseData = recvReply->data;
     require(responseData.find("HTTP/1.1 200 OK") != std::string::npos,
             "HTTP response should contain '200 OK'");
     require(responseData.find("test-httpd") != std::string::npos,

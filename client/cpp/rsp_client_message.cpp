@@ -14,7 +14,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,22 +59,22 @@ int RSPClientMessage::run() const {
     return 0;
 }
 
-RSPClientMessage::ClientConnectionID RSPClientMessage::connectToResourceManager(const std::string& transport,
+std::optional<RSPClientMessage::ClientConnectionID> RSPClientMessage::connectToResourceManager(const std::string& transport,
                                                                                 const std::string& encoding) {
     std::string transportName;
     std::string transportParameters;
     if (!splitTransportSpec(transport, transportName, transportParameters)) {
-        throw std::invalid_argument("transport must be in the format <name>:<parameters>");
+        return std::nullopt;
     }
 
     const auto selectedTransport = createTransport(transportName);
     if (selectedTransport == nullptr) {
-        throw std::invalid_argument("unsupported transport");
+        return std::nullopt;
     }
 
     const rsp::transport::ConnectionHandle connection = selectedTransport->connect(transportParameters);
     if (connection == nullptr) {
-        throw std::runtime_error("failed to establish transport connection");
+        return std::nullopt;
     }
 
     struct ConnectResult {
@@ -132,7 +131,7 @@ RSPClientMessage::ClientConnectionID RSPClientMessage::connectToResourceManager(
         handshakeQueue->stop();
         authnQueue->stop();
         selectedTransport->stop();
-        throw std::runtime_error("failed to enqueue transport for client handshake");
+        return std::nullopt;
     }
 
     {
@@ -145,13 +144,13 @@ RSPClientMessage::ClientConnectionID RSPClientMessage::connectToResourceManager(
 
     if (result.encoding == nullptr) {
         selectedTransport->stop();
-        throw std::runtime_error(result.error.empty() ? "connection setup failed" : result.error);
+        return std::nullopt;
     }
 
     if (!result.encoding->start()) {
         result.encoding->stop();
         selectedTransport->stop();
-        throw std::runtime_error("failed to start encoding");
+        return std::nullopt;
     }
 
     const auto signingQueue = std::make_shared<rsp::MessageQueueSign>(

@@ -333,11 +333,11 @@ int main(int argc, char* argv[]) {
             try {
                 const auto nsConnId = nsClient->connectToResourceManager(
                     transport, rsp::message_queue::kAsciiHandshakeEncoding);
-                if (nsConnId == rsp::GUID{}) {
+                if (!nsConnId.has_value()) {
                     std::cerr << "[rsp-sshd] Warning: could not open NS discovery connection\n";
                     return;
                 }
-                const auto rmNodeIdOpt = nsClient->peerNodeID(nsConnId);
+                const auto rmNodeIdOpt = nsClient->peerNodeID(*nsConnId);
                 if (!rmNodeIdOpt.has_value()) {
                     std::cerr << "[rsp-sshd] Warning: could not get RM node ID for NS\n";
                     return;
@@ -350,11 +350,11 @@ int main(int argc, char* argv[]) {
                     return;
                 }
                 std::cerr << "[rsp-sshd] Resource list returned "
-                          << queryResult->services_size() << " service(s)\n";
+                          << queryResult->services.size() << " service(s)\n";
                 int nsCount = 0;
-                for (const auto& svc : queryResult->services()) {
+                for (const auto& svc : queryResult->services) {
                     bool isNS = false;
-                    for (const auto& url : svc.schema().accepted_type_urls()) {
+                    for (const auto& url : svc.acceptedTypeUrls) {
                         if (url == "type.rsp/rsp.proto.NameCreateRequest") {
                             isNS = true;
                             break;
@@ -362,22 +362,22 @@ int main(int argc, char* argv[]) {
                     }
                     if (!isNS) continue;
 
-                    const auto nsNodeIdOpt = rsp::nodeIdFromSourceField(svc.node_id());
-                    if (!nsNodeIdOpt.has_value()) continue;
+                    const rsp::NodeID nsNodeId = svc.nodeId;
+                    if (nsNodeId == rsp::NodeID{}) continue;
 
                     const auto reply = nsClient->nameCreate(
-                        *nsNodeIdOpt,
+                        nsNodeId,
                         hostname,
                         sshdNodeId,
                         rsp::resource_service::kSshdNameType,
                         sshdNodeId);
                     if (reply.has_value()) {
                         std::cerr << "[rsp-sshd] Registered hostname '" << hostname
-                                  << "' with NS node " << nsNodeIdOpt->toString() << '\n';
+                                  << "' with NS node " << nsNodeId.toString() << '\n';
                         ++nsCount;
                     } else {
                         std::cerr << "[rsp-sshd] Warning: nameCreate failed for NS "
-                                  << nsNodeIdOpt->toString() << '\n';
+                                  << nsNodeId.toString() << '\n';
                     }
                 }
                 if (nsCount == 0) {

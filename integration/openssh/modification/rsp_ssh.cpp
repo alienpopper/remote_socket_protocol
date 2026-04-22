@@ -121,7 +121,7 @@ bool acquireEndorsement(rsp::client::RSPClient& client,
 
     for (int attempt = 0; attempt < 3; ++attempt) {
         auto reply = client.beginEndorsementRequest(esNodeId, etype, evalueBuffer);
-        if (reply.has_value() && reply->status() == rsp::proto::ENDORSEMENT_SUCCESS) {
+        if (reply.has_value() && reply->status == rsp::client::EndorsementResult::Status::Success) {
             return true;
         }
     }
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
 
     const auto connId = client->connectToResourceManager(
         cfg.rspTransport, rsp::message_queue::kAsciiHandshakeEncoding);
-    if (connId == rsp::GUID{}) {
+    if (!connId.has_value()) {
         log("Failed to connect to resource manager: " + cfg.rspTransport);
         return 1;
     }
@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
         rsNodeId = rsp::NodeID{cfg.resourceServiceNodeId};
     } else {
         // Discover NS nodes via RM, then look up the configured service name.
-        const auto rmNodeIdOpt = client->peerNodeID(connId);
+        const auto rmNodeIdOpt = client->peerNodeID(*connId);
         if (!rmNodeIdOpt.has_value()) {
             log("Failed to get RM node ID for name lookup");
             return 1;
@@ -222,9 +222,9 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         bool resolved = false;
-        for (const auto& svc : queryResult->services()) {
+        for (const auto& svc : queryResult->services) {
             bool isNS = false;
-            for (const auto& url : svc.schema().accepted_type_urls()) {
+            for (const auto& url : svc.acceptedTypeUrls) {
                 if (url == "type.rsp/rsp.proto.NameCreateRequest") {
                     isNS = true;
                     break;
@@ -232,21 +232,18 @@ int main(int argc, char* argv[]) {
             }
             if (!isNS) continue;
 
-            const auto nsNodeIdOpt = rsp::nodeIdFromSourceField(svc.node_id());
-            if (!nsNodeIdOpt.has_value()) continue;
+            const auto nsNodeId = svc.nodeId;
+            if (nsNodeId == rsp::NodeID{}) continue;
 
-            log("Querying NS " + nsNodeIdOpt->toString() + " for name '" + cfg.resourceServiceName + "'");
+            log("Querying NS " + nsNodeId.toString() + " for name '" + cfg.resourceServiceName + "'");
             const auto nameReply = client->nameQuery(
-                *nsNodeIdOpt,
+                nsNodeId,
                 cfg.resourceServiceName,
                 std::nullopt,
                 rsp::resource_service::kSshdNameType);
-            if (!nameReply.has_value() || nameReply->records().empty()) continue;
+            if (!nameReply.has_value() || nameReply->records.empty()) continue;
 
-            const auto ownerNodeIdOpt = rsp::nodeIdFromSourceField(nameReply->records(0).owner());
-            if (!ownerNodeIdOpt.has_value()) continue;
-
-            rsNodeId = *ownerNodeIdOpt;
+            rsNodeId = nameReply->records[0].owner;
             log("Resolved '" + cfg.resourceServiceName + "' to node " + rsNodeId.toString());
             resolved = true;
             break;

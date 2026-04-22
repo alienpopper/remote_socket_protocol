@@ -85,7 +85,7 @@ void testMemoryTransportHandshake() {
 
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create();
     const auto connectionId =
-        client->connectToResourceManager("memory:mem-handshake-channel", rsp::message_queue::kAsciiHandshakeEncoding);
+        client->connectToResourceManager("memory:mem-handshake-channel", rsp::message_queue::kAsciiHandshakeEncoding).value();
 
     require(client->hasConnections(), "client should track the memory transport connection");
     require(client->hasConnection(connectionId), "client should expose the new connection id");
@@ -149,7 +149,7 @@ void testMemoryTransportResourceServicePing() {
     // Connect a simple client to RM via memory transport.
     rsp::client::RSPClientMessage::Ptr client = rsp::client::RSPClientMessage::create();
     const auto clientConnectionId =
-        client->connectToResourceManager("memory:mem-rs-rm-channel", rsp::message_queue::kAsciiHandshakeEncoding);
+        client->connectToResourceManager("memory:mem-rs-rm-channel", rsp::message_queue::kAsciiHandshakeEncoding).value();
     require(client->hasConnections(), "client should connect to RM via memory transport");
 
     // Wait for RM to authenticate both connections.

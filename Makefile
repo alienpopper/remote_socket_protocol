@@ -544,6 +544,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/encoding/json/json_encoding.o \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
 	$(OBJ_DIR)/common/endorsement/field_resolver.o \
+	$(OBJ_DIR)/common/logging/logging.o \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)/common/transport/transport.o \
 	$(OBJ_DIR)/common/transport/transport_tcp.o \
