@@ -9,10 +9,19 @@ source_set("rsp") {
     "rsp_connection_manager.h",
     "rsp_keyed_service.cc",
     "rsp_keyed_service.h",
+    "rsp_scheme_url_loader_factory.cc",
+    "rsp_scheme_url_loader_factory.h",
+    "rsp_url_loader_factory.cc",
+    "rsp_url_loader_factory.h",
   ]
 
   deps = [
     "//base",
+    "//chrome/browser/profiles",
     "//components/keyed_service/core",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
   ]
 }
