@@ -4,17 +4,17 @@
 # Run via: ssh oldgame "bash ~/chromium/mainline/src/../../../test_baseline.sh"
 # Or:       bash integration/chromium/test_baseline.sh  (from repo root, runs remotely)
 
-set -euo pipefail
+set -uo pipefail
 
 CHROME="$HOME/chromium/mainline/src/out/Default/chrome"
 USER_DATA="$(mktemp -d /tmp/chrome-baseline-XXXXXX)"
 PASS=0
 FAIL=0
 ERRORS=()
+XVFB_PID=""
 
 cleanup() {
-    kill "$XVFB_PID" 2>/dev/null || true
-    pkill -f "$CHROME" 2>/dev/null || true
+    [ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null || true
     rm -rf "$USER_DATA"
 }
 trap cleanup EXIT
