@@ -1,0 +1,47 @@
+diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
+index 14662e913d..b7833ab1a2 100644
+--- a/chrome/browser/ui/browser_commands.cc
++++ b/chrome/browser/ui/browser_commands.cc
+@@ -41,6 +41,9 @@
+ #include "chrome/browser/media/router/media_router_feature.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/rsp/rsp_config.h"
++#include "chrome/browser/rsp/rsp_connection_manager.h"
++#include "chrome/browser/rsp/rsp_keyed_service.h"
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+ #include "chrome/browser/search/search.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -1132,6 +1135,32 @@ void NewIncognitoWindow(Profile* profile) {
+   NewEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
+ }
+ 
++void NewRspTab(BrowserWindowInterface* browser) {
++  CHECK(browser);
++  base::RecordAction(base::UserMetricsAction("NewRspTab"));
++
++  // TODO(rsp): Show RspTabConfigDialog to let the user choose RM/RS.
++  // For now, use a placeholder config so the OTR profile machinery can
++  // be exercised end-to-end.
++  RspTabConfig config;
++  config.rm_addr = "localhost:8080";
++  config.rs_node_id = "placeholder";
++
++  RspConnectionManager::GetInstance()->GetOrCreate(config);
++
++  Profile* rsp_profile = browser->GetProfile()->GetOriginalProfile()
++      ->GetOffTheRecordProfile(
++          Profile::OTRProfileID::CreateUniqueForRspTab(),
++          /*create_if_needed=*/true);
++
++  NavigateParams params(browser->GetBrowserForMigrationOnly(),
++                        GURL("chrome://newtab"),
++                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  params.initiating_profile = rsp_profile;
++  Navigate(&params);
++}
++
+ void CloseWindow(BrowserWindowInterface* browser) {
+   base::RecordAction(UserMetricsAction("CloseWindow"));
+   browser->GetWindow()->Close();
