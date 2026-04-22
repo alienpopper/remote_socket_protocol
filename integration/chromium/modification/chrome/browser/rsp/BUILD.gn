@@ -1,0 +1,18 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("rsp") {
+  sources = [
+    "rsp_config.h",
+    "rsp_connection_manager.cc",
+    "rsp_connection_manager.h",
+    "rsp_keyed_service.cc",
+    "rsp_keyed_service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/keyed_service/core",
+  ]
+}

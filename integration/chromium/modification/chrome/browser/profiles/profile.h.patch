@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/profiles/profile.h b/chrome/browser/profiles/profile.h
+index fde81ad289..c8f03e884e 100644
+--- a/chrome/browser/profiles/profile.h
++++ b/chrome/browser/profiles/profile.h
+@@ -97,6 +97,12 @@ class Profile : public content::BrowserContext {
+     // Creates a unique OTR profile id to be used for media router.
+     static OTRProfileID CreateUniqueForMediaRouter();
+ 
++    // Creates an OTR profile ID for an RSP tab.
++    static OTRProfileID CreateUniqueForRspTab();
++
++    // Returns true if this is an RSP tab OTR profile.
++    bool IsRspTab() const;
++
+ #if BUILDFLAG(IS_CHROMEOS)
+     // Creates a unique OTR profile id to be used for captive portal signin on
+     // ChromeOS.

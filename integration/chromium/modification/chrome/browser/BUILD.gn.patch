@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 12c6332978..4cdb64188f 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -837,6 +837,7 @@ static_library("browser") {
+     "//chrome/browser/obsolete_system",
+     "//chrome/browser/privacy_sandbox:headers",
+     "//chrome/browser/profiles",
++    "//chrome/browser/rsp",
+     "//chrome/browser/tab_contents",
+     "//chrome/browser/ui/tabs:tab_enums",
+   ]

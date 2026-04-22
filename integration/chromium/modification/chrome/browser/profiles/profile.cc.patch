@@ -1,0 +1,39 @@
+diff --git a/chrome/browser/profiles/profile.cc b/chrome/browser/profiles/profile.cc
+index 9fbd8722ba..5935e756ee 100644
+--- a/chrome/browser/profiles/profile.cc
++++ b/chrome/browser/profiles/profile.cc
+@@ -95,6 +95,7 @@ std::set<content::BrowserContext*>& GetProfileInstances() {
+ namespace {
+ 
+ const char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
++const char kRspTabOTRProfileIDPrefix[] = "RSP::Tab";
+ const char kMediaRouterOTRProfileIDPrefix[] = "MediaRouter::Presentation";
+ const char kTestOTRProfileIDPrefix[] = "Test::OTR";
+ 
+@@ -113,7 +114,8 @@ bool Profile::OTRProfileID::AllowsBrowserWindows() const {
+   // Non-Primary OTR profiles are not supposed to create Browser windows.
+   // DevTools::BrowserContext, MediaRouter::Presentation, and
+   // CaptivePortal::Signin are exceptions to this ban.
+-  if (*this == PrimaryID() || IsDevTools() ||
++  if (IsRspTab() ||
++      *this == PrimaryID() || IsDevTools() ||
+       base::StartsWith(profile_id_, kMediaRouterOTRProfileIDPrefix,
+                        base::CompareCase::SENSITIVE)) {
+     return true;
+@@ -164,6 +166,16 @@ Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForMediaRouter() {
+   return CreateUnique(kMediaRouterOTRProfileIDPrefix);
+ }
+ 
++// static
++Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForRspTab() {
++  return CreateUnique(kRspTabOTRProfileIDPrefix);
++}
++
++bool Profile::OTRProfileID::IsRspTab() const {
++  return base::StartsWith(profile_id_, kRspTabOTRProfileIDPrefix,
++                          base::CompareCase::SENSITIVE);
++}
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ // static
+ Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForCaptivePortal() {

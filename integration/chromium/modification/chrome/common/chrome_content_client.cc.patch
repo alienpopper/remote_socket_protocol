@@ -1,0 +1,22 @@
+diff --git a/chrome/common/chrome_content_client.cc b/chrome/common/chrome_content_client.cc
+index 12b399993a..2accaefd22 100644
+--- a/chrome/common/chrome_content_client.cc
++++ b/chrome/common/chrome_content_client.cc
+@@ -193,6 +193,7 @@ static const char* const kChromeStandardURLSchemes[] = {
+     webapps::kIsolatedAppScheme,
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+         // BUILDFLAG(IS_CHROMEOS)
++    chrome::kRspScheme,
+     chrome::kChromeNativeScheme,        chrome::kChromeSearchScheme,
+     dom_distiller::kDomDistillerScheme,
+ #if BUILDFLAG(IS_ANDROID)
+@@ -228,6 +229,9 @@ void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
+   // chrome-search: resources shouldn't trigger insecure content warnings.
+   schemes->secure_schemes.push_back(chrome::kChromeSearchScheme);
+ 
++  // rsp:// is a browser-internal scheme for RSP connections.
++  schemes->secure_schemes.push_back(chrome::kRspScheme);
++
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+   // Treat extensions as secure because communication with them is entirely in
+   // the browser, so there is no danger of manipulation or eavesdropping on
