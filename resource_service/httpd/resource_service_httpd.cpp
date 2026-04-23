@@ -229,7 +229,8 @@ bool HttpdResourceService::handleConnectHttp(const rsp::proto::RSPMessage& messa
                                            "HTTP server connection failed", &*socketId));
     }
 
-    return registerConnectedSocket(message, std::move(tcpResult), *socketId, asyncData, shareSocket);
+    const std::string hostPort = "127.0.0.1:" + std::to_string(builtinPort_.load());
+    return registerConnectedSocket(message, std::move(tcpResult), *socketId, hostPort, asyncData, shareSocket);
 }
 
 // ---------------------------------------------------------------------------

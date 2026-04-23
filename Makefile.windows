@@ -27,6 +27,8 @@ NAME_SERVICE_TARGET = $(BIN_DIR)\rsp_name_service.exe
 TRANSPORT_MEMORY_TEST_TARGET = $(BIN_DIR)\transport_memory_test.exe
 HTTPD_RESOURCE_SERVICE_TEST_TARGET = $(BIN_DIR)\httpd_resource_service_test.exe
 RSP_HTTPD_TARGET = $(BIN_DIR)\rsp_httpd.exe
+LOGGING_TEST_TARGET = $(BIN_DIR)\logging_test.exe
+TRANSPORT_TCP_TEST_TARGET = $(BIN_DIR)\transport_tcp_test.exe
 ENDORSEMENT_TEXT_TEST_TARGET = $(BIN_DIR)\endorsement_text_test.exe
 MESSAGE_HASH_TEST_TARGET = $(BIN_DIR)\message_hash_test.exe
 RUNTIME_PROTO_TEST_TARGET = $(BIN_DIR)\runtime_proto_test.exe
@@ -50,7 +52,13 @@ HTTPD_GENERATED_OBJECT = $(OBJ_DIR)\httpd.pb.obj
 NAME_SERVICE_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\name_service\name_service.pb.cc
 NAME_SERVICE_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\name_service\name_service.pb.h
 NAME_SERVICE_GENERATED_OBJECT = $(OBJ_DIR)\name_service.pb.obj
-PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj $(BSD_SOCKETS_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT) $(HTTPD_GENERATED_OBJECT) $(NAME_SERVICE_GENERATED_OBJECT)
+BSD_SOCKETS_LOGGING_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets_logging.pb.cc
+BSD_SOCKETS_LOGGING_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets_logging.pb.h
+BSD_SOCKETS_LOGGING_GENERATED_OBJECT = $(OBJ_DIR)\bsd_sockets_logging.pb.obj
+LOGGING_GENERATED_SOURCE = $(PROTOBUF_GENERATED_DIR)\logging\logging.pb.cc
+LOGGING_GENERATED_HEADER = $(PROTOBUF_GENERATED_DIR)\logging\logging.pb.h
+LOGGING_GENERATED_OBJECT = $(OBJ_DIR)\logging.pb.obj
+PROTOBUF_GENERATED_OBJECT = $(OBJ_DIR)\messages.pb.obj $(BSD_SOCKETS_GENERATED_OBJECT) $(BSD_SOCKETS_LOGGING_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT) $(HTTPD_GENERATED_OBJECT) $(NAME_SERVICE_GENERATED_OBJECT) $(LOGGING_GENERATED_OBJECT)
 GENERATE_MESSAGES_SCRIPT = scripts\generate_messages.py
 EMBED_DESCRIPTOR_SCRIPT = scripts\embed_descriptor.py
 BSD_SOCKETS_DESC = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets.desc
@@ -61,6 +69,10 @@ HTTPD_DESC = $(PROTOBUF_GENERATED_DIR)\resource_service\httpd\httpd.desc
 HTTPD_DESC_HEADER = $(PROTOBUF_GENERATED_DIR)\resource_service\httpd\httpd_desc.hpp
 NAME_SERVICE_DESC = $(PROTOBUF_GENERATED_DIR)\name_service\name_service.desc
 NAME_SERVICE_DESC_HEADER = $(PROTOBUF_GENERATED_DIR)\name_service\name_service_desc.hpp
+BSD_SOCKETS_LOGGING_DESC = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets_logging.desc
+BSD_SOCKETS_LOGGING_DESC_HEADER = $(PROTOBUF_GENERATED_DIR)\resource_service\bsd_sockets\bsd_sockets_logging_desc.hpp
+LOGGING_DESC = $(PROTOBUF_GENERATED_DIR)\logging\logging.desc
+LOGGING_DESC_HEADER = $(PROTOBUF_GENERATED_DIR)\logging\logging_desc.hpp
 NODEJS_MESSAGES_JS = client\nodejs\messages.js
 PYTHON_MESSAGES_PY = client\python\messages.py
 TOP_BIN_DIR = bin
@@ -117,6 +129,7 @@ OBJECTS = \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
 	$(OBJ_DIR)\transport_memory.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
     $(OBJ_DIR)\resource_manager.obj \
@@ -156,6 +169,9 @@ MQ_SIGNING_TEST_OBJECTS = \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\mq_signing.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -167,6 +183,9 @@ SIGNING_BENCHMARK_OBJECTS = \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\mq_signing.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -182,6 +201,7 @@ MQ_AUTHN_TEST_OBJECTS = \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
 	$(OBJ_DIR)\json_encoding.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_memory.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
@@ -232,6 +252,7 @@ RSP_CLI_TOOL_OBJECTS = \
 	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -243,6 +264,9 @@ NODE_TEST_OBJECTS = \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\mq_signing.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -267,6 +291,7 @@ CLIENT_LIBRARY_OBJECTS = \
 	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_client_message.obj \
 	$(OBJ_DIR)\rsp_client.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -287,6 +312,7 @@ FULL_CLIENT_LIBRARY_OBJECTS = \
 	$(OBJ_DIR)\transport_tcp.obj \
 	$(OBJ_DIR)\transport_memory.obj \
 	$(OBJ_DIR)\rsp_full_client.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -302,6 +328,8 @@ RESOURCE_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
 	$(OBJ_DIR)\json_encoding.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
@@ -310,6 +338,7 @@ RESOURCE_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_main.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -325,6 +354,8 @@ BSD_SOCKETS_OBJECTS = \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
 	$(OBJ_DIR)\json_encoding.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
@@ -333,6 +364,7 @@ BSD_SOCKETS_OBJECTS = \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_bsd_sockets_main.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -357,6 +389,7 @@ ENDORSEMENT_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\endorsement_service.obj \
 	$(OBJ_DIR)\endorsement_service_main.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -372,6 +405,8 @@ NAME_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\encoding.obj \
 	$(OBJ_DIR)\protobuf_encoding.obj \
 	$(OBJ_DIR)\json_encoding.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\transport.obj \
 	$(OBJ_DIR)\transport_tcp.obj \
@@ -380,6 +415,7 @@ NAME_SERVICE_OBJECTS = \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\name_service.obj \
 	$(OBJ_DIR)\name_service_main.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -410,6 +446,7 @@ RESOURCE_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\name_service.obj \
 	$(OBJ_DIR)\resource_service_test.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -437,6 +474,7 @@ RESOURCE_SERVICE_JSON_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_json_test.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -467,6 +505,7 @@ HTTPD_RESOURCE_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_httpd.obj \
 	$(OBJ_DIR)\httpd_resource_service_test.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -496,6 +535,7 @@ RSP_HTTPD_OBJECTS = \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\resource_service_httpd.obj \
 	$(OBJ_DIR)\resource_service_httpd_main.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -524,6 +564,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS = \
 	$(OBJ_DIR)\rsp_full_client.obj \
 	$(OBJ_DIR)\endorsement_service.obj \
 	$(OBJ_DIR)\endorsement_service_test.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -553,6 +594,7 @@ TRANSPORT_MEMORY_TEST_OBJECTS = \
 	$(OBJ_DIR)\resource_service.obj \
 	$(OBJ_DIR)\resource_service_bsd_sockets.obj \
 	$(OBJ_DIR)\transport_memory_test.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
@@ -562,6 +604,9 @@ KEYPAIR_TEST_OBJECTS = \
 	$(OBJ_DIR)\node.obj \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq_signing.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -588,6 +633,9 @@ MESSAGE_HASH_TEST_OBJECTS = \
 	$(OBJ_DIR)\keypair.obj \
 	$(OBJ_DIR)\mq.obj \
 	$(OBJ_DIR)\mq_signing.obj \
+	$(OBJ_DIR)\endorsement.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_random.obj \
@@ -598,6 +646,24 @@ RUNTIME_PROTO_TEST_OBJECTS = \
 
 TRANSCODING_TEST_OBJECTS = \
 	$(OBJ_DIR)\transcoding_test.obj
+
+LOGGING_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\field_resolver.obj \
+	$(OBJ_DIR)\logging.obj \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\logging_test.obj
+
+TRANSPORT_TCP_TEST_OBJECTS = \
+	$(OBJ_DIR)\base_types.obj \
+	$(OBJ_DIR)\transport.obj \
+	$(OBJ_DIR)\transport_tcp.obj \
+	$(OBJ_DIR)\os_fileops.obj \
+	$(OBJ_DIR)\os_socket.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\transport_tcp_test.obj
 
 CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
@@ -624,11 +690,12 @@ CLIENT_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_fileops.obj \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\logging.obj \
 	$(OBJ_DIR)\client_test.obj
 
 all: dirs generate-messages $(TARGET) $(ESP_RM_TARGET) $(ESP_ES_TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(BSD_SOCKETS_TARGET) $(NAME_SERVICE_TARGET) $(RSP_HTTPD_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET) $(RSP_CLI_TOOL_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-signing test-node test-client test-resource-service test-httpd-resource-service test-endorsement-service test-transport-memory
+test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-signing test-node test-client test-resource-service test-httpd-resource-service test-endorsement-service test-transport-memory test-logging test-transport-tcp
 
 !include third_party\Makefile.windows
 
@@ -658,7 +725,7 @@ $(RSPFULLCLIENT_STATIC_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB
 $(RSPCLIENT_SHARED_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(CLIENT_LIBRARY_OBJECTS)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message_dll.obj
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_BUILD_DLL /c client\cpp\rsp_client.cpp /Fo$(OBJ_DIR)\rsp_client_dll.obj
-		cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\mq.obj $(OBJ_DIR)\mq_ascii_handshake.obj $(OBJ_DIR)\mq_authn.obj $(OBJ_DIR)\mq_signing.obj $(OBJ_DIR)\encoding.obj $(OBJ_DIR)\protobuf_encoding.obj $(OBJ_DIR)\json_encoding.obj $(OBJ_DIR)\endorsement.obj $(OBJ_DIR)\field_resolver.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\transport_memory.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
+		cl /nologo $(CXXFLAGS) /LD $(OBJ_DIR)\base_types.obj $(OBJ_DIR)\node.obj $(OBJ_DIR)\keypair.obj $(OBJ_DIR)\mq.obj $(OBJ_DIR)\mq_ascii_handshake.obj $(OBJ_DIR)\mq_authn.obj $(OBJ_DIR)\mq_signing.obj $(OBJ_DIR)\encoding.obj $(OBJ_DIR)\protobuf_encoding.obj $(OBJ_DIR)\json_encoding.obj $(OBJ_DIR)\endorsement.obj $(OBJ_DIR)\field_resolver.obj $(PROTOBUF_GENERATED_OBJECT) $(OBJ_DIR)\transport.obj $(OBJ_DIR)\transport_tcp.obj $(OBJ_DIR)\transport_memory.obj $(OBJ_DIR)\rsp_client_message_dll.obj $(OBJ_DIR)\rsp_client_dll.obj $(OBJ_DIR)\logging.obj $(OBJ_DIR)\os_fileops.obj $(OBJ_DIR)\os_socket.obj $(OBJ_DIR)\os_random.obj $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /link /OUT:$(RSPCLIENT_SHARED_TARGET) /IMPLIB:$(RSPCLIENT_IMPORT_LIB)
 
 $(RESOURCE_SERVICE_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RESOURCE_SERVICE_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(RESOURCE_SERVICE_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RESOURCE_SERVICE_TARGET)
@@ -693,17 +760,21 @@ $(RUNTIME_PROTO_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) 
 $(TRANSCODING_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSCODING_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(TRANSCODING_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(TRANSCODING_TEST_TARGET)
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto $(PROTOBUF_PROTOC)
 	if not exist $(PROTOBUF_GENERATED_DIR) mkdir $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto
+	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto
 	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(BSD_SOCKETS_DESC) --include_imports resource_service\bsd_sockets\bsd_sockets.proto
+	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(BSD_SOCKETS_LOGGING_DESC) --include_imports resource_service\bsd_sockets\bsd_sockets_logging.proto
 	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(SSHD_DESC) --include_imports resource_service\sshd\sshd.proto
 	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(HTTPD_DESC) --include_imports resource_service\httpd\httpd.proto
 	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(NAME_SERVICE_DESC) --include_imports name_service\name_service.proto
+	$(PROTOBUF_PROTOC) --proto_path=. --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(LOGGING_DESC) --include_imports logging\logging.proto
 	python $(EMBED_DESCRIPTOR_SCRIPT) $(BSD_SOCKETS_DESC) $(BSD_SOCKETS_DESC_HEADER) --name kBsdSocketsDescriptor
+	python $(EMBED_DESCRIPTOR_SCRIPT) $(BSD_SOCKETS_LOGGING_DESC) $(BSD_SOCKETS_LOGGING_DESC_HEADER) --name kBsdSocketsLoggingDescriptor
 	python $(EMBED_DESCRIPTOR_SCRIPT) $(SSHD_DESC) $(SSHD_DESC_HEADER) --name kSshdDescriptor
 	python $(EMBED_DESCRIPTOR_SCRIPT) $(HTTPD_DESC) $(HTTPD_DESC_HEADER) --name kHttpdDescriptor
 	python $(EMBED_DESCRIPTOR_SCRIPT) $(NAME_SERVICE_DESC) $(NAME_SERVICE_DESC_HEADER) --name kNameServiceDescriptor
+	python $(EMBED_DESCRIPTOR_SCRIPT) $(LOGGING_DESC) $(LOGGING_DESC_HEADER) --name kLoggingDescriptor
 
 $(PROTOBUF_GENERATED_HEADER): $(PROTOBUF_GENERATED_SOURCE)
 
@@ -751,6 +822,28 @@ $(NAME_SERVICE_DESC_HEADER): $(NAME_SERVICE_DESC)
 $(NAME_SERVICE_GENERATED_OBJECT): $(NAME_SERVICE_GENERATED_SOURCE) $(NAME_SERVICE_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c $(NAME_SERVICE_GENERATED_SOURCE) /Fo$(NAME_SERVICE_GENERATED_OBJECT)
 
+$(BSD_SOCKETS_LOGGING_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_LOGGING_GENERATED_HEADER): $(BSD_SOCKETS_LOGGING_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_LOGGING_DESC): $(PROTOBUF_GENERATED_SOURCE)
+
+$(BSD_SOCKETS_LOGGING_DESC_HEADER): $(BSD_SOCKETS_LOGGING_DESC)
+
+$(BSD_SOCKETS_LOGGING_GENERATED_OBJECT): $(BSD_SOCKETS_LOGGING_GENERATED_SOURCE) $(BSD_SOCKETS_LOGGING_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c $(BSD_SOCKETS_LOGGING_GENERATED_SOURCE) /Fo$(BSD_SOCKETS_LOGGING_GENERATED_OBJECT)
+
+$(LOGGING_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
+
+$(LOGGING_GENERATED_HEADER): $(LOGGING_GENERATED_SOURCE)
+
+$(LOGGING_DESC): $(PROTOBUF_GENERATED_SOURCE)
+
+$(LOGGING_DESC_HEADER): $(LOGGING_DESC)
+
+$(LOGGING_GENERATED_OBJECT): $(LOGGING_GENERATED_SOURCE) $(LOGGING_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c $(LOGGING_GENERATED_SOURCE) /Fo$(LOGGING_GENERATED_OBJECT)
+
 $(BASE_TYPES_TEST_TARGET): dirs $(BASE_TYPES_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(BASE_TYPES_TEST_TARGET)
 
@@ -795,6 +888,12 @@ $(ENDORSEMENT_SERVICE_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE
 
 $(TRANSPORT_MEMORY_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSPORT_MEMORY_TEST_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(TRANSPORT_MEMORY_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(TRANSPORT_MEMORY_TEST_TARGET)
+
+$(LOGGING_TEST_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(LOGGING_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(LOGGING_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(LOGGING_TEST_TARGET)
+
+$(TRANSPORT_TCP_TEST_TARGET): dirs $(TRANSPORT_TCP_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(TRANSPORT_TCP_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(TRANSPORT_TCP_TEST_TARGET)
 
 $(RSP_ENDORSEMENT_TOOL_TARGET): dirs $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_ENDORSEMENT_TOOL_OBJECTS)
 	cl /nologo $(CXXFLAGS) $(RSP_ENDORSEMENT_TOOL_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) /Fe$(RSP_ENDORSEMENT_TOOL_TARGET)
@@ -862,8 +961,14 @@ test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 test-httpd-resource-service: $(HTTPD_RESOURCE_SERVICE_TEST_TARGET)
 	$(HTTPD_RESOURCE_SERVICE_TEST_TARGET)
 
-generate-messages: messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto $(GENERATE_MESSAGES_SCRIPT)
-	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+test-logging: $(LOGGING_TEST_TARGET)
+	$(LOGGING_TEST_TARGET)
+
+test-transport-tcp: $(TRANSPORT_TCP_TEST_TARGET)
+	$(TRANSPORT_TCP_TEST_TARGET)
+
+generate-messages: messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto $(GENERATE_MESSAGES_SCRIPT)
+	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 $(OBJ_DIR)\base_types.obj: common\base_types.cpp common\base_types.hpp
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\base_types.cpp /Fo$(OBJ_DIR)\base_types.obj
@@ -900,6 +1005,9 @@ $(OBJ_DIR)\json_encoding.obj: common\encoding\json\json_encoding.cpp common\enco
 
 $(OBJ_DIR)\endorsement.obj: common\endorsement\endorsement.cpp common\endorsement\endorsement.hpp common\endorsement\field_resolver.hpp common\base_types.hpp common\keypair.hpp resource_manager\schema_registry.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\endorsement\endorsement.cpp /Fo$(OBJ_DIR)\endorsement.obj
+
+$(OBJ_DIR)\logging.obj: common\logging\logging.cpp common\logging\logging.hpp common\endorsement\field_resolver.hpp resource_manager\schema_registry.hpp $(PROTOBUF_GENERATED_HEADER) $(LOGGING_GENERATED_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\logging\logging.cpp /Fo$(OBJ_DIR)\logging.obj
 
 $(OBJ_DIR)\field_resolver.obj: common\endorsement\field_resolver.cpp common\endorsement\field_resolver.hpp resource_manager\schema_registry.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\endorsement\field_resolver.cpp /Fo$(OBJ_DIR)\field_resolver.obj
@@ -945,7 +1053,7 @@ $(OBJ_DIR)\resource_manager_main.obj: resource_manager\resource_manager_main.cpp
 $(OBJ_DIR)\resource_service.obj: resource_service\resource_service.cpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\resource_service.cpp /Fo$(OBJ_DIR)\resource_service.obj
 
-$(OBJ_DIR)\resource_service_bsd_sockets.obj: resource_service\bsd_sockets\resource_service_bsd_sockets.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp common\message_queue\mq.hpp common\transport\transport_tcp.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(BSD_SOCKETS_DESC_HEADER)
+$(OBJ_DIR)\resource_service_bsd_sockets.obj: resource_service\bsd_sockets\resource_service_bsd_sockets.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp common\message_queue\mq.hpp common\transport\transport_tcp.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(BSD_SOCKETS_DESC_HEADER) $(BSD_SOCKETS_LOGGING_GENERATED_HEADER) $(BSD_SOCKETS_LOGGING_DESC_HEADER) $(LOGGING_GENERATED_HEADER) $(LOGGING_DESC_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c resource_service\bsd_sockets\resource_service_bsd_sockets.cpp /Fo$(OBJ_DIR)\resource_service_bsd_sockets.obj
 
 $(OBJ_DIR)\resource_service_main.obj: resource_service\resource_service_main.cpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp client\cpp_full\rsp_client.hpp common\message_queue\mq_ascii_handshake.hpp $(PROTOBUF_GENERATED_HEADER)
@@ -1040,6 +1148,12 @@ $(OBJ_DIR)\signing_benchmark.obj: test\signing_benchmark.cpp common\message_queu
 
 $(OBJ_DIR)\transport_memory_test.obj: test\transport_memory_test.cpp client\cpp\rsp_client_message.hpp resource_service\bsd_sockets\resource_service_bsd_sockets.hpp resource_service\resource_service.hpp resource_manager\resource_manager.hpp common\transport\transport_memory.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c test\transport_memory_test.cpp /Fo$(OBJ_DIR)\transport_memory_test.obj
+
+$(OBJ_DIR)\logging_test.obj: test\logging_test.cpp common\logging\logging.hpp $(PROTOBUF_GENERATED_HEADER) $(LOGGING_GENERATED_HEADER) $(LOGGING_DESC_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\logging_test.cpp /Fo$(OBJ_DIR)\logging_test.obj
+
+$(OBJ_DIR)\transport_tcp_test.obj: test\transport_tcp_test.cpp common\transport\transport_tcp.hpp
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\transport_tcp_test.cpp /Fo$(OBJ_DIR)\transport_tcp_test.obj
 
 clean:
 	if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR)

@@ -136,8 +136,12 @@ int resourceList(const std::string& transport) {
     auto client = rsp::client::RSPClientMessage::create();
 
     const auto connectionId = client->connectToResourceManager(transport, rsp::message_queue::kAsciiHandshakeEncoding);
+    if (!connectionId.has_value()) {
+        std::cerr << "error: failed to connect to resource manager\n";
+        return 1;
+    }
 
-    const auto rmNodeId = client->peerNodeID(connectionId);
+    const auto rmNodeId = client->peerNodeID(*connectionId);
     if (!rmNodeId.has_value()) {
         std::cerr << "error: failed to obtain resource manager node id\n";
         return 1;

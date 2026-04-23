@@ -1672,34 +1672,6 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
-        "ERDASTMesDestination": {
-            "fields": [
-                {
-                    "name": "destination",
-                    "number": 1,
-                    "kind": "message",
-                    "type": "NodeId",
-                    "repeated": false,
-                    "has_presence": true,
-                    "oneof": null
-                }
-            ],
-            "oneofs": []
-        },
-        "ERDASTMesSource": {
-            "fields": [
-                {
-                    "name": "source",
-                    "number": 1,
-                    "kind": "message",
-                    "type": "NodeId",
-                    "repeated": false,
-                    "has_presence": true,
-                    "oneof": null
-                }
-            ],
-            "oneofs": []
-        },
         "ERDASTFieldPath": {
             "fields": [
                 {
@@ -2282,24 +2254,6 @@ const SCHEMA = {
                     "oneof": "node_type"
                 },
                 {
-                    "name": "destination",
-                    "number": 100,
-                    "kind": "message",
-                    "type": "ERDASTMesDestination",
-                    "repeated": false,
-                    "has_presence": true,
-                    "oneof": "node_type"
-                },
-                {
-                    "name": "source",
-                    "number": 101,
-                    "kind": "message",
-                    "type": "ERDASTMesSource",
-                    "repeated": false,
-                    "has_presence": true,
-                    "oneof": "node_type"
-                },
-                {
                     "name": "field_equals",
                     "number": 200,
                     "kind": "message",
@@ -2338,8 +2292,6 @@ const SCHEMA = {
                         "false_value",
                         "all_of",
                         "any_of",
-                        "destination",
-                        "source",
                         "field_equals",
                         "field_exists",
                         "field_contains"
