@@ -505,6 +505,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 NODEJS_PING_FIXTURE_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/logging/logging.o \
 	$(OBJ_DIR)/common/keypair.o \
 	$(OBJ_DIR)/common/message_queue/mq.o \
 	$(OBJ_DIR)/common/message_queue/mq_ascii_handshake.o \
@@ -850,6 +851,13 @@ test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(P
 
 test-bsd-sockets-web-service: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/bsd_sockets_web_service_integration.js $(NODEJS_PING_FIXTURE_TARGET)
+
+# End-to-end Chromium RSP integration test.
+# Runs the RM + bsd_sockets RS plumbing test, then smoke-tests the RSP-modified
+# Chrome binary on oldgame (172.16.12.171).
+# Requires: Chrome built on oldgame, Xvfb, nodejs_ping_fixture built locally.
+test-chromium-rsp-e2e: $(NODEJS_PING_FIXTURE_TARGET)
+	ssh oldgame "bash ~/remote_socket_protocol/integration/chromium/test_rsp_e2e.sh ~/remote_socket_protocol/bin/nodejs_ping_fixture"
 
 test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-httpd-resource-service test-logging
 
