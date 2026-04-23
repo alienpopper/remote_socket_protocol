@@ -19,10 +19,12 @@
 
 set -uo pipefail
 
-FIXTURE="${1:-$HOME/remote_socket_protocol/bin/nodejs_ping_fixture}"
+FIXTURE="${1:-$HOME/remote_socket_protocol/build/bin/nodejs_ping_fixture}"
 CHROME="${CHROME:-$HOME/chromium/mainline/src/out/Default/chrome}"
 RSP_REPO="${RSP_REPO:-$HOME/remote_socket_protocol}"
 REMOTE_WEB="${REMOTE_WEB:-172.16.206.185:3939}"
+NODE="${NODE:-$(PATH="$HOME/local/bin:$PATH" command -v node 2>/dev/null || echo "$HOME/local/bin/node")}"
+export PATH="$HOME/local/bin:$PATH"
 
 PASS=0
 FAIL=0
@@ -61,7 +63,7 @@ fi
 pass "nodejs_ping_fixture exists"
 
 if ! command -v node >/dev/null 2>&1; then
-    echo "  ERROR: node not found in PATH"
+    echo "  ERROR: node not found (checked PATH=$PATH)"
     exit 1
 fi
 pass "node is available"
@@ -79,7 +81,7 @@ echo ""
 echo "[1] RSP plumbing: RM + bsd_sockets RS + HTTP to $REMOTE_WEB"
 echo "    (This is the same test as 'make test-bsd-sockets-web-service')"
 
-if node "$RSP_REPO/test/bsd_sockets_web_service_integration.js" "$FIXTURE" 2>&1; then
+if "$NODE" "$RSP_REPO/test/bsd_sockets_web_service_integration.js" "$FIXTURE" 2>&1; then
     pass "RM + bsd_sockets RS + HTTP routing works"
 else
     fail "RM + bsd_sockets RS + HTTP routing FAILED"
