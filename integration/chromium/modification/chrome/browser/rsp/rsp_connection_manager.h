@@ -11,6 +11,8 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/rsp/rsp_config.h"
 
+class Profile;
+
 // Singleton that manages shared RSP connections keyed by (rm_addr, rs_node_id).
 // Multiple RSP tabs using the same RM+RS share one connection (ref-counted).
 //
@@ -24,29 +26,25 @@ class RspConnectionManager {
   // given config.  Returns the connection key, or empty string on failure.
   std::string GetOrCreate(const RspTabConfig& config);
 
-  // Associates |otr_profile_id| with |connection_key| so that
-  // GetKeyForProfile() can find it later.  Called by NewRspTab() right after
-  // GetOrCreate().
-  void RegisterProfile(const std::string& otr_profile_id,
-                       const std::string& connection_key);
+  // Associates |profile| with |connection_key| so that GetKeyForProfile()
+  // can find it later.  Called by NewRspTab() right after GetOrCreate().
+  void RegisterProfile(Profile* profile, const std::string& connection_key);
 
-  // Returns the connection key for the given OTR profile ID, or empty string
+  // Returns the connection key for the given RSP OTR profile, or empty string
   // if not registered.
-  std::string GetKeyForProfile(const std::string& otr_profile_id) const;
+  std::string GetKeyForProfile(Profile* profile) const;
 
   // Decrements the ref count. Stops and destroys the RSP client when it
   // reaches zero.
   void Release(const std::string& connection_key);
 
   // Unregisters a profile mapping (called when the OTR profile is destroyed).
-  void UnregisterProfile(const std::string& otr_profile_id);
+  void UnregisterProfile(Profile* profile);
 
   // Opens a TCP connection to |host_port| (e.g. "example.com:80") through the
   // bsd_sockets Resource Service identified by |connection_key|.
   // Returns the raw socket fd on success, or -1 on failure.
   // The caller owns the fd and must close() it when done.
-  // This is the ONLY way callers should obtain an RSP socket — RSP headers
-  // must not be included outside of rsp_connection_manager.cc.
   int ConnectTCPSocket(const std::string& connection_key,
                        const std::string& host_port);
 

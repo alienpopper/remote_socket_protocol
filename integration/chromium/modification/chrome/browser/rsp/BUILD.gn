@@ -22,14 +22,17 @@ source_set("rsp") {
   deps = [
     "//base",
     "//chrome/browser/profiles",
+    "//components/keyed_service/content",
     "//components/keyed_service/core",
     "//components/pref_registry",
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
     "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
     "//net",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
+    "//third_party/rsp:rsp_client",
   ]
 }

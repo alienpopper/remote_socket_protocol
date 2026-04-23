@@ -8,8 +8,7 @@
 #include <mutex>
 #include <string>
 
-// RSP C API — pure C header, no protobuf.  The implementation
-// (rsp_c_api.cpp) lives inside librspclient.so.
+// RSP C API — pure C header, no protobuf.
 #include "client/cpp/rsp_c_api.h"
 
 #include "base/logging.h"
@@ -19,11 +18,11 @@
 struct RspConnectionManager::Impl {
   struct ConnectionEntry {
     int ref_count = 0;
-    RspBridgeHandle bridge = nullptr;  // C API handle
+    RspBridgeHandle bridge = nullptr;
   };
 
   std::map<std::string, ConnectionEntry> connections;  // key -> entry
-  std::map<std::string, std::string> profile_keys;    // otr_profile_id -> key
+  std::map<Profile*, std::string> profile_keys;        // profile -> key
   std::mutex mutex;
 };
 
@@ -72,16 +71,15 @@ std::string RspConnectionManager::GetOrCreate(const RspTabConfig& config) {
   return key;
 }
 
-void RspConnectionManager::RegisterProfile(const std::string& otr_profile_id,
+void RspConnectionManager::RegisterProfile(Profile* profile,
                                            const std::string& connection_key) {
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  impl_->profile_keys[otr_profile_id] = connection_key;
+  impl_->profile_keys[profile] = connection_key;
 }
 
-std::string RspConnectionManager::GetKeyForProfile(
-    const std::string& otr_profile_id) const {
+std::string RspConnectionManager::GetKeyForProfile(Profile* profile) const {
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  auto it = impl_->profile_keys.find(otr_profile_id);
+  auto it = impl_->profile_keys.find(profile);
   return it != impl_->profile_keys.end() ? it->second : std::string();
 }
 
@@ -102,15 +100,13 @@ void RspConnectionManager::Release(const std::string& connection_key) {
   }
 }
 
-void RspConnectionManager::UnregisterProfile(
-    const std::string& otr_profile_id) {
+void RspConnectionManager::UnregisterProfile(Profile* profile) {
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  impl_->profile_keys.erase(otr_profile_id);
+  impl_->profile_keys.erase(profile);
 }
 
 int RspConnectionManager::ConnectTCPSocket(const std::string& connection_key,
                                            const std::string& host_port) {
-  // Capture bridge handle under the lock, then call outside (may block).
   RspBridgeHandle bridge = nullptr;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
