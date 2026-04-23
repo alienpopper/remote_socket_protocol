@@ -62,7 +62,9 @@ void rsp_bridge_destroy(RspBridgeHandle handle) {
     if (!handle) {
         return;
     }
-    handle->client->stop();
+    // Releasing the Ptr triggers RSPClient::~RSPClient() which sets stopping_
+    // and notifies stateChanged_, causing run() to return in run_thread.
+    handle->client.reset();
     if (handle->run_thread.joinable()) {
         handle->run_thread.join();
     }
