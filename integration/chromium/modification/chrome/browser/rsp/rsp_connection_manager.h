@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_RSP_RSP_CONNECTION_MANAGER_H_
 #define CHROME_BROWSER_RSP_RSP_CONNECTION_MANAGER_H_
 
-#include <map>
 #include <memory>
 #include <string>
 
@@ -13,18 +12,43 @@
 #include "chrome/browser/rsp/rsp_config.h"
 
 // Singleton that manages shared RSP connections keyed by (rm_addr, rs_node_id).
-// Multiple RSP tabs using the same RM+RS share one connection.
-// TODO(rsp): Wire up actual RSP client when network layer is implemented.
+// Multiple RSP tabs using the same RM+RS share one connection (ref-counted).
+//
+// IMPORTANT: This class is intentionally a complete facade — callers MUST NOT
+// include any RSP headers.  All RSP types are hidden behind the Impl pimpl.
 class RspConnectionManager {
  public:
   static RspConnectionManager* GetInstance();
 
-  // Returns an opaque connection handle for the given config.
-  // Creates a new connection if one doesn't exist; increments ref count.
+  // Creates (or increments ref-count of) an RSP client connection for the
+  // given config.  Returns the connection key, or empty string on failure.
   std::string GetOrCreate(const RspTabConfig& config);
 
-  // Decrements ref count for the connection. Disconnects when ref=0.
+  // Associates |otr_profile_id| with |connection_key| so that
+  // GetKeyForProfile() can find it later.  Called by NewRspTab() right after
+  // GetOrCreate().
+  void RegisterProfile(const std::string& otr_profile_id,
+                       const std::string& connection_key);
+
+  // Returns the connection key for the given OTR profile ID, or empty string
+  // if not registered.
+  std::string GetKeyForProfile(const std::string& otr_profile_id) const;
+
+  // Decrements the ref count. Stops and destroys the RSP client when it
+  // reaches zero.
   void Release(const std::string& connection_key);
+
+  // Unregisters a profile mapping (called when the OTR profile is destroyed).
+  void UnregisterProfile(const std::string& otr_profile_id);
+
+  // Opens a TCP connection to |host_port| (e.g. "example.com:80") through the
+  // bsd_sockets Resource Service identified by |connection_key|.
+  // Returns the raw socket fd on success, or -1 on failure.
+  // The caller owns the fd and must close() it when done.
+  // This is the ONLY way callers should obtain an RSP socket — RSP headers
+  // must not be included outside of rsp_connection_manager.cc.
+  int ConnectTCPSocket(const std::string& connection_key,
+                       const std::string& host_port);
 
   RspConnectionManager(const RspConnectionManager&) = delete;
   RspConnectionManager& operator=(const RspConnectionManager&) = delete;
@@ -34,12 +58,8 @@ class RspConnectionManager {
   RspConnectionManager();
   ~RspConnectionManager();
 
-  struct ConnectionEntry {
-    int ref_count = 0;
-    // TODO(rsp): std::shared_ptr<RSPClient> client;
-  };
-
-  std::map<std::string, ConnectionEntry> connections_;
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 #endif  // CHROME_BROWSER_RSP_RSP_CONNECTION_MANAGER_H_
