@@ -33,6 +33,7 @@ class RspSchemeURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
 
  private:
   explicit RspSchemeURLLoaderFactory(
+      std::string connection_key,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver);
   ~RspSchemeURLLoaderFactory() override;
 
@@ -45,6 +46,8 @@ class RspSchemeURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
       override;
+
+  const std::string connection_key_;
 };
 
 }  // namespace rsp

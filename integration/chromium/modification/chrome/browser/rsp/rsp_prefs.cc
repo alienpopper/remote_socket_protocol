@@ -11,6 +11,7 @@ namespace prefs {
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kRspDefaultRmAddr, /*default_value=*/"");
+  registry->RegisterStringPref(kRspDefaultRsNodeId, /*default_value=*/"");
 }
 
 }  // namespace prefs

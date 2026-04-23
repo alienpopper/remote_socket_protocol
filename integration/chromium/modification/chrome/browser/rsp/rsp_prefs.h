@@ -16,6 +16,10 @@ namespace prefs {
 // Empty string means no default RM is configured.
 inline constexpr char kRspDefaultRmAddr[] = "rsp.default_rm_addr";
 
+// Node ID of the default bsd_sockets Resource Service.
+// Empty string means no default RS is configured.
+inline constexpr char kRspDefaultRsNodeId[] = "rsp.default_rs_node_id";
+
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
 }  // namespace prefs

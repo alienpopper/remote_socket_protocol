@@ -2,11 +2,22 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# librspclient.so was built on Ubuntu 24.04 (glibc 2.38) and references
+# protobuf arena constructors and versioned glibc symbols that Chromium's
+# Debian Bullseye sysroot linker (-z defs) would otherwise reject.
+# all_dependent_configs propagates this flag transitively to the chrome
+# executable link step.
+config("rsp_shlib_ldflags") {
+  ldflags = [ "-Wl,--allow-shlib-undefined" ]
+}
+
 source_set("rsp") {
   sources = [
     "rsp_config.h",
     "rsp_connection_manager.cc",
     "rsp_connection_manager.h",
+    "rsp_http_helper.cc",
+    "rsp_http_helper.h",
     "rsp_keyed_service.cc",
     "rsp_keyed_service.h",
     "rsp_prefs.cc",
@@ -18,6 +29,8 @@ source_set("rsp") {
     "rsp_url_loader_factory.cc",
     "rsp_url_loader_factory.h",
   ]
+
+  all_dependent_configs = [ ":rsp_shlib_ldflags" ]
 
   deps = [
     "//base",
