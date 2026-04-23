@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_RSP_RSP_HTTP_HELPER_H_
 #define CHROME_BROWSER_RSP_RSP_HTTP_HELPER_H_
 
+#include <stdint.h>
 #include <string>
 
 #include "net/base/net_errors.h"
@@ -26,10 +27,11 @@ struct HttpResult {
   std::string body;
 };
 
-// Sends |request| as a plain HTTP/1.1 request over the raw socket |fd|,
-// reads the response, closes |fd|, and returns the result.
+// Sends |request| as a plain HTTP/1.1 request over |socket|,
+// reads the response, closes the socket, and returns the result.
 // Must be called on a thread that allows blocking I/O.
-HttpResult DoHttpRequest(int fd, const network::ResourceRequest& request);
+HttpResult DoHttpRequest(intptr_t socket,
+                         const network::ResourceRequest& request);
 
 }  // namespace rsp
 

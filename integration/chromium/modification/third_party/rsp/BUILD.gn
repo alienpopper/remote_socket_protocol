@@ -4,7 +4,7 @@
 #
 # This directory is expected to be a symlink to (or checkout of) the
 # remote_socket_protocol repo root.  The config below makes the RSP headers
-# and the prebuilt librspclient.so available to Chromium targets.
+# and prebuilt RSP client library available to Chromium targets.
 #
 # To set up:
 #   ln -s /path/to/remote_socket_protocol \
@@ -21,10 +21,18 @@ config("rsp_client_config") {
   ]
 
   lib_dirs = [ "build/lib" ]
-  libs = [ "rspclient" ]
+  if (is_win) {
+    # Makefile.windows produces build/lib/rspclient.lib (import lib) and
+    # build/bin/rspclient.dll.
+    libs = [ "rspclient.lib" ]
+  } else {
+    libs = [ "rspclient" ]
+  }
 
-  # Link flags for the prebuilt shared library.
-  ldflags = [ "-Wl,-rpath,${root_build_dir}/rsp_lib" ]
+  # Runtime library search path for Linux shared library builds.
+  if (is_linux) {
+    ldflags = [ "-Wl,-rpath,${root_build_dir}/rsp_lib" ]
+  }
 }
 
 group("rsp_client") {

@@ -105,8 +105,9 @@ void RspConnectionManager::UnregisterProfile(Profile* profile) {
   impl_->profile_keys.erase(profile);
 }
 
-int RspConnectionManager::ConnectTCPSocket(const std::string& connection_key,
-                                           const std::string& host_port) {
+intptr_t RspConnectionManager::ConnectTCPSocket(
+    const std::string& connection_key,
+    const std::string& host_port) {
   RspBridgeHandle bridge = nullptr;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
@@ -123,10 +124,10 @@ int RspConnectionManager::ConnectTCPSocket(const std::string& connection_key,
     return -1;
   }
 
-  const int fd = rsp_bridge_connect_tcp(bridge, host_port.c_str());
-  if (fd < 0) {
+  const intptr_t socket = rsp_bridge_connect_tcp(bridge, host_port.c_str());
+  if (socket < 0) {
     LOG(WARNING) << "RspConnectionManager::ConnectTCPSocket: failed for "
                  << host_port;
   }
-  return fd;
+  return socket;
 }

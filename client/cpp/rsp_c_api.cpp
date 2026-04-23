@@ -42,7 +42,7 @@ RspBridgeHandle rsp_bridge_create(const char* rm_addr,
     return bridge;
 }
 
-int rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port) {
+intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port) {
     if (!handle || !host_port) {
         return -1;
     }
@@ -55,7 +55,7 @@ int rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port) {
         /*retries=*/2,
         /*retryMs=*/1000);
 
-    return socket.has_value() ? static_cast<int>(*socket) : -1;
+    return socket.has_value() ? static_cast<intptr_t>(*socket) : -1;
 }
 
 void rsp_bridge_destroy(RspBridgeHandle handle) {

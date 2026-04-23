@@ -4,6 +4,7 @@
 
 #include "chrome/browser/rsp/rsp_url_loader_factory.h"
 
+#include <stdint.h>
 #include <string>
 
 #include "base/functional/bind.h"
@@ -66,15 +67,17 @@ class RspHTTPURLLoader : public network::mojom::URLLoader {
   void SetPriority(net::RequestPriority, int32_t) override {}
 
  private:
-  static int DoConnect(std::string connection_key, std::string host, int port) {
+  static intptr_t DoConnect(std::string connection_key,
+                            std::string host,
+                            int port) {
     const std::string host_port =
         base::StringPrintf("%s:%d", host.c_str(), port);
     return RspConnectionManager::GetInstance()->ConnectTCPSocket(
         connection_key, host_port);
   }
 
-  void OnConnected(int fd) {
-    if (fd < 0) {
+  void OnConnected(intptr_t socket) {
+    if (socket < 0) {
       client_->OnComplete(
           network::URLLoaderCompletionStatus(net::ERR_CONNECTION_FAILED));
       return;
@@ -82,7 +85,7 @@ class RspHTTPURLLoader : public network::mojom::URLLoader {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE,
         {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&DoHttpRequest, fd, request_),
+        base::BindOnce(&DoHttpRequest, socket, request_),
         base::BindOnce(&RspHTTPURLLoader::OnHttpDone,
                        weak_factory_.GetWeakPtr()));
   }

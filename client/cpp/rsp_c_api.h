@@ -22,8 +22,9 @@ RspBridgeHandle rsp_bridge_create(const char* rm_addr,
 
 // Opens a TCP connection to |host_port| (e.g. "example.com:80") through the
 // bsd_sockets RS identified by this handle.
-// Returns a raw socket fd (caller must close() it) or -1 on failure.
-int rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port);
+// Returns a raw socket handle (caller must close/closesocket it) or -1 on
+// failure.
+intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port);
 
 // Stops the RSP client and releases all resources. The handle is invalid
 // after this call.

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_RSP_RSP_CONNECTION_MANAGER_H_
 #define CHROME_BROWSER_RSP_RSP_CONNECTION_MANAGER_H_
 
+#include <stdint.h>
+
 #include <memory>
 #include <string>
 
@@ -43,10 +45,10 @@ class RspConnectionManager {
 
   // Opens a TCP connection to |host_port| (e.g. "example.com:80") through the
   // bsd_sockets Resource Service identified by |connection_key|.
-  // Returns the raw socket fd on success, or -1 on failure.
-  // The caller owns the fd and must close() it when done.
-  int ConnectTCPSocket(const std::string& connection_key,
-                       const std::string& host_port);
+  // Returns the raw socket handle on success, or -1 on failure.
+  // The caller owns the socket and must close/closesocket it when done.
+  intptr_t ConnectTCPSocket(const std::string& connection_key,
+                            const std::string& host_port);
 
   RspConnectionManager(const RspConnectionManager&) = delete;
   RspConnectionManager& operator=(const RspConnectionManager&) = delete;
