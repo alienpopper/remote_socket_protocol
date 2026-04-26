@@ -76,6 +76,14 @@ SshdConfig loadSshdConfig(const std::string& path) {
     if (j.contains("sshd_config")) cfg.sshdConfig = j["sshd_config"].get<std::string>();
     if (j.contains("sshd_debug"))  cfg.sshdDebug  = j["sshd_debug"].get<bool>();
     if (j.contains("ns_hostname")) cfg.nsHostname  = j["ns_hostname"].get<std::string>();
+    if (j.contains("keypair")) {
+        const auto& kp = j["keypair"];
+        if (!kp.is_array() || kp.size() != 2) {
+            throw std::runtime_error("\"keypair\" must be [\"<public_key_path>\", \"<private_key_path>\"]");
+        }
+        cfg.keypairPublicKeyPath  = kp[0].get<std::string>();
+        cfg.keypairPrivateKeyPath = kp[1].get<std::string>();
+    }
     return cfg;
 }
 
@@ -124,8 +132,11 @@ private:
 // ---------------------------------------------------------------------------
 
 std::shared_ptr<SshdResourceService> SshdResourceService::create(const SshdConfig& cfg) {
+    rsp::KeyPair keyPair = (!cfg.keypairPublicKeyPath.empty() && !cfg.keypairPrivateKeyPath.empty())
+        ? rsp::KeyPair::readFromDisk(cfg.keypairPrivateKeyPath, cfg.keypairPublicKeyPath)
+        : rsp::KeyPair::generateP256();
     return std::shared_ptr<SshdResourceService>(
-        new SshdResourceService(rsp::KeyPair::generateP256(), cfg));
+        new SshdResourceService(std::move(keyPair), cfg));
 }
 
 SshdResourceService::SshdResourceService(rsp::KeyPair keyPair, const SshdConfig& cfg)

@@ -22,6 +22,8 @@ struct SshdConfig {
     std::string sshdConfig;
     bool        sshdDebug   = false;
     std::string nsHostname;   // if non-empty, register this name with NS at startup
+    std::string keypairPublicKeyPath;   // if set (with keypairPrivateKeyPath), load persistent keypair
+    std::string keypairPrivateKeyPath;
 };
 
 SshdConfig loadSshdConfig(const std::string& path);
