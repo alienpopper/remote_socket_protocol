@@ -265,7 +265,7 @@ bool SshdResourceService::handleConnectSshd(const rsp::proto::RSPMessage& messag
 
     TCPConnectionResult result;
     result.connection = std::make_shared<SshdConnection>(fds[0], pid);
-    return registerConnectedSocket(message, std::move(result), *socketId, asyncData, shareSocket);
+    return registerConnectedSocket(message, std::move(result), *socketId, "sshd", asyncData, shareSocket);
 }
 
 }  // namespace rsp::resource_service
