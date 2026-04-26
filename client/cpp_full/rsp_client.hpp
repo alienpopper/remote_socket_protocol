@@ -7,6 +7,7 @@
 
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -47,6 +48,8 @@ public:
     rsp::NodeID nodeId() const;
     void dispatchIncomingMessage(rsp::proto::RSPMessage message);
 
+    bool ping(rsp::NodeID nodeId, uint32_t timeoutMs = 2000);
+
 protected:
     explicit RSPClient(KeyPair keyPair);
 
@@ -62,8 +65,15 @@ private:
         rsp::MessageQueueHandle signingQueue;
     };
 
+    struct PendingPingState {
+        rsp::NodeID destination;
+        uint32_t sequence = 0;
+        bool completed = false;
+    };
+
     bool isForThisNode(const rsp::proto::RSPMessage& message) const;
     std::optional<ClientConnectionState> connectionState(ClientConnectionID connectionId) const;
+    void handlePingReply(const rsp::proto::RSPMessage& message);
 
     mutable std::mutex connectionsMutex_;
     std::map<ClientConnectionID, ClientConnectionState> connections_;
@@ -71,6 +81,11 @@ private:
     mutable std::mutex runMutex_;
     mutable std::condition_variable runCondition_;
     bool stopping_ = false;
+
+    mutable std::mutex pingMutex_;
+    std::condition_variable pingCv_;
+    std::map<std::string, PendingPingState> pendingPings_;
+    uint32_t nextPingSequence_ = 1;
 };
 
 }  // namespace rsp::client::full

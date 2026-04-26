@@ -1,5 +1,6 @@
 #include "client/cpp_full/rsp_client.hpp"
 
+#include "common/base_types.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/message_queue/mq_authn.hpp"
 #include "common/message_queue/mq_signing.hpp"
@@ -38,6 +39,12 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     std::memcpy(value.data() + sizeof(high), &low, sizeof(low));
     protoNodeId.set_value(value);
     return protoNodeId;
+}
+
+rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dt) {
+    rsp::proto::DateTime proto;
+    proto.set_milliseconds_since_epoch(dt.millisecondsSinceEpoch());
+    return proto;
 }
 
 std::string randomMessageNonce() {
@@ -105,6 +112,7 @@ void RSPClient::stop() {
 
     if (shouldNotify) {
         runCondition_.notify_all();
+        pingCv_.notify_all();
     }
 
     if (incomingMessages_ != nullptr) {
@@ -360,8 +368,65 @@ rsp::NodeID RSPClient::nodeId() const {
     return keyPair().nodeID();
 }
 
-bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage&) {
+bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
+    if (message.has_ping_reply()) {
+        handlePingReply(message);
+        return true;
+    }
     return false;
+}
+
+bool RSPClient::ping(rsp::NodeID nodeId, uint32_t timeoutMs) {
+    const std::string nonce = rsp::GUID().toString();
+    const uint32_t sequence = [this, &nonce, &nodeId]() {
+        std::lock_guard<std::mutex> lock(pingMutex_);
+        const uint32_t next = nextPingSequence_++;
+        pendingPings_.emplace(nonce, PendingPingState{nodeId, next, false});
+        return next;
+    }();
+
+    rsp::proto::RSPMessage pingRequest;
+    *pingRequest.mutable_destination() = toProtoNodeId(nodeId);
+    pingRequest.mutable_ping_request()->mutable_nonce()->set_value(nonce);
+    pingRequest.mutable_ping_request()->set_sequence(sequence);
+    *pingRequest.mutable_ping_request()->mutable_time_sent() = toProtoDateTime(rsp::DateTime());
+
+    if (!send(pingRequest)) {
+        std::lock_guard<std::mutex> lock(pingMutex_);
+        pendingPings_.erase(nonce);
+        return false;
+    }
+
+    std::unique_lock<std::mutex> lock(pingMutex_);
+    const bool replied = pingCv_.wait_for(
+        lock,
+        std::chrono::milliseconds(timeoutMs),
+        [this, &nonce]() {
+            const auto it = pendingPings_.find(nonce);
+            return stopping_ || (it != pendingPings_.end() && it->second.completed);
+        });
+
+    const bool success = replied && !stopping_ &&
+                         pendingPings_.count(nonce) && pendingPings_.at(nonce).completed;
+    pendingPings_.erase(nonce);
+    return success;
+}
+
+void RSPClient::handlePingReply(const rsp::proto::RSPMessage& message) {
+    if (!message.ping_reply().has_nonce()) {
+        return;
+    }
+    const std::string& nonce = message.ping_reply().nonce().value();
+    std::lock_guard<std::mutex> lock(pingMutex_);
+    const auto it = pendingPings_.find(nonce);
+    if (it == pendingPings_.end()) {
+        return;
+    }
+    if (message.ping_reply().sequence() != it->second.sequence) {
+        return;
+    }
+    it->second.completed = true;
+    pingCv_.notify_all();
 }
 
 void RSPClient::handleOutputMessage(rsp::proto::RSPMessage message) {

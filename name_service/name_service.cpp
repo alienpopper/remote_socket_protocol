@@ -78,6 +78,7 @@ NameService::Ptr NameService::create(KeyPair keyPair) {
 NameService::NameService(KeyPair keyPair)
     : ResourceService(std::move(keyPair)) {
     sweepThread_ = std::thread([this]() { runSweepThread(); });
+    pingCheckThread_ = std::thread([this]() { runPingCheckThread(); });
 }
 
 NameService::~NameService() {
@@ -88,6 +89,15 @@ NameService::~NameService() {
     sweepCv_.notify_all();
     if (sweepThread_.joinable()) {
         sweepThread_.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(pingCheckMutex_);
+        pingCheckStopping_ = true;
+    }
+    pingCheckCv_.notify_all();
+    if (pingCheckThread_.joinable()) {
+        pingCheckThread_.join();
     }
 }
 
@@ -142,6 +152,10 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
     const auto& record = request.record();
     const auto key = makeKey(record);
 
+    // Find any existing records for (name, type) under a different owner.
+    // If exactly one exists, we'll ping-check it after inserting the new record.
+    std::optional<PingCheckItem> pingCheck;
+
     rsp::proto::NameCreateReply reply;
     {
         std::lock_guard<std::mutex> lock(dbMutex_);
@@ -149,6 +163,20 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
             reply.set_status(rsp::proto::NAME_DUPLICATE);
             reply.set_message("record with (name, owner, type) already exists");
         } else {
+            // Count existing records for the same (name, type) under different owners.
+            std::vector<RecordKey> sameNameType;
+            for (const auto& [k, stored] : records_) {
+                if (stored.name == record.name() &&
+                    stored.typeBytes == record.type().value() &&
+                    stored.ownerBytes != record.owner().value()) {
+                    sameNameType.push_back(k);
+                }
+            }
+            if (sameNameType.size() == 1) {
+                const auto& oldKey = sameNameType[0];
+                pingCheck = PingCheckItem{oldKey, records_.at(oldKey).ownerBytes};
+            }
+
             StoredRecord stored;
             stored.name = record.name();
             stored.ownerBytes = record.owner().value();
@@ -168,7 +196,16 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
     }
     *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
-    return send(response);
+    const bool sent = send(response);
+
+    // Enqueue ping check after sending reply (cannot block the message worker thread).
+    if (pingCheck.has_value()) {
+        std::lock_guard<std::mutex> lock(pingCheckMutex_);
+        pingCheckQueue_.push_back(std::move(*pingCheck));
+        pingCheckCv_.notify_one();
+    }
+
+    return sent;
 }
 
 bool NameService::handleReadRequest(const rsp::proto::RSPMessage& message) {
@@ -369,6 +406,38 @@ void NameService::runSweepThread() {
                 it = records_.erase(it);
             } else {
                 ++it;
+            }
+        }
+    }
+}
+
+void NameService::runPingCheckThread() {
+    while (true) {
+        PingCheckItem item;
+        {
+            std::unique_lock<std::mutex> lock(pingCheckMutex_);
+            pingCheckCv_.wait(lock, [this] { return pingCheckStopping_ || !pingCheckQueue_.empty(); });
+            if (pingCheckStopping_) break;
+            item = std::move(pingCheckQueue_.front());
+            pingCheckQueue_.pop_front();
+        }
+
+        // Reconstruct the NodeID from the raw bytes stored in ownerBytes.
+        rsp::NodeID oldOwner;
+        if (item.oldOwnerBytes.size() == 16) {
+            uint64_t high = 0, low = 0;
+            std::memcpy(&high, item.oldOwnerBytes.data(), 8);
+            std::memcpy(&low,  item.oldOwnerBytes.data() + 8, 8);
+            oldOwner = rsp::NodeID(high, low);
+        }
+
+        // ping() blocks on pingCheckThread, not on the IncomingMessageQueue worker.
+        const bool alive = (oldOwner != rsp::NodeID{}) && ping(oldOwner);
+        if (!alive) {
+            std::lock_guard<std::mutex> lock(dbMutex_);
+            const auto it = records_.find(item.oldRecordKey);
+            if (it != records_.end()) {
+                it->second.expiresAt = rsp::DateTime(0.0); // immediately expired
             }
         }
     }

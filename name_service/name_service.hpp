@@ -5,6 +5,7 @@
 
 #include <condition_variable>
 #include <chrono>
+#include <deque>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -65,6 +66,17 @@ private:
     bool sweepStopping_ = false;
     std::thread sweepThread_;
     void runSweepThread();
+
+    struct PingCheckItem {
+        RecordKey oldRecordKey;
+        std::string oldOwnerBytes;
+    };
+    std::deque<PingCheckItem> pingCheckQueue_;
+    std::mutex pingCheckMutex_;
+    std::condition_variable pingCheckCv_;
+    bool pingCheckStopping_ = false;
+    std::thread pingCheckThread_;
+    void runPingCheckThread();
 };
 
 }  // namespace rsp::name_service
