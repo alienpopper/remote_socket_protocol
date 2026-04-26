@@ -7,11 +7,14 @@
 #include "name_service/name_service.pb.h"
 #include "name_service/name_service_desc.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <utility>
 
 namespace rsp::name_service {
+
+static constexpr double kRecordTtlSeconds = 300.0; // 5 minutes
 
 namespace {
 
@@ -44,7 +47,22 @@ rsp::proto::NameRecord toProto(const NameService::StoredRecord& stored) {
     record.mutable_owner()->set_value(stored.ownerBytes);
     record.mutable_type()->set_value(stored.typeBytes);
     record.mutable_value()->set_value(stored.valueBytes);
+    record.mutable_expires_at()->set_milliseconds_since_epoch(stored.expiresAt.millisecondsSinceEpoch());
     return record;
+}
+
+void sortByExpiresAtDescending(rsp::proto::NameReadReply& reply) {
+    auto* recs = reply.mutable_records();
+    std::sort(recs->begin(), recs->end(), [](const rsp::proto::NameRecord& a, const rsp::proto::NameRecord& b) {
+        return a.expires_at().milliseconds_since_epoch() > b.expires_at().milliseconds_since_epoch();
+    });
+}
+
+void sortByExpiresAtDescending(rsp::proto::NameQueryReply& reply) {
+    auto* recs = reply.mutable_records();
+    std::sort(recs->begin(), recs->end(), [](const rsp::proto::NameRecord& a, const rsp::proto::NameRecord& b) {
+        return a.expires_at().milliseconds_since_epoch() > b.expires_at().milliseconds_since_epoch();
+    });
 }
 
 }  // namespace
@@ -58,9 +76,20 @@ NameService::Ptr NameService::create(KeyPair keyPair) {
 }
 
 NameService::NameService(KeyPair keyPair)
-    : ResourceService(std::move(keyPair)) {}
+    : ResourceService(std::move(keyPair)) {
+    sweepThread_ = std::thread([this]() { runSweepThread(); });
+}
 
-NameService::~NameService() = default;
+NameService::~NameService() {
+    {
+        std::lock_guard<std::mutex> lock(dbMutex_);
+        sweepStopping_ = true;
+    }
+    sweepCv_.notify_all();
+    if (sweepThread_.joinable()) {
+        sweepThread_.join();
+    }
+}
 
 rsp::proto::ResourceAdvertisement NameService::buildResourceAdvertisement() const {
     rsp::proto::ResourceAdvertisement advertisement;
@@ -76,6 +105,7 @@ rsp::proto::ResourceAdvertisement NameService::buildResourceAdvertisement() cons
             "type.rsp/rsp.proto.NameUpdateRequest",
             "type.rsp/rsp.proto.NameDeleteRequest",
             "type.rsp/rsp.proto.NameQueryRequest",
+            "type.rsp/rsp.proto.NameRefreshRequest",
         });
 
     return advertisement;
@@ -96,6 +126,9 @@ bool NameService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& messag
     }
     if (rsp::hasServiceMessage<rsp::proto::NameQueryRequest>(message)) {
         return handleQueryRequest(message);
+    }
+    if (rsp::hasServiceMessage<rsp::proto::NameRefreshRequest>(message)) {
+        return handleRefreshRequest(message);
     }
     return false;
 }
@@ -121,6 +154,8 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
             stored.ownerBytes = record.owner().value();
             stored.typeBytes = record.type().value();
             stored.valueBytes = record.value().value();
+            stored.expiresAt = rsp::DateTime();
+            stored.expiresAt += kRecordTtlSeconds;
             records_[key] = std::move(stored);
             reply.set_status(rsp::proto::NAME_SUCCESS);
         }
@@ -146,6 +181,7 @@ bool NameService::handleReadRequest(const rsp::proto::RSPMessage& message) {
     {
         std::lock_guard<std::mutex> lock(dbMutex_);
         bool found = false;
+        const rsp::DateTime now;
         for (const auto& [key, stored] : records_) {
             if (stored.name != request.name()) {
                 continue;
@@ -156,11 +192,15 @@ bool NameService::handleReadRequest(const rsp::proto::RSPMessage& message) {
             if (request.has_type() && stored.typeBytes != request.type().value()) {
                 continue;
             }
+            if (stored.expiresAt <= now) {
+                continue;
+            }
             *reply.add_records() = toProto(stored);
             found = true;
         }
         reply.set_status(found ? rsp::proto::NAME_SUCCESS : rsp::proto::NAME_NOT_FOUND);
     }
+    sortByExpiresAtDescending(reply);
 
     rsp::proto::RSPMessage response;
     const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
@@ -248,6 +288,7 @@ bool NameService::handleQueryRequest(const rsp::proto::RSPMessage& message) {
     {
         std::lock_guard<std::mutex> lock(dbMutex_);
         uint32_t count = 0;
+        const rsp::DateTime now;
         for (const auto& [key, stored] : records_) {
             if (request.has_name_prefix() && !request.name_prefix().empty()) {
                 if (stored.name.find(request.name_prefix()) != 0) {
@@ -260,11 +301,49 @@ bool NameService::handleQueryRequest(const rsp::proto::RSPMessage& message) {
             if (request.has_type() && stored.typeBytes != request.type().value()) {
                 continue;
             }
+            if (stored.expiresAt <= now) {
+                continue;
+            }
             *reply.add_records() = toProto(stored);
             ++count;
             if (request.max_records() > 0 && count >= request.max_records()) {
                 break;
             }
+        }
+    }
+    sortByExpiresAtDescending(reply);
+
+    rsp::proto::RSPMessage response;
+    const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+    if (!requesterNodeId.has_value()) {
+        return false;
+    }
+    *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
+    rsp::packServiceMessage(response, reply);
+    return send(response);
+}
+
+bool NameService::handleRefreshRequest(const rsp::proto::RSPMessage& message) {
+    rsp::proto::NameRefreshRequest request;
+    if (!rsp::unpackServiceMessage(message, &request)) {
+        return false;
+    }
+
+    const auto key = makeKey(request.name(),
+                             request.owner().value(),
+                             request.type().value());
+
+    rsp::proto::NameRefreshReply reply;
+    {
+        std::lock_guard<std::mutex> lock(dbMutex_);
+        auto it = records_.find(key);
+        if (it == records_.end()) {
+            reply.set_status(rsp::proto::NAME_NOT_FOUND);
+            reply.set_message("no matching record");
+        } else {
+            it->second.expiresAt = rsp::DateTime();
+            it->second.expiresAt += kRecordTtlSeconds;
+            reply.set_status(rsp::proto::NAME_SUCCESS);
         }
     }
 
@@ -276,6 +355,23 @@ bool NameService::handleQueryRequest(const rsp::proto::RSPMessage& message) {
     *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
     return send(response);
+}
+
+void NameService::runSweepThread() {
+    static constexpr auto kSweepInterval = std::chrono::seconds(60);
+    std::unique_lock<std::mutex> lock(dbMutex_);
+    while (true) {
+        sweepCv_.wait_for(lock, kSweepInterval, [this] { return sweepStopping_; });
+        if (sweepStopping_) break;
+        const rsp::DateTime now;
+        for (auto it = records_.begin(); it != records_.end(); ) {
+            if (it->second.expiresAt < now) {
+                it = records_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
 }
 
 }  // namespace rsp::name_service

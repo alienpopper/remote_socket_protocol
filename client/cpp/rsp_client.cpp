@@ -72,7 +72,8 @@ bool isNameServiceReply(const rsp::proto::RSPMessage& message) {
            rsp::hasServiceMessage<rsp::proto::NameReadReply>(message) ||
            rsp::hasServiceMessage<rsp::proto::NameUpdateReply>(message) ||
            rsp::hasServiceMessage<rsp::proto::NameDeleteReply>(message) ||
-           rsp::hasServiceMessage<rsp::proto::NameQueryReply>(message);
+           rsp::hasServiceMessage<rsp::proto::NameQueryReply>(message) ||
+           rsp::hasServiceMessage<rsp::proto::NameRefreshReply>(message);
 }
 
 rsp::proto::DateTime toProtoDateTime(const rsp::DateTime& dateTime) {
@@ -181,6 +182,9 @@ static NameRecord nameRecordFromProto(const rsp::proto::NameRecord& r) {
         std::memcpy(&l, r.value().value().data() + 8, 8);
         rec.value = rsp::GUID(h, l);
     }
+    if (r.has_expires_at()) {
+        rec.expiresAt = rsp::DateTime::fromMillisecondsSinceEpoch(r.expires_at().milliseconds_since_epoch());
+    }
     return rec;
 }
 
@@ -263,6 +267,15 @@ RSPClient::RSPClient(KeyPair keyPair)
 }
 
 RSPClient::~RSPClient() {
+    {
+        std::lock_guard<std::mutex> lock(refreshMutex_);
+        refreshStopping_ = true;
+    }
+    refreshCv_.notify_all();
+    if (refreshThread_.joinable()) {
+        refreshThread_.join();
+    }
+
     stopNativeListenBridges();
     stopNativeSocketBridges();
     {
@@ -635,6 +648,70 @@ std::optional<NameResult> RSPClient::nameQuery(
     rsp::packServiceMessage(request, req);
     return sendNameRequestImpl(nodeId, request, stateMutex_, stateChanged_,
         nameReplyPending_, nameReplyResult_, stopping_, messageClient_);
+}
+
+std::optional<NameResult> RSPClient::nameRefresh(
+        rsp::NodeID nodeId, const std::string& name,
+        rsp::NodeID owner, const rsp::GUID& type) {
+    rsp::proto::NameRefreshRequest req;
+    req.set_name(name);
+    *req.mutable_owner() = toProtoNodeId(owner);
+    *req.mutable_type() = toProtoUuid(type);
+    rsp::proto::RSPMessage request;
+    *request.mutable_destination() = toProtoNodeId(nodeId);
+    rsp::packServiceMessage(request, req);
+    return sendNameRequestImpl(nodeId, request, stateMutex_, stateChanged_,
+        nameReplyPending_, nameReplyResult_, stopping_, messageClient_);
+}
+
+std::optional<rsp::NodeID> RSPClient::nameResolve(
+        rsp::NodeID nsNodeId,
+        const std::string& name,
+        const std::optional<rsp::GUID>& type) {
+    const auto result = nameQuery(nsNodeId, name, std::nullopt, type);
+    if (!result.has_value() || result->records.empty()) {
+        return std::nullopt;
+    }
+    for (const auto& rec : result->records) {
+        if (ping(rec.owner)) {
+            return rec.owner;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<NameResult> RSPClient::registerNameWithRefresh(
+        rsp::NodeID nsNodeId, const std::string& name,
+        rsp::NodeID owner, const rsp::GUID& type, const rsp::GUID& value) {
+    auto result = nameCreate(nsNodeId, name, owner, type, value);
+    if (!result.has_value() || result->status != NameResult::Status::Success) {
+        return result;
+    }
+    {
+        std::lock_guard<std::mutex> lock(refreshMutex_);
+        refreshRegistrations_.push_back({nsNodeId, name, owner, type, value});
+        if (!refreshThread_.joinable()) {
+            refreshStopping_ = false;
+            refreshThread_ = std::thread([this] { runRefreshThread(); });
+        }
+    }
+    return result;
+}
+
+void RSPClient::runRefreshThread() {
+    static constexpr auto kRefreshInterval = std::chrono::seconds(150); // TTL/2
+    while (true) {
+        std::vector<RefreshEntry> entries;
+        {
+            std::unique_lock<std::mutex> lock(refreshMutex_);
+            refreshCv_.wait_for(lock, kRefreshInterval, [this] { return refreshStopping_; });
+            if (refreshStopping_) break;
+            entries = refreshRegistrations_;
+        }
+        for (const auto& entry : entries) {
+            nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
+        }
+    }
 }
 
 std::optional<StreamResult> RSPClient::connectTCPEx(rsp::NodeID nodeId,
@@ -1673,6 +1750,7 @@ void RSPClient::handleNameServiceReply(const rsp::proto::RSPMessage& message) {
     rsp::proto::NameUpdateReply updateReply;
     rsp::proto::NameDeleteReply deleteReply;
     rsp::proto::NameQueryReply queryReply;
+    rsp::proto::NameRefreshReply refreshReply;
 
     if (rsp::unpackServiceMessage(message, &createReply)) {
         result.status = nameStatusFromProto(createReply.status());
@@ -1689,6 +1767,9 @@ void RSPClient::handleNameServiceReply(const rsp::proto::RSPMessage& message) {
     } else if (rsp::unpackServiceMessage(message, &queryReply)) {
         result.status = NameResult::Status::Success;
         for (const auto& r : queryReply.records()) result.records.push_back(nameRecordFromProto(r));
+    } else if (rsp::unpackServiceMessage(message, &refreshReply)) {
+        result.status = nameStatusFromProto(refreshReply.status());
+        if (refreshReply.has_message()) result.message = refreshReply.message();
     }
 
     nameReplyResult_ = result;

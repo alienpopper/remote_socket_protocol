@@ -9,6 +9,7 @@ message NameRecord {
     NodeId owner = 2;
     Uuid type = 3;
     Uuid value = 4;
+    DateTime expires_at = 5;
 }
 
 enum NAME_STATUS {
@@ -72,4 +73,15 @@ message NameQueryRequest {
 
 message NameQueryReply {
     repeated NameRecord records = 1;
+}
+
+message NameRefreshRequest {
+    string name = 1;
+    NodeId owner = 2;
+    Uuid type = 3;
+}
+
+message NameRefreshReply {
+    NAME_STATUS status = 1;
+    optional string message = 2;
 }

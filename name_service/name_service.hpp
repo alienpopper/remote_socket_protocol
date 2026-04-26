@@ -1,11 +1,15 @@
 #pragma once
 
 #include "resource_service/resource_service.hpp"
+#include "common/base_types.hpp"
 
+#include <condition_variable>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -41,6 +45,7 @@ public:
         std::string ownerBytes;   // serialised NodeId.value
         std::string typeBytes;    // serialised Uuid.value
         std::string valueBytes;   // serialised Uuid.value
+        rsp::DateTime expiresAt;
     };
 
 private:
@@ -54,6 +59,12 @@ private:
     bool handleUpdateRequest(const rsp::proto::RSPMessage& message);
     bool handleDeleteRequest(const rsp::proto::RSPMessage& message);
     bool handleQueryRequest(const rsp::proto::RSPMessage& message);
+    bool handleRefreshRequest(const rsp::proto::RSPMessage& message);
+
+    std::condition_variable sweepCv_;
+    bool sweepStopping_ = false;
+    std::thread sweepThread_;
+    void runSweepThread();
 };
 
 }  // namespace rsp::name_service

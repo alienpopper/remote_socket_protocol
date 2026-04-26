@@ -1784,6 +1784,140 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
             serverTransport->stop();
         }
 
+    void testNameRefreshUpdatesExpiryAndRecordIsReturned() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        const std::string memoryChannel = "rm-ns-refresh-" + std::to_string(rsp::GUID().high());
+        require(serverTransport->listen(memoryChannel), "memory transport listener should start");
+        const std::string transportSpec = "memory:" + memoryChannel;
+
+        auto nameService = rsp::name_service::NameService::create();
+        rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID ownerNodeId = clientKeyPair.nodeID();
+        auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
+
+        const auto nsConnId = nameService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate name service and client");
+
+        const rsp::NodeID nsNodeId = nameService->nodeId();
+        const rsp::GUID type{};
+        const rsp::GUID value{};
+        const std::string name = "test.refresh.host";
+
+        const auto createResult = client->nameCreate(nsNodeId, name, ownerNodeId, type, value);
+        require(createResult.has_value() && createResult->status == rsp::client::NameResult::Status::Success,
+            "nameCreate should succeed before refresh test");
+
+        const auto refreshResult = client->nameRefresh(nsNodeId, name, ownerNodeId, type);
+        require(refreshResult.has_value(),
+            "nameRefresh should return a result");
+        require(refreshResult->status == rsp::client::NameResult::Status::Success,
+            "nameRefresh should return NAME_SUCCESS for an existing record");
+
+        const auto readResult = client->nameRead(nsNodeId, name, ownerNodeId, type);
+        require(readResult.has_value() && !readResult->records.empty(),
+            "nameRead should return the refreshed record");
+
+        require(nameService->removeConnection(nsConnId), "name service should remove connection");
+        require(client->removeConnection(clientConnId), "client should remove connection");
+        serverTransport->stop();
+    }
+
+    void testNameResolveReturnsReachableNode() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        const std::string memoryChannel = "rm-ns-resolve-" + std::to_string(rsp::GUID().high());
+        require(serverTransport->listen(memoryChannel), "memory transport listener should start");
+        const std::string transportSpec = "memory:" + memoryChannel;
+
+        auto nameService = rsp::name_service::NameService::create();
+        rsp::KeyPair serviceKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID serviceNodeId = serviceKeyPair.nodeID();
+        auto serviceClient = rsp::client::RSPClient::create(std::move(serviceKeyPair));
+        auto resolverClient = rsp::client::RSPClient::create();
+
+        const auto nsConnId = nameService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto svcConnId = serviceClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+        const auto resolverConnId = resolverClient->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
+            "resource manager should authenticate name service, service client, and resolver");
+
+        const rsp::NodeID nsNodeId = nameService->nodeId();
+        const rsp::GUID type{};
+        const rsp::GUID value{};
+        const std::string name = "test.resolve.host";
+
+        const auto createResult = resolverClient->nameCreate(nsNodeId, name, serviceNodeId, type, value);
+        require(createResult.has_value() && createResult->status == rsp::client::NameResult::Status::Success,
+            "nameCreate should succeed for resolve test");
+
+        const auto resolvedId = resolverClient->nameResolve(nsNodeId, name, type);
+        require(resolvedId.has_value(),
+            "nameResolve should return a node ID for the reachable service");
+        require(*resolvedId == serviceNodeId,
+            "nameResolve should return the service node's ID");
+
+        require(nameService->removeConnection(nsConnId), "name service should remove connection");
+        require(serviceClient->removeConnection(svcConnId), "service client should remove connection");
+        require(resolverClient->removeConnection(resolverConnId), "resolver client should remove connection");
+        serverTransport->stop();
+    }
+
+    void testNameResolveSkipsUnreachableNodes() {
+        auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+        TestResourceManager resourceManager({serverTransport});
+
+        const std::string memoryChannel = "rm-ns-skip-" + std::to_string(rsp::GUID().high());
+        require(serverTransport->listen(memoryChannel), "memory transport listener should start");
+        const std::string transportSpec = "memory:" + memoryChannel;
+
+        auto nameService = rsp::name_service::NameService::create();
+        rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
+        const rsp::NodeID realNodeId = clientKeyPair.nodeID();
+        auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
+
+        const auto nsConnId = nameService->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+        const auto clientConnId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+
+        require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate name service and client");
+
+        const rsp::NodeID nsNodeId = nameService->nodeId();
+        // A fake (non-existent) node ID that ping will never reach
+        const rsp::NodeID fakeNodeId{0xDEADBEEFDEADBEEFULL, 0xCAFEBABECAFEBABEULL};
+        const rsp::GUID type{};
+        const rsp::GUID value{};
+        const std::string name = "test.skip.host";
+
+        // Register the fake node first so it sorts first if expiry is the same
+        const auto createFake = client->nameCreate(nsNodeId, name, fakeNodeId, type, value);
+        require(createFake.has_value() && createFake->status == rsp::client::NameResult::Status::Success,
+            "nameCreate for fake node should succeed");
+
+        // Small delay so the real record gets a later expiry (sorts first in descending order)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        const auto createReal = client->nameCreate(nsNodeId, name, realNodeId, type, value);
+        require(createReal.has_value() && createReal->status == rsp::client::NameResult::Status::Success,
+            "nameCreate for real node should succeed");
+
+        const auto resolvedId = client->nameResolve(nsNodeId, name, type);
+        require(resolvedId.has_value(),
+            "nameResolve should return a node ID skipping the unreachable fake node");
+        require(*resolvedId == realNodeId,
+            "nameResolve should return the reachable real node ID");
+
+        require(nameService->removeConnection(nsConnId), "name service should remove connection");
+        require(client->removeConnection(clientConnId), "client should remove connection");
+        serverTransport->stop();
+    }
+
 }  // namespace
 
 int main() {
@@ -1805,6 +1939,9 @@ int main() {
         testSocketOwnershipByNodeIdThroughResourceService();
         testSharedSocketRejectsUnsupportedOptions();
         testListeningSocketRejectsUnsupportedOptions();
+        testNameRefreshUpdatesExpiryAndRecordIsReturned();
+        testNameResolveReturnsReachableNode();
+        testNameResolveSkipsUnreachableNodes();
         std::cout << "resource service test passed" << std::endl;
         return 0;
     } catch (const std::exception& exception) {

@@ -2,6 +2,7 @@
 
 #include "client/cpp/rsp_client_export.hpp"
 #include "client/cpp/rsp_client_message.hpp"
+#include "common/base_types.hpp"
 #include "common/endorsement/endorsement.hpp"
 #include "common/node.hpp"
 #include "os/os_socket.hpp"
@@ -53,6 +54,7 @@ struct NameRecord {
     rsp::NodeID owner;
     rsp::GUID type;
     rsp::GUID value;
+    rsp::DateTime expiresAt;
 };
 
 struct NameResult {
@@ -157,6 +159,21 @@ public:
         const std::optional<rsp::NodeID>& owner = std::nullopt,
         const std::optional<rsp::GUID>& type = std::nullopt,
         uint32_t maxRecords = 0);
+    RSPCLIENT_API std::optional<NameResult> nameRefresh(
+        rsp::NodeID nodeId,
+        const std::string& name,
+        rsp::NodeID owner,
+        const rsp::GUID& type);
+    RSPCLIENT_API std::optional<rsp::NodeID> nameResolve(
+        rsp::NodeID nsNodeId,
+        const std::string& name,
+        const std::optional<rsp::GUID>& type = std::nullopt);
+    RSPCLIENT_API std::optional<NameResult> registerNameWithRefresh(
+        rsp::NodeID nsNodeId,
+        const std::string& name,
+        rsp::NodeID owner,
+        const rsp::GUID& type,
+        const rsp::GUID& value);
 
     RSPCLIENT_API std::optional<StreamResult> connectTCPEx(rsp::NodeID nodeId,
                                                            const std::string& hostPort,
@@ -342,6 +359,20 @@ private:
     std::map<rsp::GUID, rsp::NodeID> streamRoutes_;
     uint32_t nextPingSequence_ = 1;
     bool stopping_ = false;
+
+    struct RefreshEntry {
+        rsp::NodeID nsNodeId;
+        std::string name;
+        rsp::NodeID owner;
+        rsp::GUID type;
+        rsp::GUID value;
+    };
+    std::vector<RefreshEntry> refreshRegistrations_;
+    std::mutex refreshMutex_;
+    std::condition_variable refreshCv_;
+    bool refreshStopping_ = false;
+    std::thread refreshThread_;
+    void runRefreshThread();
 };
 
 }  // namespace rsp::client

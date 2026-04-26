@@ -333,14 +333,15 @@ int main(int argc, char* argv[]) {
     // If a hostname is configured, register with the name service in the background.
     // This runs in a separate thread so sshd can immediately accept connections
     // while the second RM connection (and its authn handshake) completes asynchronously.
+    std::shared_ptr<rsp::client::RSPClient> nsClient;
     std::thread nsThread;
     if (!cfg.nsHostname.empty()) {
+        nsClient = rsp::client::RSPClient::create();
         const std::string transport = cfg.rspTransport;
         const std::string hostname  = cfg.nsHostname;
         const rsp::NodeID sshdNodeId = rs->nodeId();
 
-        nsThread = std::thread([transport, hostname, sshdNodeId]() {
-            auto nsClient = rsp::client::RSPClient::create();
+        nsThread = std::thread([nsClient, transport, hostname, sshdNodeId]() {
             try {
                 const auto nsConnId = nsClient->connectToResourceManager(
                     transport, rsp::message_queue::kAsciiHandshakeEncoding);
@@ -372,11 +373,10 @@ int main(int argc, char* argv[]) {
                         }
                     }
                     if (!isNS) continue;
-
                     const rsp::NodeID nsNodeId = svc.nodeId;
                     if (nsNodeId == rsp::NodeID{}) continue;
 
-                    const auto reply = nsClient->nameCreate(
+                    const auto reply = nsClient->registerNameWithRefresh(
                         nsNodeId,
                         hostname,
                         sshdNodeId,

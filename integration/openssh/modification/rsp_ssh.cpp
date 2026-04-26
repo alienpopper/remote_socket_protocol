@@ -236,14 +236,13 @@ int main(int argc, char* argv[]) {
             if (nsNodeId == rsp::NodeID{}) continue;
 
             log("Querying NS " + nsNodeId.toString() + " for name '" + cfg.resourceServiceName + "'");
-            const auto nameReply = client->nameQuery(
+            const auto resolvedNodeId = client->nameResolve(
                 nsNodeId,
                 cfg.resourceServiceName,
-                std::nullopt,
                 rsp::resource_service::kSshdNameType);
-            if (!nameReply.has_value() || nameReply->records.empty()) continue;
+            if (!resolvedNodeId.has_value()) continue;
 
-            rsNodeId = nameReply->records[0].owner;
+            rsNodeId = *resolvedNodeId;
             log("Resolved '" + cfg.resourceServiceName + "' to node " + rsNodeId.toString());
             resolved = true;
             break;
