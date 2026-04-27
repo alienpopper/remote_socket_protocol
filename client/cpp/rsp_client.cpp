@@ -694,12 +694,13 @@ std::optional<NameResult> RSPClient::registerNameWithRefresh(
         rsp::NodeID nsNodeId, const std::string& name,
         rsp::NodeID owner, const rsp::GUID& type, const rsp::GUID& value) {
     auto result = nameCreate(nsNodeId, name, owner, type, value);
-    if (!result.has_value() || result->status != NameResult::Status::Success) {
-        return result;
-    }
     {
         std::lock_guard<std::mutex> lock(refreshMutex_);
         refreshRegistrations_.push_back({nsNodeId, name, owner, type, value});
+        if (!result.has_value() || result->status != NameResult::Status::Success) {
+            // NS may be down; flag for immediate retry when NodeConnectedEvent arrives.
+            pendingReregistrations_.insert(nsNodeId);
+        }
         if (!refreshThread_.joinable()) {
             refreshStopping_ = false;
             refreshThread_ = std::thread([this] { runRefreshThread(); });
