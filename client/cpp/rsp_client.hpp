@@ -180,6 +180,18 @@ public:
     // call registerNameWithRefresh when it discovers an NS.
     RSPCLIENT_API void watchNodeConnectedEvents(std::function<void(rsp::NodeID)> callback);
 
+    // Callbacks for node lifecycle events delivered via the RM log subscription.
+    // onConnected fires when a node (re)starts with a new boot_id; NOT on
+    // transparent transport reconnects (same boot_id = same process).
+    // onDisconnected fires whenever a node's connection to the RM is dropped.
+    struct NodeLifecycleCallbacks {
+        std::function<void(rsp::NodeID)> onConnected;
+        std::function<void(rsp::NodeID)> onDisconnected;
+    };
+    // Register lifecycle callbacks. Starts the log subscription if not already
+    // active. Safe to call multiple times; only the last callbacks are retained.
+    RSPCLIENT_API void watchNodeLifecycle(NodeLifecycleCallbacks callbacks);
+
     RSPCLIENT_API std::optional<StreamResult> connectTCPEx(rsp::NodeID nodeId,
                                                            const std::string& hostPort,
                                                            uint32_t timeoutMilliseconds = 0,
@@ -377,6 +389,8 @@ private:
     std::set<rsp::NodeID> pendingReregistrations_;    // NSes that need re-registration
     std::set<rsp::NodeID> failedRegistrations_;       // NSes with transient failures, retry soon
     std::function<void(rsp::NodeID)> nodeConnectedCallback_; // called for unknown connecting nodes
+    std::optional<NodeLifecycleCallbacks> lifecycleCallbacks_;
+    std::map<rsp::NodeID, std::string> lifecycleBootIds_; // boot_id per node for lifecycle dedup
     bool logSubActive_ = false;
     std::mutex refreshMutex_;
     std::condition_variable refreshCv_;

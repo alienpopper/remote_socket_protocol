@@ -765,14 +765,18 @@ void RSPClient::sendLogSubscribeToRM() {
         if (!rmNodeId.has_value()) {
             continue;
         }
-        rsp::proto::RSPMessage request;
-        *request.mutable_source() = toProtoNodeId(messageClient_->nodeId());
-        *request.mutable_destination() = toProtoNodeId(*rmNodeId);
-        auto* sub = request.mutable_log_subscribe_request();
-        sub->set_payload_type_url("type.rsp/rsp.proto.NodeConnectedEvent");
-        sub->mutable_filter()->mutable_field_exists()->mutable_path()->add_segments("node_id");
-        sub->set_duration_ms(300000); // 5 minutes
-        messageClient_->send(request);
+        const auto sendSubscription = [&](const std::string& typeUrl) {
+            rsp::proto::RSPMessage request;
+            *request.mutable_source() = toProtoNodeId(messageClient_->nodeId());
+            *request.mutable_destination() = toProtoNodeId(*rmNodeId);
+            auto* sub = request.mutable_log_subscribe_request();
+            sub->set_payload_type_url(typeUrl);
+            sub->mutable_filter()->mutable_field_exists()->mutable_path()->add_segments("node_id");
+            sub->set_duration_ms(300000); // 5 minutes
+            messageClient_->send(request);
+        };
+        sendSubscription("type.rsp/rsp.proto.NodeConnectedEvent");
+        sendSubscription("type.rsp/rsp.proto.NodeDisconnectedEvent");
     }
 }
 
@@ -789,50 +793,85 @@ void RSPClient::watchNodeConnectedEvents(std::function<void(rsp::NodeID)> callba
     }
 }
 
+void RSPClient::watchNodeLifecycle(NodeLifecycleCallbacks callbacks) {
+    std::lock_guard<std::mutex> lock(refreshMutex_);
+    lifecycleCallbacks_ = std::move(callbacks);
+    if (!refreshThread_.joinable()) {
+        refreshStopping_ = false;
+        refreshThread_ = std::thread([this] { runRefreshThread(); });
+    }
+    if (!logSubActive_) {
+        sendLogSubscribeToRM();
+        logSubActive_ = true;
+    }
+}
+
 void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
     if (!message.has_log_record() || !message.log_record().has_payload()) {
         return;
     }
     const auto& payload = message.log_record().payload();
-    if (payload.type_url() != "type.rsp/rsp.proto.NodeConnectedEvent") {
-        return;
-    }
-    rsp::proto::NodeConnectedEvent event;
-    if (!event.ParseFromString(payload.value())) {
-        return;
-    }
-    const auto connectedNodeId = rsp::nodeIdFromSourceField(event.node_id());
-    if (!connectedNodeId.has_value()) {
-        return;
-    }
 
-    std::function<void(rsp::NodeID)> unknownNodeCallback;
-    {
-        std::lock_guard<std::mutex> lock(refreshMutex_);
-        bool isKnownNS = false;
-        for (const auto& entry : refreshRegistrations_) {
-            if (entry.nsNodeId == *connectedNodeId) {
-                isKnownNS = true;
-                break;
+    if (payload.type_url() == "type.rsp/rsp.proto.NodeConnectedEvent") {
+        rsp::proto::NodeConnectedEvent event;
+        if (!event.ParseFromString(payload.value())) return;
+        const auto nodeId = rsp::nodeIdFromSourceField(event.node_id());
+        if (!nodeId.has_value()) return;
+
+        const std::string newBootId = event.identity().has_boot_id()
+            ? event.identity().boot_id().value()
+            : std::string();
+
+        std::function<void(rsp::NodeID)> unknownNodeCallback;
+        std::function<void(rsp::NodeID)> lifecycleOnConnected;
+        {
+            std::lock_guard<std::mutex> lock(refreshMutex_);
+
+            // NS re-registration logic: check if this node is a known NS.
+            bool isKnownNS = false;
+            for (const auto& entry : refreshRegistrations_) {
+                if (entry.nsNodeId == *nodeId) { isKnownNS = true; break; }
+            }
+            if (!isKnownNS) {
+                unknownNodeCallback = nodeConnectedCallback_;
+            } else {
+                const auto it = nsBootIds_.find(*nodeId);
+                if (it != nsBootIds_.end() && it->second == newBootId && !newBootId.empty()) {
+                    return; // same boot_id = transport reconnect, skip
+                }
+                nsBootIds_[*nodeId] = newBootId;
+                pendingReregistrations_.insert(*nodeId);
+                refreshCv_.notify_all();
+            }
+
+            // General lifecycle: fire onConnected if boot_id changed (or first connect).
+            if (lifecycleCallbacks_.has_value() && lifecycleCallbacks_->onConnected) {
+                const auto it = lifecycleBootIds_.find(*nodeId);
+                if (it == lifecycleBootIds_.end() || it->second != newBootId || newBootId.empty()) {
+                    lifecycleBootIds_[*nodeId] = newBootId;
+                    lifecycleOnConnected = lifecycleCallbacks_->onConnected;
+                }
             }
         }
-        if (!isKnownNS) {
-            unknownNodeCallback = nodeConnectedCallback_;
-        } else {
-            const std::string newBootId = event.identity().has_boot_id()
-                ? event.identity().boot_id().value()
-                : std::string();
-            const auto it = nsBootIds_.find(*connectedNodeId);
-            if (it != nsBootIds_.end() && it->second == newBootId && !newBootId.empty()) {
-                return; // same boot_id = transport reconnect, no re-registration needed
+        if (unknownNodeCallback) unknownNodeCallback(*nodeId);
+        if (lifecycleOnConnected) lifecycleOnConnected(*nodeId);
+
+    } else if (payload.type_url() == "type.rsp/rsp.proto.NodeDisconnectedEvent") {
+        rsp::proto::NodeDisconnectedEvent event;
+        if (!event.ParseFromString(payload.value())) return;
+        const auto nodeId = rsp::nodeIdFromSourceField(event.node_id());
+        if (!nodeId.has_value()) return;
+
+        std::function<void(rsp::NodeID)> lifecycleOnDisconnected;
+        {
+            std::lock_guard<std::mutex> lock(refreshMutex_);
+            // Clear boot_id so the next connect fires onConnected unconditionally.
+            lifecycleBootIds_.erase(*nodeId);
+            if (lifecycleCallbacks_.has_value() && lifecycleCallbacks_->onDisconnected) {
+                lifecycleOnDisconnected = lifecycleCallbacks_->onDisconnected;
             }
-            nsBootIds_[*connectedNodeId] = newBootId;
-            pendingReregistrations_.insert(*connectedNodeId);
-            refreshCv_.notify_all();
         }
-    }
-    if (unknownNodeCallback) {
-        unknownNodeCallback(*connectedNodeId);
+        if (lifecycleOnDisconnected) lifecycleOnDisconnected(*nodeId);
     }
 }
 
