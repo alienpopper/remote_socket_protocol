@@ -30,6 +30,8 @@ def main() -> None:
     assert field("FieldEncryptionFixture", "clear_text").get("encrypted") is False
     assert field("FieldEncryptionFixture", "secret_text").get("encrypted") is True
     assert field("FieldEncryptionFixture", "secret_bytes").get("encrypted") is True
+    assert field("RSPMessage", "aes_key_negotiation_request")
+    assert field("RSPMessage", "aes_key_negotiation_reply")
 
     message = {
         "source": {"value": b64(b"source-node-12345")},
@@ -54,6 +56,28 @@ def main() -> None:
     modified["encrypted_fields"][0]["ciphertext"] = b64(b"ciphertext-b")
     hash_b = messages.hash_rsp_message(modified)
     assert hash_a != hash_b, "encrypted field data should affect canonical hash"
+
+    key_message = {
+        "source": {"value": b64(b"source-node-12345")},
+        "destination": {"value": b64(b"destination-node")},
+        "aes_key_negotiation_request": {
+            "key_id": {"value": b64(b"1234567890ABCDEF")},
+            "ephemeral_public_key": {
+                "algorithm": messages.SIGNATURE_ALGORITHMS.P256,
+                "public_key": b64(b"ephemeral-public-key"),
+            },
+            "requested_lifetime_ms": 5000,
+            "algorithm": (
+                messages.KEY_NEGOTIATION_ALGORITHM
+                .KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256
+            ),
+        },
+    }
+    key_hash_a = messages.hash_rsp_message(key_message)
+    key_modified = copy.deepcopy(key_message)
+    key_modified["aes_key_negotiation_request"]["key_id"]["value"] = b64(b"ABCDE1234567890F")
+    key_hash_b = messages.hash_rsp_message(key_modified)
+    assert key_hash_a != key_hash_b, "AES key negotiation fields should affect canonical hash"
 
     print("python_encrypted_proto_schema_test passed")
 

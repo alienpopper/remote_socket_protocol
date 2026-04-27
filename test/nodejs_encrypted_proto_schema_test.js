@@ -20,6 +20,8 @@ function main() {
     assert.strictEqual(field('FieldEncryptionFixture', 'clear_text').encrypted, false);
     assert.strictEqual(field('FieldEncryptionFixture', 'secret_text').encrypted, true);
     assert.strictEqual(field('FieldEncryptionFixture', 'secret_bytes').encrypted, true);
+    assert.ok(field('RSPMessage', 'aes_key_negotiation_request'));
+    assert.ok(field('RSPMessage', 'aes_key_negotiation_reply'));
 
     const message = messages.createRSPMessage({
         source: {value: b64('source-node-12345')},
@@ -51,6 +53,26 @@ function main() {
     assert.deepStrictEqual(roundTrip.encrypted_fields[0].path.segments, ['service_message', 'secret_text']);
     assert.strictEqual(roundTrip.encrypted_fields[0].algorithm, 1);
     assert.strictEqual(roundTrip.encrypted_fields[0].ciphertext, message.encrypted_fields[0].ciphertext);
+
+    const keyNegotiationMessage = messages.createRSPMessage({
+        source: {value: b64('source-node-12345')},
+        destination: {value: b64('destination-node')},
+        aes_key_negotiation_request: {
+            key_id: {value: b64('1234567890ABCDEF')},
+            ephemeral_public_key: {
+                algorithm: messages.SIGNATURE_ALGORITHMS.P256,
+                public_key: b64('ephemeral-public-key'),
+            },
+            requested_lifetime_ms: 5000,
+            algorithm: messages.KEY_NEGOTIATION_ALGORITHM
+                .KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256,
+        },
+    });
+    const keyHashA = messages.hashRSPMessage(keyNegotiationMessage).toString('hex');
+    const modifiedKeyMessage = JSON.parse(JSON.stringify(keyNegotiationMessage));
+    modifiedKeyMessage.aes_key_negotiation_request.key_id.value = b64('ABCDE1234567890F');
+    const keyHashB = messages.hashRSPMessage(modifiedKeyMessage).toString('hex');
+    assert.notStrictEqual(keyHashA, keyHashB, 'AES key negotiation fields should affect canonical hash');
 
     console.log('nodejs_encrypted_proto_schema_test passed');
 }

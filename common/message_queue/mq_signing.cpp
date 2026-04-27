@@ -407,6 +407,22 @@ void hashLogRecord(MessageHasher& hasher, const rsp::proto::LogRecord& message) 
     hashMessageReflective(hasher, message);
 }
 
+void hashAesKeyNegotiationRequest(MessageHasher& hasher, const rsp::proto::AesKeyNegotiationRequest& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashAesKeyNegotiationReply(MessageHasher& hasher, const rsp::proto::AesKeyNegotiationReply& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashAesKeyDropNotification(MessageHasher& hasher, const rsp::proto::AesKeyDropNotification& message) {
+    hashMessageReflective(hasher, message);
+}
+
+void hashAesKeyNegotiationError(MessageHasher& hasher, const rsp::proto::AesKeyNegotiationError& message) {
+    hashMessageReflective(hasher, message);
+}
+
 void hashEndorsementNeeded(MessageHasher& hasher, const rsp::proto::EndorsementNeeded& message) {
     if (message.has_message_nonce()) {
         hasher.tag(1);
@@ -551,6 +567,22 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
     if (message.has_log_record()) {
         hasher.tag(32);
         hashLogRecord(hasher, message.log_record());
+    }
+    if (message.has_aes_key_negotiation_request()) {
+        hasher.tag(33);
+        hashAesKeyNegotiationRequest(hasher, message.aes_key_negotiation_request());
+    }
+    if (message.has_aes_key_negotiation_reply()) {
+        hasher.tag(34);
+        hashAesKeyNegotiationReply(hasher, message.aes_key_negotiation_reply());
+    }
+    if (message.has_aes_key_drop_notification()) {
+        hasher.tag(35);
+        hashAesKeyDropNotification(hasher, message.aes_key_drop_notification());
+    }
+    if (message.has_aes_key_negotiation_error()) {
+        hasher.tag(36);
+        hashAesKeyNegotiationError(hasher, message.aes_key_negotiation_error());
     }
 
     // field 100: endorsements (repeated — always hash count)

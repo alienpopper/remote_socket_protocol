@@ -351,6 +351,52 @@ void testRSPEncryptedFieldContainerTranscoding() {
             "JSON decode should preserve encrypted field algorithm value");
 }
 
+void testRSPAesNegotiationTranscoding() {
+    rsp::proto::RSPMessage outbound;
+    outbound.mutable_source()->set_value(std::string(16, '\x11'));
+    outbound.mutable_destination()->set_value(std::string(16, '\x22'));
+
+    auto* request = outbound.mutable_aes_key_negotiation_request();
+    request->mutable_key_id()->set_value(std::string(16, '\x33'));
+    request->mutable_ephemeral_public_key()->set_algorithm(rsp::proto::P256);
+    request->mutable_ephemeral_public_key()->set_public_key("test-ephemeral-public-key");
+    request->set_requested_lifetime_ms(5000);
+    request->set_algorithm(rsp::proto::KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256);
+
+    std::string protobufBytes;
+    require(outbound.SerializeToString(&protobufBytes),
+            "RSPMessage with AES key negotiation request should serialize");
+
+    rsp::proto::RSPMessage decodedFromProtobuf;
+    require(decodedFromProtobuf.ParseFromString(protobufBytes),
+            "RSPMessage with AES key negotiation request should parse from protobuf");
+    require(decodedFromProtobuf.has_aes_key_negotiation_request(),
+            "protobuf decode should preserve aes_key_negotiation_request");
+    require(decodedFromProtobuf.aes_key_negotiation_request().requested_lifetime_ms() == 5000,
+            "protobuf decode should preserve requested lifetime");
+
+    std::string jsonPayload;
+    google::protobuf::util::JsonPrintOptions printOptions;
+    printOptions.preserve_proto_field_names = true;
+    const auto toJsonStatus =
+        google::protobuf::util::MessageToJsonString(decodedFromProtobuf, &jsonPayload, printOptions);
+    require(toJsonStatus.ok(),
+            "RSPMessage with AES negotiation fields should convert to JSON");
+    require(jsonPayload.find("aes_key_negotiation_request") != std::string::npos,
+            "JSON output should include aes_key_negotiation_request");
+
+    rsp::proto::RSPMessage decodedFromJson;
+    const auto fromJsonStatus =
+        google::protobuf::util::JsonStringToMessage(jsonPayload, &decodedFromJson);
+    require(fromJsonStatus.ok(),
+            "RSPMessage with AES negotiation fields should parse from JSON");
+    require(decodedFromJson.has_aes_key_negotiation_request(),
+            "JSON decode should preserve aes_key_negotiation_request");
+    require(decodedFromJson.aes_key_negotiation_request().algorithm() ==
+                rsp::proto::KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256,
+            "JSON decode should preserve negotiation algorithm");
+}
+
 }  // namespace
 
 int main() {
@@ -358,6 +404,7 @@ int main() {
 
     testTranscoding();
     testRSPEncryptedFieldContainerTranscoding();
+    testRSPAesNegotiationTranscoding();
 
     std::cout << "transcoding_test: " << testsRun << " checks, "
               << (testsPassed ? "all passed" : "SOME FAILED") << "\n";

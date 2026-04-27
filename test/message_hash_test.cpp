@@ -153,6 +153,27 @@ static void test_encrypted_fields_affect_hash() {
     CHECK(computeMessageHash(mk("cipher-a")) == computeMessageHash(mk("cipher-a")));
 }
 
+static void test_aes_key_negotiation_messages_affect_hash() {
+    auto mk = [](const std::string& keyId, uint64_t lifetimeMs) {
+        rsp::proto::RSPMessage msg;
+        msg.mutable_source()->set_value(std::string(16, '\x01'));
+        auto* request = msg.mutable_aes_key_negotiation_request();
+        request->mutable_key_id()->set_value(keyId);
+        request->mutable_ephemeral_public_key()->set_algorithm(rsp::proto::P256);
+        request->mutable_ephemeral_public_key()->set_public_key("ephemeral-public-key");
+        request->set_requested_lifetime_ms(lifetimeMs);
+        request->set_algorithm(rsp::proto::KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256);
+        return msg;
+    };
+
+    CHECK(computeMessageHash(mk(std::string(16, '\x11'), 1000)) !=
+          computeMessageHash(mk(std::string(16, '\x22'), 1000)));
+    CHECK(computeMessageHash(mk(std::string(16, '\x11'), 1000)) !=
+          computeMessageHash(mk(std::string(16, '\x11'), 2000)));
+    CHECK(computeMessageHash(mk(std::string(16, '\x11'), 1000)) ==
+          computeMessageHash(mk(std::string(16, '\x11'), 1000)));
+}
+
 static void test_socket_send_field_order() {
     // StreamSend has data=2 and index=3 in non-numeric proto order;
     // verify that changing either affects the hash distinctly.
@@ -254,6 +275,7 @@ int main() {
     run("endorsements_affect_hash",       test_endorsements_affect_hash);
     run("endorsements_deterministic",     test_endorsements_deterministic);
     run("encrypted_fields_affect_hash",   test_encrypted_fields_affect_hash);
+    run("aes_key_negotiation_affect_hash", test_aes_key_negotiation_messages_affect_hash);
     run("socket_send_field_order",        test_socket_send_field_order);
     run("connect_tcp_request",            test_connect_tcp_request);
     run("route_update",                   test_route_update);

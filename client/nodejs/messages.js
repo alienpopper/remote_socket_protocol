@@ -33,6 +33,21 @@ const SCHEMA = {
             "SIGNATURE_FAILED": 2,
             "UNIMPLEMENTED": 3
         },
+        "KEY_NEGOTIATION_ALGORITHM": {
+            "KEY_NEGOTIATION_ALGORITHM_UNSPECIFIED": 0,
+            "KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256": 1
+        },
+        "KEY_NEGOTIATION_ERROR": {
+            "KEY_NEGOTIATION_ERROR_UNSPECIFIED": 0,
+            "KEY_NEGOTIATION_ERROR_INVALID_REQUEST": 1,
+            "KEY_NEGOTIATION_ERROR_UNSUPPORTED_ALGORITHM": 2,
+            "KEY_NEGOTIATION_ERROR_PAIR_NEGOTIATION_EXISTS": 3,
+            "KEY_NEGOTIATION_ERROR_PAIR_KEY_EXISTS": 4,
+            "KEY_NEGOTIATION_ERROR_KEY_LIMIT_REACHED": 5,
+            "KEY_NEGOTIATION_ERROR_UNKNOWN_KEY": 6,
+            "KEY_NEGOTIATION_ERROR_KEY_INCORRECT": 7,
+            "KEY_NEGOTIATION_ERROR_EXPIRED": 8
+        },
         "LOG_LEVEL": {
             "LOG_LEVEL_UNSPECIFIED": 0,
             "LOG_LEVEL_TRACE": 1,
@@ -953,6 +968,156 @@ const SCHEMA = {
                 {
                     "name": "message",
                     "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "AesKeyNegotiationRequest": {
+            "fields": [
+                {
+                    "name": "key_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "ephemeral_public_key",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "PublicKey",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "requested_lifetime_ms",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "uint64",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "algorithm",
+                    "number": 4,
+                    "kind": "enum",
+                    "type": "KEY_NEGOTIATION_ALGORITHM",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "AesKeyNegotiationReply": {
+            "fields": [
+                {
+                    "name": "key_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "ephemeral_public_key",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "PublicKey",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "accepted_lifetime_ms",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "uint64",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "algorithm",
+                    "number": 4,
+                    "kind": "enum",
+                    "type": "KEY_NEGOTIATION_ALGORITHM",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "AesKeyDropNotification": {
+            "fields": [
+                {
+                    "name": "key_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "reason",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "AesKeyNegotiationError": {
+            "fields": [
+                {
+                    "name": "error_code",
+                    "number": 1,
+                    "kind": "enum",
+                    "type": "KEY_NEGOTIATION_ERROR",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "key_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "message",
+                    "number": 3,
                     "kind": "scalar",
                     "type": "string",
                     "repeated": false,
@@ -2966,6 +3131,46 @@ const SCHEMA = {
                     "encrypted": false
                 },
                 {
+                    "name": "aes_key_negotiation_request",
+                    "number": 33,
+                    "kind": "message",
+                    "type": "AesKeyNegotiationRequest",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message",
+                    "encrypted": false
+                },
+                {
+                    "name": "aes_key_negotiation_reply",
+                    "number": 34,
+                    "kind": "message",
+                    "type": "AesKeyNegotiationReply",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message",
+                    "encrypted": false
+                },
+                {
+                    "name": "aes_key_drop_notification",
+                    "number": 35,
+                    "kind": "message",
+                    "type": "AesKeyDropNotification",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message",
+                    "encrypted": false
+                },
+                {
+                    "name": "aes_key_negotiation_error",
+                    "number": 36,
+                    "kind": "message",
+                    "type": "AesKeyNegotiationError",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": "core_message",
+                    "encrypted": false
+                },
+                {
                     "name": "signature",
                     "number": 99,
                     "kind": "message",
@@ -3036,7 +3241,11 @@ const SCHEMA = {
                         "log_subscribe_reply",
                         "log_unsubscribe_request",
                         "log_unsubscribe_reply",
-                        "log_record"
+                        "log_record",
+                        "aes_key_negotiation_request",
+                        "aes_key_negotiation_reply",
+                        "aes_key_drop_notification",
+                        "aes_key_negotiation_error"
                     ]
                 }
             ]

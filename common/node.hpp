@@ -7,6 +7,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <string>
 
 #include "common/logging/logging.hpp"
 #include "common/keypair.hpp"
@@ -59,6 +60,22 @@ private:
 
 class RSPNode {
 public:
+    struct AesNegotiationLimits {
+        size_t maxActiveKeys = 64;
+        size_t maxPendingNegotiations = 64;
+        uint64_t defaultLifetimeMs = 5 * 60 * 1000;
+        uint64_t minLifetimeMs = 1000;
+        uint64_t maxLifetimeMs = 60 * 60 * 1000;
+        uint64_t pendingTimeoutMs = 15 * 1000;
+    };
+
+    struct AesNegotiatedKeyInfo {
+        rsp::GUID keyId;
+        rsp::NodeID peerNodeId;
+        uint32_t algorithm = 0;
+        rsp::DateTime expiresAt;
+    };
+
     RSPNode();
     explicit RSPNode(KeyPair keyPair);
     virtual ~RSPNode();
@@ -71,6 +88,14 @@ public:
     size_t pendingOutputCount() const;
     IdentityCache& identityCache();
     const IdentityCache& identityCache() const;
+    void setAesNegotiationLimits(const AesNegotiationLimits& limits);
+    AesNegotiationLimits aesNegotiationLimits() const;
+    bool beginAesKeyNegotiation(const rsp::NodeID& peerNodeId, uint64_t requestedLifetimeMs = 0);
+    bool dropAesKey(const rsp::NodeID& peerNodeId, const std::string& reason = "local_drop");
+    bool hasAesKey(const rsp::NodeID& peerNodeId) const;
+    size_t activeAesKeyCount() const;
+    size_t pendingAesNegotiationCount() const;
+    std::optional<AesNegotiatedKeyInfo> aesKeyInfo(const rsp::NodeID& peerNodeId) const;
 
 protected:
     virtual bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) = 0;
@@ -84,10 +109,37 @@ protected:
     const KeyPair& keyPair() const;
     rsp::MessageQueueHandle inputQueue() const;
     rsp::MessageQueueHandle outputQueue() const;
+    std::optional<rsp::Buffer> aesKeyMaterialForPeer(const rsp::NodeID& peerNodeId) const;
 
 private:
     friend class NodeInputQueue;
     friend class NodeOutputQueue;
+
+    struct PendingAesNegotiation {
+        std::string keyId;
+        KeyPair ephemeralKeyPair;
+        uint32_t algorithm = 0;
+        uint64_t requestedLifetimeMs = 0;
+        rsp::DateTime expiresAt;
+    };
+
+    struct ActiveAesKey {
+        std::string keyId;
+        rsp::Buffer keyMaterial;
+        uint32_t algorithm = 0;
+        rsp::DateTime expiresAt;
+    };
+
+    struct AesNegotiationState {
+        AesNegotiationLimits limits;
+        std::map<rsp::NodeID, PendingAesNegotiation> pendingByPeer;
+        std::map<rsp::NodeID, ActiveAesKey> activeByPeer;
+    };
+
+    bool handleAesNegotiationMessage(const rsp::proto::RSPMessage& message);
+    void handleAesKeyNegotiationError(const rsp::proto::RSPMessage& message);
+    bool pushOutputMessage(rsp::proto::RSPMessage message, const char* context) const;
+    void processExpiredAesKeys() const;
 
     KeyPair keyPair_;
     std::array<uint8_t, 16> instanceSeed_;
@@ -95,6 +147,8 @@ private:
     rsp::MessageQueueHandle inputQueue_;
     rsp::MessageQueueHandle outputQueue_;
     mutable IdentityCache identityCache_;
+    mutable std::mutex aesNegotiationMutex_;
+    mutable AesNegotiationState aesNegotiationState_;
     rsp::logging::SubscriptionManager loggingSubscriptions_;
 };
 

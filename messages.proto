@@ -212,6 +212,48 @@ message Error {
     string message = 2;
 }
 
+enum KEY_NEGOTIATION_ALGORITHM {
+    KEY_NEGOTIATION_ALGORITHM_UNSPECIFIED = 0;
+    KEY_NEGOTIATION_ALGORITHM_P256_SHA256_AES256 = 1;
+}
+
+enum KEY_NEGOTIATION_ERROR {
+    KEY_NEGOTIATION_ERROR_UNSPECIFIED = 0;
+    KEY_NEGOTIATION_ERROR_INVALID_REQUEST = 1;
+    KEY_NEGOTIATION_ERROR_UNSUPPORTED_ALGORITHM = 2;
+    KEY_NEGOTIATION_ERROR_PAIR_NEGOTIATION_EXISTS = 3;
+    KEY_NEGOTIATION_ERROR_PAIR_KEY_EXISTS = 4;
+    KEY_NEGOTIATION_ERROR_KEY_LIMIT_REACHED = 5;
+    KEY_NEGOTIATION_ERROR_UNKNOWN_KEY = 6;
+    KEY_NEGOTIATION_ERROR_KEY_INCORRECT = 7;
+    KEY_NEGOTIATION_ERROR_EXPIRED = 8;
+}
+
+message AesKeyNegotiationRequest {
+    Uuid key_id = 1;
+    PublicKey ephemeral_public_key = 2;
+    uint64 requested_lifetime_ms = 3;
+    KEY_NEGOTIATION_ALGORITHM algorithm = 4;
+}
+
+message AesKeyNegotiationReply {
+    Uuid key_id = 1;
+    PublicKey ephemeral_public_key = 2;
+    uint64 accepted_lifetime_ms = 3;
+    KEY_NEGOTIATION_ALGORITHM algorithm = 4;
+}
+
+message AesKeyDropNotification {
+    Uuid key_id = 1;
+    string reason = 2;
+}
+
+message AesKeyNegotiationError {
+    KEY_NEGOTIATION_ERROR error_code = 1;
+    Uuid key_id = 2;
+    string message = 3;
+}
+
 message PingRequest {
     Uuid nonce = 1;
     uint32 sequence = 2;
@@ -612,6 +654,10 @@ message RSPMessage {
       LogUnsubscribeRequest log_unsubscribe_request = 30;
       LogUnsubscribeReply log_unsubscribe_reply = 31;
       LogRecord log_record = 32;
+      AesKeyNegotiationRequest aes_key_negotiation_request = 33;
+      AesKeyNegotiationReply aes_key_negotiation_reply = 34;
+      AesKeyDropNotification aes_key_drop_notification = 35;
+      AesKeyNegotiationError aes_key_negotiation_error = 36;
   }
 
   // Service-specific payload — opaque to RM at compile time.
