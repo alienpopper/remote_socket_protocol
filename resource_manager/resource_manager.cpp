@@ -1095,6 +1095,12 @@ void ResourceManager::handleAuthorizedMessage(rsp::proto::RSPMessage message) {
 
     observeMessage(message);
 
+    if (message.has_service_message()) {
+        const auto dest = fromProtoNodeId(message.destination());
+        std::cerr << "[RM] handleAuthorizedMessage: routing service_message to "
+                  << (dest.has_value() ? dest->toString() : "unknown") << "\n";
+    }
+
     if (!routeAndSend(message)) {
         std::cerr << "ResourceManager failed to route incoming message" << std::endl;
     }
