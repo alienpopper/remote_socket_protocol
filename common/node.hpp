@@ -20,12 +20,16 @@ class NodeInputQueue;
 class IdentityCache {
 public:
     using SendMessageCallback = std::function<bool(rsp::proto::RSPMessage)>;
+    using IdentityObservedCallback = std::function<void(const rsp::NodeID&)>;
+    using IdentityObservedCallbackToken = uint64_t;
 
     IdentityCache() = default;
     IdentityCache(NodeID localNodeId, SendMessageCallback sendMessageCallback, size_t maximumEntries = 1024);
 
     bool observeMessage(const rsp::proto::RSPMessage& message);
     bool sendChallengeRequest(const rsp::NodeID& nodeId) const;
+    IdentityObservedCallbackToken addIdentityObservedCallback(IdentityObservedCallback callback);
+    bool removeIdentityObservedCallback(IdentityObservedCallbackToken token);
 
     std::optional<rsp::proto::Identity> get(const rsp::NodeID& nodeId) const;
     bool contains(const rsp::NodeID& nodeId) const;
@@ -47,6 +51,8 @@ private:
     size_t maximumEntries_ = 1024;
     std::optional<rsp::NodeID> localNodeId_;
     SendMessageCallback sendMessageCallback_;
+    IdentityObservedCallbackToken nextIdentityObservedCallbackToken_ = 1;
+    std::map<IdentityObservedCallbackToken, IdentityObservedCallback> identityObservedCallbacks_;
     std::list<rsp::NodeID> usageOrder_;
     std::map<rsp::NodeID, CacheEntry> entries_;
 };

@@ -3,6 +3,7 @@
 #include "common/endorsement/endorsement.hpp"
 #include "common/encoding/encoding.hpp"
 #include "common/message_queue/mq.hpp"
+#include "common/message_queue/mq_signing.hpp"
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
 #include "resource_manager/schema_registry.hpp"
@@ -67,7 +68,7 @@ private:
     void handleAuthNSuccess(const rsp::encoding::EncodingHandle& encoding);
     void handleAuthNFailure(const rsp::encoding::EncodingHandle& encoding);
     void handleVerifiedMessage(rsp::proto::RSPMessage message);
-    void handleSignatureFailure(rsp::proto::RSPMessage message, const std::string& reason);
+    void handleSignatureFailure(rsp::proto::RSPMessage message, const rsp::MessageQueueCheckSignature::Failure& failure);
     void handleAuthorizedMessage(rsp::proto::RSPMessage message);
     void handleAuthorizationFailure(rsp::proto::RSPMessage message);
     void cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity);
@@ -87,10 +88,12 @@ private:
     rsp::MessageQueueHandle incomingMessages_;
     rsp::MessageQueueHandle authzQueue_;
     rsp::MessageQueueHandle signatureCheckQueue_;
+    std::shared_ptr<rsp::MessageQueueRequestIdentity> identityRequestQueue_;
     ConnectionQueueHandle handshakeQueue_;
     EncodingQueueHandle authnQueue_;
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
     SchemaSnapshot loggingSchemaSnapshot_;
+    rsp::IdentityCache::IdentityObservedCallbackToken identityObservedCallbackToken_ = 0;
 };
 
 }  // namespace rsp::resource_manager

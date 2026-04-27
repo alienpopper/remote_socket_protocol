@@ -505,10 +505,23 @@ ResourceManager::ResourceManager()
       authzQueue_(nullptr),
       signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
           [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
-          [this](rsp::proto::RSPMessage message, std::string reason) {
-              handleSignatureFailure(std::move(message), reason);
+          [this](rsp::proto::RSPMessage message, rsp::MessageQueueCheckSignature::Failure failure) {
+              handleSignatureFailure(std::move(message), failure);
           },
           [this](const rsp::NodeID& nodeId) { return verificationKeyForNodeId(nodeId); })),
+      identityRequestQueue_(std::make_shared<rsp::MessageQueueRequestIdentity>(
+          [this](rsp::proto::RSPMessage message) {
+              return signatureCheckQueue_ != nullptr && signatureCheckQueue_->push(std::move(message));
+          },
+          [this](rsp::proto::RSPMessage message, std::string reason) {
+              sendSignatureFailure(message, reason);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().sendChallengeRequest(nodeId);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().contains(nodeId);
+          })),
       handshakeQueue_(std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeServer>(
           signatureCheckQueue_,
           keyPair().duplicate(),
@@ -532,11 +545,19 @@ ResourceManager::ResourceManager()
         rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
+    identityRequestQueue_->setWorkerCount(1);
+    identityRequestQueue_->start();
     handshakeQueue_->setWorkerCount(4);
     handshakeQueue_->start();
     authnQueue_->setWorkerCount(4);
     authnQueue_->start();
     registerTransportCallbacks();
+    identityObservedCallbackToken_ = identityCache().addIdentityObservedCallback(
+        [this](const rsp::NodeID& nodeId) {
+            if (identityRequestQueue_ != nullptr) {
+                identityRequestQueue_->notifyIdentityObserved(nodeId);
+            }
+        });
 }
 
 ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportHandle> clientTransports)
@@ -544,10 +565,23 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
       authzQueue_(nullptr),
       signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
           [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
-          [this](rsp::proto::RSPMessage message, std::string reason) {
-              handleSignatureFailure(std::move(message), reason);
+          [this](rsp::proto::RSPMessage message, rsp::MessageQueueCheckSignature::Failure failure) {
+              handleSignatureFailure(std::move(message), failure);
           },
           [this](const rsp::NodeID& nodeId) { return verificationKeyForNodeId(nodeId); })),
+      identityRequestQueue_(std::make_shared<rsp::MessageQueueRequestIdentity>(
+          [this](rsp::proto::RSPMessage message) {
+              return signatureCheckQueue_ != nullptr && signatureCheckQueue_->push(std::move(message));
+          },
+          [this](rsp::proto::RSPMessage message, std::string reason) {
+              sendSignatureFailure(message, reason);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().sendChallengeRequest(nodeId);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().contains(nodeId);
+          })),
       handshakeQueue_(std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeServer>(
           signatureCheckQueue_,
           keyPair().duplicate(),
@@ -572,11 +606,19 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
         rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
+    identityRequestQueue_->setWorkerCount(1);
+    identityRequestQueue_->start();
     handshakeQueue_->setWorkerCount(4);
     handshakeQueue_->start();
     authnQueue_->setWorkerCount(4);
     authnQueue_->start();
     registerTransportCallbacks();
+    identityObservedCallbackToken_ = identityCache().addIdentityObservedCallback(
+        [this](const rsp::NodeID& nodeId) {
+            if (identityRequestQueue_ != nullptr) {
+                identityRequestQueue_->notifyIdentityObserved(nodeId);
+            }
+        });
 }
 
 ResourceManager::ResourceManager(rsp::KeyPair keyPair,
@@ -586,10 +628,23 @@ ResourceManager::ResourceManager(rsp::KeyPair keyPair,
       authzQueue_(nullptr),
       signatureCheckQueue_(std::make_shared<rsp::MessageQueueCheckSignature>(
           [this](rsp::proto::RSPMessage message) { handleVerifiedMessage(std::move(message)); },
-          [this](rsp::proto::RSPMessage message, std::string reason) {
-              handleSignatureFailure(std::move(message), reason);
+          [this](rsp::proto::RSPMessage message, rsp::MessageQueueCheckSignature::Failure failure) {
+              handleSignatureFailure(std::move(message), failure);
           },
           [this](const rsp::NodeID& nodeId) { return verificationKeyForNodeId(nodeId); })),
+      identityRequestQueue_(std::make_shared<rsp::MessageQueueRequestIdentity>(
+          [this](rsp::proto::RSPMessage message) {
+              return signatureCheckQueue_ != nullptr && signatureCheckQueue_->push(std::move(message));
+          },
+          [this](rsp::proto::RSPMessage message, std::string reason) {
+              sendSignatureFailure(message, reason);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().sendChallengeRequest(nodeId);
+          },
+          [this](const rsp::NodeID& nodeId) {
+              return identityCache().contains(nodeId);
+          })),
       handshakeQueue_(std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeServer>(
           signatureCheckQueue_,
           this->keyPair().duplicate(),
@@ -614,11 +669,19 @@ ResourceManager::ResourceManager(rsp::KeyPair keyPair,
         rebuildAuthorizationQueue();
     signatureCheckQueue_->setWorkerCount(1);
     signatureCheckQueue_->start();
+    identityRequestQueue_->setWorkerCount(1);
+    identityRequestQueue_->start();
     handshakeQueue_->setWorkerCount(4);
     handshakeQueue_->start();
     authnQueue_->setWorkerCount(4);
     authnQueue_->start();
     registerTransportCallbacks();
+    identityObservedCallbackToken_ = identityCache().addIdentityObservedCallback(
+        [this](const rsp::NodeID& nodeId) {
+            if (identityRequestQueue_ != nullptr) {
+                identityRequestQueue_->notifyIdentityObserved(nodeId);
+            }
+        });
 }
 
 ResourceManager::~ResourceManager() {
@@ -626,10 +689,19 @@ ResourceManager::~ResourceManager() {
         incomingMessages_->stop();
     }
 
+    if (identityObservedCallbackToken_ != 0) {
+        identityCache().removeIdentityObservedCallback(identityObservedCallbackToken_);
+        identityObservedCallbackToken_ = 0;
+    }
+
     // Stop signatureCheckQueue_ before authzQueue_ — it is the feeder for authzQueue_
     // via handleVerifiedMessage. Once stopped, no new messages can race into authzQueue_.
     if (signatureCheckQueue_ != nullptr) {
         signatureCheckQueue_->stop();
+    }
+
+    if (identityRequestQueue_ != nullptr) {
+        identityRequestQueue_->stop();
     }
 
     rsp::MessageQueueHandle authzQueue;
@@ -1098,7 +1170,23 @@ void ResourceManager::handleVerifiedMessage(rsp::proto::RSPMessage message) {
     }
 }
 
-void ResourceManager::handleSignatureFailure(rsp::proto::RSPMessage message, const std::string& reason) {
+void ResourceManager::handleSignatureFailure(
+    rsp::proto::RSPMessage message,
+    const rsp::MessageQueueCheckSignature::Failure& failure) {
+    if (failure.kind == rsp::MessageQueueCheckSignature::FailureKind::MissingVerificationKey &&
+        failure.signerNodeId.has_value() &&
+        identityRequestQueue_ != nullptr) {
+        rsp::IdentityResolutionRequest request;
+        request.message = message;
+        request.signerNodeId = *failure.signerNodeId;
+        if (identityRequestQueue_->push(std::move(request))) {
+            return;
+        }
+    }
+
+    const std::string reason = failure.reason.empty()
+                                   ? "signature verification failed"
+                                   : failure.reason;
     sendSignatureFailure(message, reason);
 }
 

@@ -312,6 +312,12 @@ private:
         std::atomic<bool> stopping = false;
         std::atomic<bool> remoteClosed = false;
         std::thread worker;
+
+        ~NativeStreamBridgeState() {
+            if (worker.joinable()) {
+                worker.detach();
+            }
+        }
     };
 
     struct NativeListenBridgeState {
@@ -320,6 +326,12 @@ private:
         std::string localEndpoint;
         std::atomic<bool> stopping = false;
         std::thread worker;
+
+        ~NativeListenBridgeState() {
+            if (worker.joinable()) {
+                worker.detach();
+            }
+        }
     };
 
     explicit RSPClient(KeyPair keyPair);

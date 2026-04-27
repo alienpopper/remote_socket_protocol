@@ -1,5 +1,7 @@
 #include "common/node.hpp"
+#include "common/message_queue/mq_signing.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <functional>
@@ -99,6 +101,13 @@ rsp::proto::RSPMessage makeUnsupportedMessage() {
     rsp::proto::RSPMessage message;
     message.mutable_source()->set_value("requester-node");
     message.mutable_route();
+    return message;
+}
+
+rsp::proto::RSPMessage makeChallengeRequest(const rsp::NodeID& requesterNodeId, const std::string& nonce) {
+    rsp::proto::RSPMessage message;
+    *message.mutable_source() = toProtoNodeId(requesterNodeId);
+    message.mutable_challenge_request()->mutable_nonce()->set_value(nonce);
     return message;
 }
 
@@ -224,6 +233,57 @@ void testIdentityCacheCanSendChallengeRequests() {
             "challenge request helper should generate a 16-byte nonce");
 }
 
+void testChallengeRequestProducesSignedIdentityReply() {
+    TestNode node;
+    node.pauseOutputQueue();
+
+    const rsp::NodeID requesterNodeId = rsp::KeyPair::generateP256().nodeID();
+    const std::string nonce = "0123456789abcdef";
+
+    require(node.enqueueInput(makeChallengeRequest(requesterNodeId, nonce)),
+            "node should accept challenge requests on its input queue");
+    require(waitForCondition([&node]() { return node.pendingOutputCount() == 1; }),
+            "node should enqueue an identity reply for challenge requests");
+
+    rsp::proto::RSPMessage reply;
+    require(node.tryPopOutput(reply), "node should allow inspection of challenge identity replies");
+    require(reply.has_identity(), "challenge requests should produce identity replies");
+    require(reply.has_signature(), "challenge identity replies should be signed");
+    require(reply.identity().nonce().value() == nonce,
+            "challenge identity replies should preserve the challenge nonce");
+    require(reply.destination().value() == toProtoNodeId(requesterNodeId).value(),
+            "challenge identity replies should target the requesting node");
+
+    const rsp::KeyPair verifyKey = rsp::KeyPair::fromPublicKey(reply.identity().public_key());
+    require(rsp::verifyMessageSignature(verifyKey, reply, reply.signature()),
+            "challenge identity replies should verify with the advertised public key");
+}
+
+void testIdentityCacheCallbacksAreTriggeredForObservedIdentities() {
+    TestNode node;
+    rsp::KeyPair identityKey = rsp::KeyPair::generateP256();
+    rsp::KeyPair secondIdentityKey = rsp::KeyPair::generateP256();
+    std::atomic<int> callbackCount{0};
+
+    const auto callbackToken = node.identityCache().addIdentityObservedCallback(
+        [&callbackCount](const rsp::NodeID&) {
+            ++callbackCount;
+        });
+
+    require(callbackToken != 0, "identity cache should return a callback token");
+    require(node.enqueueInput(makeIdentityMessage(identityKey)),
+            "node should cache identities while callback observers are attached");
+    require(callbackCount.load() == 1,
+            "identity cache observers should be notified when identities are cached");
+
+    require(node.identityCache().removeIdentityObservedCallback(callbackToken),
+            "identity cache should allow callback removal");
+    require(node.enqueueInput(makeIdentityMessage(secondIdentityKey)),
+            "node should continue caching identities after callback removal");
+    require(callbackCount.load() == 1,
+            "identity cache should stop notifying removed callbacks");
+}
+
 }  // namespace
 
 int main() {
@@ -234,6 +294,8 @@ int main() {
         testIdentityMessagesAreCachedByNodeId();
         testIdentityCacheEvictsLeastRecentlyUsedEntries();
         testIdentityCacheCanSendChallengeRequests();
+        testChallengeRequestProducesSignedIdentityReply();
+        testIdentityCacheCallbacksAreTriggeredForObservedIdentities();
         std::cout << "node_test passed\n";
         return 0;
     } catch (const std::exception& exception) {

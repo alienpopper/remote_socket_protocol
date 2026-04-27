@@ -7,6 +7,7 @@
 #include <google/protobuf/message.h>
 #include <openssl/sha.h>
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <iostream>
@@ -730,8 +731,8 @@ void MessageQueueSign::handleQueueFull(size_t, size_t limit, const Message& reje
 //
 
 MessageQueueCheckSignature::MessageQueueCheckSignature(
-    std::function<void(rsp::proto::RSPMessage)> onSuccess,
-    std::function<void(rsp::proto::RSPMessage, std::string)> onFailure,
+    SuccessCallback onSuccess,
+    FailureCallback onFailure,
     GetKeyFunction getKeyForNodeID)
     : onSuccess_(std::move(onSuccess))
     , onFailure_(std::move(onFailure))
@@ -739,8 +740,22 @@ MessageQueueCheckSignature::MessageQueueCheckSignature(
 }
 
 MessageQueueCheckSignature::MessageQueueCheckSignature(
-    std::function<void(rsp::proto::RSPMessage)> onSuccess,
-    std::function<void(rsp::proto::RSPMessage, std::string)> onFailure,
+    SuccessCallback onSuccess,
+    LegacyFailureCallback onFailure,
+    GetKeyFunction getKeyForNodeID)
+    : MessageQueueCheckSignature(
+          std::move(onSuccess),
+          [onFailure = std::move(onFailure)](rsp::proto::RSPMessage message, Failure failure) {
+              if (onFailure) {
+                  onFailure(std::move(message), std::move(failure.reason));
+              }
+          },
+          std::move(getKeyForNodeID)) {
+}
+
+MessageQueueCheckSignature::MessageQueueCheckSignature(
+    SuccessCallback onSuccess,
+    FailureCallback onFailure,
     KeyPair keyPair)
     : onSuccess_(std::move(onSuccess))
     , onFailure_(std::move(onFailure)) {
@@ -753,6 +768,20 @@ MessageQueueCheckSignature::MessageQueueCheckSignature(
     };
 }
 
+MessageQueueCheckSignature::MessageQueueCheckSignature(
+    SuccessCallback onSuccess,
+    LegacyFailureCallback onFailure,
+    KeyPair keyPair)
+    : MessageQueueCheckSignature(
+          std::move(onSuccess),
+          [onFailure = std::move(onFailure)](rsp::proto::RSPMessage message, Failure failure) {
+              if (onFailure) {
+                  onFailure(std::move(message), std::move(failure.reason));
+              }
+          },
+          std::move(keyPair)) {
+}
+
 void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueSharedState&) {
     const bool trace = messageTraceEnabled(message);
     if (trace) {
@@ -762,7 +791,11 @@ void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueShar
         if (trace) {
             std::cerr << "[mq_signing] reject: message has no signature" << std::endl;
         }
-        onFailure_(std::move(message), "message has no signature");
+        onFailure_(std::move(message), Failure{
+                                          FailureKind::MissingSignature,
+                                          "message has no signature",
+                                          std::nullopt,
+                                      });
         return;
     }
 
@@ -771,7 +804,11 @@ void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueShar
         if (trace) {
             std::cerr << "[mq_signing] reject: signature signer has invalid node ID encoding" << std::endl;
         }
-        onFailure_(std::move(message), "signature signer has invalid node ID encoding");
+        onFailure_(std::move(message), Failure{
+                                          FailureKind::InvalidSignerNodeId,
+                                          "signature signer has invalid node ID encoding",
+                                          std::nullopt,
+                                      });
         return;
     }
 
@@ -780,7 +817,11 @@ void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueShar
         if (trace) {
             std::cerr << "[mq_signing] reject: no verification key for signer " << nodeId->toString() << std::endl;
         }
-        onFailure_(std::move(message), "no verification key found for signer node ID");
+        onFailure_(std::move(message), Failure{
+                                          FailureKind::MissingVerificationKey,
+                                          "no verification key found for signer node ID",
+                                          *nodeId,
+                                      });
         return;
     }
 
@@ -795,13 +836,21 @@ void MessageQueueCheckSignature::handleMessage(Message message, MessageQueueShar
                 std::cerr << "[mq_signing] reject: signature verification failed for signer "
                           << nodeId->toString() << std::endl;
             }
-            onFailure_(std::move(message), "signature verification failed");
+            onFailure_(std::move(message), Failure{
+                                              FailureKind::SignatureVerificationFailed,
+                                              "signature verification failed",
+                                              *nodeId,
+                                          });
         }
     } catch (const std::exception& e) {
         if (trace) {
             std::cerr << "[mq_signing] reject: exception during signature check: " << e.what() << std::endl;
         }
-        onFailure_(std::move(message), std::string("signature check failed: ") + e.what());
+        onFailure_(std::move(message), Failure{
+                                          FailureKind::InternalError,
+                                          std::string("signature check failed: ") + e.what(),
+                                          *nodeId,
+                                      });
     }
 }
 
@@ -810,7 +859,224 @@ void MessageQueueCheckSignature::handleQueueFull(size_t, size_t limit, const Mes
         std::cerr << "[mq_check_signature] queue_full limit=" << limit << std::endl;
     }
     if (onFailure_) {
-        onFailure_(rejected, "check-signature queue full (limit=" + std::to_string(limit) + ")");
+        onFailure_(rejected, Failure{
+                                FailureKind::InternalError,
+                                "check-signature queue full (limit=" + std::to_string(limit) + ")",
+                                std::nullopt,
+                            });
+    }
+}
+
+//
+// MessageQueueRequestIdentity
+//
+
+MessageQueueRequestIdentity::MessageQueueRequestIdentity(
+    ReplayCallback replay,
+    FailureCallback onFailure,
+    RequestIdentityCallback requestIdentity,
+    HasIdentityCallback hasIdentity,
+    Limits limits)
+    : replay_(std::move(replay))
+    , onFailure_(std::move(onFailure))
+    , requestIdentity_(std::move(requestIdentity))
+    , hasIdentity_(std::move(hasIdentity))
+    , limits_(limits) {
+}
+
+MessageQueueRequestIdentity::MessageQueueRequestIdentity(
+    ReplayCallback replay,
+    FailureCallback onFailure,
+    RequestIdentityCallback requestIdentity,
+    HasIdentityCallback hasIdentity)
+    : MessageQueueRequestIdentity(
+          std::move(replay),
+          std::move(onFailure),
+          std::move(requestIdentity),
+          std::move(hasIdentity),
+          Limits{}) {
+}
+
+MessageQueueRequestIdentity::~MessageQueueRequestIdentity() {
+    stop();
+
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        stopping_ = true;
+        for (auto& [_, state] : pendingBySigner_) {
+            state.condition.notify_all();
+        }
+    }
+
+    std::vector<std::thread> resolverThreads;
+    {
+        std::lock_guard<std::mutex> lock(resolverThreadsMutex_);
+        resolverThreads.swap(resolverThreads_);
+    }
+
+    for (auto& resolverThread : resolverThreads) {
+        if (resolverThread.joinable()) {
+            resolverThread.join();
+        }
+    }
+}
+
+void MessageQueueRequestIdentity::notifyIdentityObserved(const rsp::NodeID& nodeId) {
+    std::lock_guard<std::mutex> lock(pendingMutex_);
+    const auto iterator = pendingBySigner_.find(nodeId);
+    if (iterator == pendingBySigner_.end()) {
+        return;
+    }
+
+    iterator->second.condition.notify_all();
+}
+
+void MessageQueueRequestIdentity::handleMessage(Message message, MessageQueueSharedState&) {
+    bool startResolver = false;
+    std::string rejectionReason;
+
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        if (stopping_) {
+            rejectionReason = "identity resolution queue is stopping";
+        } else if (limits_.maxPendingMessages != 0 && totalPendingMessages_ >= limits_.maxPendingMessages) {
+            rejectionReason =
+                "identity resolution queue exceeded max pending messages (" + std::to_string(limits_.maxPendingMessages) +
+                ")";
+        } else {
+            auto& state = pendingBySigner_[message.signerNodeId];
+            if (limits_.maxPendingPerSigner != 0 && state.messages.size() >= limits_.maxPendingPerSigner) {
+                rejectionReason =
+                    "identity resolution queue exceeded max pending messages for signer (" +
+                    std::to_string(limits_.maxPendingPerSigner) + ")";
+            } else {
+                state.messages.push_back(std::move(message.message));
+                ++totalPendingMessages_;
+                if (!state.resolverActive) {
+                    state.resolverActive = true;
+                    startResolver = true;
+                }
+            }
+        }
+    }
+
+    if (!rejectionReason.empty()) {
+        if (onFailure_) {
+            onFailure_(std::move(message.message), rejectionReason);
+        }
+        return;
+    }
+
+    if (!startResolver) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(resolverThreadsMutex_);
+        resolverThreads_.emplace_back([this, nodeId = message.signerNodeId]() {
+            resolveSigner(nodeId);
+        });
+    }
+}
+
+void MessageQueueRequestIdentity::handleQueueFull(size_t, size_t limit, const Message& rejected) {
+    if (onFailure_) {
+        onFailure_(rejected.message,
+                   "identity resolution queue full (limit=" + std::to_string(limit) + ")");
+    }
+}
+
+void MessageQueueRequestIdentity::resolveSigner(const rsp::NodeID& nodeId) {
+    const auto hasIdentity = [this, &nodeId]() {
+        return hasIdentity_ != nullptr && hasIdentity_(nodeId);
+    };
+
+    if (hasIdentity()) {
+        replayMessages(drainSignerMessages(nodeId));
+        return;
+    }
+
+    if (!requestIdentity_ || !requestIdentity_(nodeId)) {
+        failMessages(drainSignerMessages(nodeId), "failed to request identity for signer");
+        return;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + limits_.resolveTimeout;
+    while (true) {
+        if (hasIdentity()) {
+            replayMessages(drainSignerMessages(nodeId));
+            return;
+        }
+
+        std::unique_lock<std::mutex> lock(pendingMutex_);
+        const auto iterator = pendingBySigner_.find(nodeId);
+        if (iterator == pendingBySigner_.end()) {
+            return;
+        }
+
+        if (stopping_) {
+            lock.unlock();
+            failMessages(drainSignerMessages(nodeId), "identity resolution queue is stopping");
+            return;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) {
+            lock.unlock();
+            failMessages(drainSignerMessages(nodeId), "timed out waiting for signer identity");
+            return;
+        }
+
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+        const auto waitDuration = std::min(remaining, limits_.pollInterval);
+        iterator->second.condition.wait_for(lock, waitDuration);
+    }
+}
+
+std::vector<rsp::proto::RSPMessage> MessageQueueRequestIdentity::drainSignerMessages(
+    const rsp::NodeID& nodeId) {
+    std::lock_guard<std::mutex> lock(pendingMutex_);
+    return drainSignerMessagesLocked(nodeId);
+}
+
+std::vector<rsp::proto::RSPMessage> MessageQueueRequestIdentity::drainSignerMessagesLocked(
+    const rsp::NodeID& nodeId) {
+    std::vector<rsp::proto::RSPMessage> drainedMessages;
+    const auto iterator = pendingBySigner_.find(nodeId);
+    if (iterator == pendingBySigner_.end()) {
+        return drainedMessages;
+    }
+
+    drainedMessages.reserve(iterator->second.messages.size());
+    for (auto& message : iterator->second.messages) {
+        drainedMessages.push_back(std::move(message));
+    }
+    totalPendingMessages_ -= drainedMessages.size();
+    pendingBySigner_.erase(iterator);
+    return drainedMessages;
+}
+
+void MessageQueueRequestIdentity::replayMessages(std::vector<rsp::proto::RSPMessage> messages) const {
+    for (auto& message : messages) {
+        rsp::proto::RSPMessage replayMessage = message;
+        if (replay_ != nullptr && replay_(std::move(replayMessage))) {
+            continue;
+        }
+
+        if (onFailure_ != nullptr) {
+            onFailure_(std::move(message), "failed to requeue message for signature verification");
+        }
+    }
+}
+
+void MessageQueueRequestIdentity::failMessages(std::vector<rsp::proto::RSPMessage> messages,
+                                               const std::string& reason) const {
+    if (onFailure_ == nullptr) {
+        return;
+    }
+
+    for (auto& message : messages) {
+        onFailure_(std::move(message), reason);
     }
 }
 

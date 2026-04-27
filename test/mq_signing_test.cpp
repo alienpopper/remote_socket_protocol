@@ -337,6 +337,187 @@ void testCheckSignatureFailsWhenKeyNotFound() {
     require(!reason.empty(), "failure reason should not be empty");
 }
 
+// Verification should report a structured missing-key failure with signer details.
+void testCheckSignatureFailureIncludesMissingKeyDetails() {
+    rsp::KeyPair signingKey = rsp::KeyPair::generateP256();
+    const rsp::NodeID signerNodeId = signingKey.nodeID();
+
+    rsp::proto::RSPMessage original = makeMessageWithSource(signerNodeId);
+    *original.mutable_signature() = rsp::signMessage(signingKey, original);
+
+    std::promise<rsp::MessageQueueCheckSignature::Failure> failurePromise;
+    auto failureFuture = failurePromise.get_future();
+
+    rsp::MessageQueueCheckSignature checkQueue(
+        [](rsp::proto::RSPMessage) {
+            throw std::runtime_error("unexpected success");
+        },
+        [&failurePromise](rsp::proto::RSPMessage, rsp::MessageQueueCheckSignature::Failure failure) {
+            failurePromise.set_value(std::move(failure));
+        },
+        [](const rsp::NodeID&) -> std::shared_ptr<const rsp::KeyPair> {
+            return nullptr;
+        });
+
+    checkQueue.setWorkerCount(1);
+    checkQueue.start();
+    checkQueue.push(std::move(original));
+
+    const auto failure = waitFor(failureFuture);
+    require(failure.kind == rsp::MessageQueueCheckSignature::FailureKind::MissingVerificationKey,
+            "missing-key failures should be classified explicitly");
+    require(failure.signerNodeId.has_value() && *failure.signerNodeId == signerNodeId,
+            "missing-key failures should report the signer node id");
+    require(failure.reason.find("no verification key") != std::string::npos,
+            "missing-key failures should preserve a useful reason");
+}
+
+// Identity request queue should replay immediately without a challenge when identity is already known.
+void testRequestIdentityQueueReplaysWhenIdentityAlreadyKnown() {
+    const rsp::NodeID signerNodeId = rsp::KeyPair::generateP256().nodeID();
+
+    std::atomic<int> replayCount{0};
+    std::atomic<int> challengeCount{0};
+    std::promise<void> replayPromise;
+    auto replayFuture = replayPromise.get_future();
+    std::atomic<bool> replayPromised{false};
+
+    rsp::MessageQueueRequestIdentity queue(
+        [&replayCount, &replayPromise, &replayPromised](rsp::proto::RSPMessage) {
+            const int count = ++replayCount;
+            if (count == 1 && !replayPromised.exchange(true)) {
+                replayPromise.set_value();
+            }
+            return true;
+        },
+        [](rsp::proto::RSPMessage, std::string reason) {
+            throw std::runtime_error("unexpected identity-request failure: " + reason);
+        },
+        [&challengeCount](const rsp::NodeID&) {
+            ++challengeCount;
+            return true;
+        },
+        [](const rsp::NodeID&) {
+            return true;
+        });
+    queue.setWorkerCount(1);
+    queue.start();
+
+    rsp::IdentityResolutionRequest request;
+    request.signerNodeId = signerNodeId;
+    request.message = makeMessageWithSource(signerNodeId);
+    queue.push(std::move(request));
+
+    waitFor(replayFuture);
+    require(challengeCount.load() == 0,
+            "identity request queue should not issue a challenge when identity is already known");
+    require(replayCount.load() == 1, "identity request queue should replay buffered messages");
+}
+
+// Identity request queue should coalesce same-signer messages and replay all on identity notification.
+void testRequestIdentityQueueCoalescesAndReplaysAfterIdentityNotification() {
+    const rsp::NodeID signerNodeId = rsp::KeyPair::generateP256().nodeID();
+
+    std::mutex identityMutex;
+    bool identityKnown = false;
+    std::atomic<int> replayCount{0};
+    std::atomic<int> challengeCount{0};
+    std::promise<void> replayPromise;
+    auto replayFuture = replayPromise.get_future();
+    std::atomic<bool> replayPromised{false};
+
+    rsp::MessageQueueRequestIdentity queue(
+        [&replayCount, &replayPromise, &replayPromised](rsp::proto::RSPMessage) {
+            const int count = ++replayCount;
+            if (count == 2 && !replayPromised.exchange(true)) {
+                replayPromise.set_value();
+            }
+            return true;
+        },
+        [](rsp::proto::RSPMessage, std::string reason) {
+            throw std::runtime_error("unexpected identity-request failure: " + reason);
+        },
+        [&challengeCount](const rsp::NodeID&) {
+            ++challengeCount;
+            return true;
+        },
+        [&identityMutex, &identityKnown](const rsp::NodeID&) {
+            std::lock_guard<std::mutex> lock(identityMutex);
+            return identityKnown;
+        });
+    queue.setWorkerCount(1);
+    queue.start();
+
+    rsp::IdentityResolutionRequest firstRequest;
+    firstRequest.signerNodeId = signerNodeId;
+    firstRequest.message = makeMessageWithSource(signerNodeId);
+    require(queue.push(std::move(firstRequest)), "identity request queue should accept the first message");
+
+    rsp::IdentityResolutionRequest secondRequest;
+    secondRequest.signerNodeId = signerNodeId;
+    secondRequest.message = makeMessageWithSource(signerNodeId);
+    require(queue.push(std::move(secondRequest)), "identity request queue should coalesce messages for the same signer");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    {
+        std::lock_guard<std::mutex> lock(identityMutex);
+        identityKnown = true;
+    }
+    queue.notifyIdentityObserved(signerNodeId);
+
+    waitFor(replayFuture);
+    require(challengeCount.load() == 1,
+            "identity request queue should launch only one challenge flow per signer");
+    require(replayCount.load() == 2,
+            "identity request queue should replay all coalesced messages once identity arrives");
+}
+
+// Identity request queue should fail new messages when per-signer pending limit is exceeded.
+void testRequestIdentityQueueRejectsWhenPerSignerLimitExceeded() {
+    const rsp::NodeID signerNodeId = rsp::KeyPair::generateP256().nodeID();
+
+    rsp::MessageQueueRequestIdentity::Limits limits;
+    limits.maxPendingPerSigner = 1;
+    limits.resolveTimeout = std::chrono::milliseconds(5000);
+
+    std::promise<std::string> failurePromise;
+    auto failureFuture = failurePromise.get_future();
+    std::atomic<bool> failureSet{false};
+
+    rsp::MessageQueueRequestIdentity queue(
+        [](rsp::proto::RSPMessage) {
+            return true;
+        },
+        [&failurePromise, &failureSet](rsp::proto::RSPMessage, std::string reason) {
+            if (!failureSet.exchange(true)) {
+                failurePromise.set_value(std::move(reason));
+            }
+        },
+        [](const rsp::NodeID&) {
+            return true;
+        },
+        [](const rsp::NodeID&) {
+            return false;
+        },
+        limits);
+    queue.setWorkerCount(1);
+    queue.start();
+
+    rsp::IdentityResolutionRequest firstRequest;
+    firstRequest.signerNodeId = signerNodeId;
+    firstRequest.message = makeMessageWithSource(signerNodeId);
+    require(queue.push(std::move(firstRequest)), "identity request queue should accept the first signer message");
+
+    rsp::IdentityResolutionRequest secondRequest;
+    secondRequest.signerNodeId = signerNodeId;
+    secondRequest.message = makeMessageWithSource(signerNodeId);
+    require(queue.push(std::move(secondRequest)), "identity request queue should process overflow checks internally");
+
+    const std::string reason = waitFor(failureFuture);
+    require(reason.find("max pending messages for signer") != std::string::npos,
+            "identity request queue should reject over-threshold signer batches");
+}
+
 // Full round-trip: sign via MessageQueueSign then verify via MessageQueueCheckSignature.
 void testSignThenCheckRoundTrip() {
     rsp::KeyPair signingKey = rsp::KeyPair::generateP256();
@@ -386,6 +567,10 @@ int main() {
         testCheckSignatureFailsForTamperedMessage();
         testCheckSignatureFailsWithNoSignature();
         testCheckSignatureFailsWhenKeyNotFound();
+        testCheckSignatureFailureIncludesMissingKeyDetails();
+        testRequestIdentityQueueReplaysWhenIdentityAlreadyKnown();
+        testRequestIdentityQueueCoalescesAndReplaysAfterIdentityNotification();
+        testRequestIdentityQueueRejectsWhenPerSignerLimitExceeded();
         testSignThenCheckRoundTrip();
         std::cout << "mq_signing_test passed" << std::endl;
         return 0;

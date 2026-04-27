@@ -132,6 +132,22 @@ bool IdentityCache::sendChallengeRequest(const rsp::NodeID& nodeId) const {
     return sendMessageCallback(std::move(challengeRequest));
 }
 
+IdentityCache::IdentityObservedCallbackToken IdentityCache::addIdentityObservedCallback(IdentityObservedCallback callback) {
+    if (!callback) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    const IdentityObservedCallbackToken token = nextIdentityObservedCallbackToken_++;
+    identityObservedCallbacks_[token] = std::move(callback);
+    return token;
+}
+
+bool IdentityCache::removeIdentityObservedCallback(IdentityObservedCallbackToken token) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return identityObservedCallbacks_.erase(token) > 0;
+}
+
 std::optional<rsp::proto::Identity> IdentityCache::get(const rsp::NodeID& nodeId) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto iterator = entries_.find(nodeId);
@@ -176,19 +192,33 @@ bool IdentityCache::cacheIdentity(const rsp::proto::Identity& identity,
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    const auto existing = entries_.find(*derivedNodeId);
-    if (existing != entries_.end()) {
-        usageOrder_.erase(existing->second.usage);
-        usageOrder_.push_front(*derivedNodeId);
-        existing->second.identity = cachedIdentity;
-        existing->second.usage = usageOrder_.begin();
-        return true;
+    std::vector<IdentityObservedCallback> callbacksToNotify;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto existing = entries_.find(*derivedNodeId);
+        if (existing != entries_.end()) {
+            usageOrder_.erase(existing->second.usage);
+            usageOrder_.push_front(*derivedNodeId);
+            existing->second.identity = cachedIdentity;
+            existing->second.usage = usageOrder_.begin();
+        } else {
+            usageOrder_.push_front(*derivedNodeId);
+            entries_[*derivedNodeId] = CacheEntry{cachedIdentity, usageOrder_.begin()};
+            trimToLimitLocked();
+        }
+
+        callbacksToNotify.reserve(identityObservedCallbacks_.size());
+        for (const auto& [_, callback] : identityObservedCallbacks_) {
+            if (callback) {
+                callbacksToNotify.push_back(callback);
+            }
+        }
     }
 
-    usageOrder_.push_front(*derivedNodeId);
-    entries_[*derivedNodeId] = CacheEntry{cachedIdentity, usageOrder_.begin()};
-    trimToLimitLocked();
+    for (const auto& callback : callbacksToNotify) {
+        callback(*derivedNodeId);
+    }
+
     return true;
 }
 
@@ -240,6 +270,32 @@ void NodeInputQueue::handleMessage(Message message, rsp::MessageQueueSharedState
     }
 
     if (owner_.handleNodeSpecificMessage(message)) {
+        return;
+    }
+
+    if (message.has_challenge_request()) {
+        const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
+        if (!requesterNodeId.has_value()) {
+            return;
+        }
+
+        if (!message.challenge_request().has_nonce() ||
+            message.challenge_request().nonce().value().size() != 16) {
+            return;
+        }
+
+        rsp::proto::RSPMessage identityReply;
+        *identityReply.mutable_destination() = toProtoNodeId(*requesterNodeId);
+        rsp::copyMessageTrace(message, identityReply);
+        identityReply.mutable_identity()->mutable_nonce()->CopyFrom(message.challenge_request().nonce());
+        *identityReply.mutable_identity()->mutable_public_key() = owner_.keyPair().publicKey();
+        *identityReply.mutable_identity()->mutable_boot_id() = owner_.bootId();
+        *identityReply.mutable_signature() = rsp::signMessage(owner_.keyPair(), identityReply);
+
+        const auto queue = owner_.outputQueue();
+        if (queue == nullptr || !queue->push(std::move(identityReply))) {
+            std::cerr << "RSPNode failed to enqueue challenge identity reply on the output queue" << std::endl;
+        }
         return;
     }
 
