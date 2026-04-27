@@ -264,7 +264,6 @@ RSPClient::Ptr RSPClient::create(KeyPair keyPair) {
 RSPClient::RSPClient(KeyPair keyPair)
         : rsp::RSPNode(keyPair.duplicate()),
             messageClient_(RSPClientMessage::create(std::move(keyPair))) {
-    receiveThread_ = std::thread([this]() { receiveLoop(); });
 }
 
 RSPClient::~RSPClient() {
@@ -359,7 +358,11 @@ void RSPClient::handleOutputMessage(rsp::proto::RSPMessage message) {
 
 std::optional<RSPClient::ClientConnectionID> RSPClient::connectToResourceManager(const std::string& transport,
                                                                                    const std::string& encoding) {
-    return messageClient_->connectToResourceManager(transport, encoding);
+    auto connectionId = messageClient_->connectToResourceManager(transport, encoding);
+    if (connectionId.has_value()) {
+        startReceiveThread();
+    }
+    return connectionId;
 }
 
 void RSPClient::enableReconnect(ClientConnectionID connectionId,
@@ -1737,6 +1740,13 @@ void RSPClient::handleResourceQueryReply(const rsp::proto::RSPMessage& message) 
 void RSPClient::registerStreamRoute(const rsp::GUID& socketId, rsp::NodeID nodeId) {
     std::lock_guard<std::mutex> lock(stateMutex_);
     streamRoutes_[socketId] = nodeId;
+}
+
+void RSPClient::startReceiveThread() {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!receiveThread_.joinable() && !stopping_) {
+        receiveThread_ = std::thread([this]() { receiveLoop(); });
+    }
 }
 
 void RSPClient::receiveLoop() {

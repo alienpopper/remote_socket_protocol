@@ -6,8 +6,8 @@
 // bytes via StreamSend / StreamRecv — the RSP layer never parses it.
 //
 // The built-in test server (HttpdResourceService::startBuiltinServer) is
-// intentionally minimal: it speaks HTTP/1.1 and returns synthetic 200 OK
-// responses so that the proto and stream-wiring mechanics can be tested
+// intentionally minimal: it speaks HTTP/1.1 and returns synthetic responses
+// so that the proto and stream-wiring mechanics can be tested
 // without any external dependency.  It is NOT suitable for production use.
 //
 // Production integration
@@ -95,6 +95,14 @@ HttpdConfig loadHttpdConfig(const std::string& path) {
     cfg.rspTransport   = j.at("rsp_transport").get<std::string>();
     if (j.contains("listen_address")) cfg.listenAddress = j["listen_address"].get<std::string>();
     if (j.contains("server_name"))    cfg.serverName    = j["server_name"].get<std::string>();
+    if (j.contains("keypair")) {
+        const auto& kpArray = j["keypair"];
+        if (!kpArray.is_array() || kpArray.size() != 2) {
+            throw std::runtime_error("\"keypair\" must be an array of [\"<public_key_path>\", \"<private_key_path>\"]");
+        }
+        cfg.keypairPublicKeyPath = kpArray[0].get<std::string>();
+        cfg.keypairPrivateKeyPath = kpArray[1].get<std::string>();
+    }
     return cfg;
 }
 
@@ -103,7 +111,17 @@ HttpdConfig loadHttpdConfig(const std::string& path) {
 // ---------------------------------------------------------------------------
 
 HttpdResourceService::Ptr HttpdResourceService::create(const HttpdConfig& cfg) {
+    if (cfg.keypairPublicKeyPath.has_value() || cfg.keypairPrivateKeyPath.has_value()) {
+        if (!cfg.keypairPublicKeyPath.has_value() || !cfg.keypairPrivateKeyPath.has_value()) {
+            throw std::runtime_error("both HTTPD keypair public and private key paths must be configured");
+        }
+        return create(rsp::KeyPair::readFromDisk(*cfg.keypairPrivateKeyPath, *cfg.keypairPublicKeyPath), cfg);
+    }
     return Ptr(new HttpdResourceService(rsp::KeyPair::generateP256(), cfg));
+}
+
+HttpdResourceService::Ptr HttpdResourceService::create(rsp::KeyPair keyPair, const HttpdConfig& cfg) {
+    return Ptr(new HttpdResourceService(std::move(keyPair), cfg));
 }
 
 HttpdResourceService::HttpdResourceService(rsp::KeyPair keyPair, const HttpdConfig& cfg)
@@ -307,12 +325,14 @@ void HttpdResourceService::handleBuiltinRequest(rsp::os::SocketHandle clientSock
         path = "/";
     }
 
+    const bool found = path == "/" || path == "/test-page";
+    const std::string status = found ? "200 OK" : "404 Not Found";
     const std::string body =
-        "Hello from " + cfg_.serverName + "\r\n"
+        (found ? "Hello from " : "Not Found from ") + cfg_.serverName + "\r\n"
         "Path: " + path + "\r\n";
 
     std::ostringstream response;
-    response << "HTTP/1.1 200 OK\r\n"
+    response << "HTTP/1.1 " << status << "\r\n"
              << "Content-Type: text/plain\r\n"
              << "Content-Length: " << body.size() << "\r\n"
              << "Server: " << cfg_.serverName << "\r\n"

@@ -346,6 +346,7 @@ private:
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override;
     void handleOutputMessage(rsp::proto::RSPMessage message) override;
+    void startReceiveThread();
     void receiveLoop();
     void dispatchIncomingMessage(rsp::proto::RSPMessage message);
     bool shouldHandleLocally(const rsp::proto::RSPMessage& message) const;

@@ -11,6 +11,8 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -48,6 +50,13 @@ bool sendAll(rsp::os::SocketHandle socket, const std::string& data) {
         remaining -= static_cast<std::size_t>(sent);
     }
     return true;
+}
+
+void writeTextFile(const std::filesystem::path& path, const std::string& text) {
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream file(path);
+    require(file.is_open(), "test should create config file: " + path.string());
+    file << text;
 }
 
 std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
@@ -106,6 +115,28 @@ void testHttpdRegistersWithResourceManager() {
 
     httpdService->removeConnection(connId);
     serverTransport->stop();
+}
+
+void testHttpdLoadsKeypairFromConfig() {
+    const std::filesystem::path testDir = std::filesystem::path("build") / "test" / "httpd_keypair";
+    const std::filesystem::path configPath = testDir / "rsp_httpd.conf.json";
+    const std::string publicKeyPath = "test/keys/test_public.pem";
+    const std::string privateKeyPath = "test/keys/test_private.pem";
+
+    writeTextFile(configPath,
+                  "{\n"
+                  "  \"rsp_transport\": \"memory:httpd-keypair-test\",\n"
+                  "  \"listen_address\": \"127.0.0.1:0\",\n"
+                  "  \"server_name\": \"test-httpd-keypair\",\n"
+                  "  \"keypair\": [\"" + publicKeyPath + "\", \"" + privateKeyPath + "\"]\n"
+                  "}\n");
+
+    const auto cfg = rsp::resource_service::loadHttpdConfig(configPath.string());
+    auto httpdService = rsp::resource_service::HttpdResourceService::create(cfg);
+    const auto expectedNodeId = rsp::KeyPair::nodeIDFromPublicKeyFile(publicKeyPath);
+
+    require(httpdService->nodeId() == expectedNodeId,
+            "httpd service node ID should come from configured keypair");
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +280,7 @@ void testClientConnectsToHttpdAndExchangesData() {
 
     // --- Send a raw HTTP/1.1 GET request over the stream ---
     const std::string httpRequest =
-        "GET /hello HTTP/1.1\r\n"
+        "GET /test-page HTTP/1.1\r\n"
         "Host: test-httpd\r\n"
         "Connection: close\r\n"
         "\r\n";
@@ -270,7 +301,7 @@ void testClientConnectsToHttpdAndExchangesData() {
             "HTTP response should contain '200 OK'");
     require(responseData.find("test-httpd") != std::string::npos,
             "HTTP response body should contain the server name");
-    require(responseData.find("/hello") != std::string::npos,
+    require(responseData.find("/test-page") != std::string::npos,
             "HTTP response body should echo the request path");
 
     // --- Clean up ---
@@ -330,7 +361,7 @@ void testClientConnectsToHttpdSocketAndExchangesData() {
     require(socket.has_value(), "client should open a bridged HTTP socket");
 
     const std::string httpRequest =
-        "GET /socket-bridge HTTP/1.1\r\n"
+        "GET /test-page HTTP/1.1\r\n"
         "Host: test-httpd-socket\r\n"
         "Connection: close\r\n"
         "\r\n";
@@ -345,10 +376,35 @@ void testClientConnectsToHttpdSocketAndExchangesData() {
             "HTTP socket response should contain '200 OK'");
     require(response.find("test-httpd-socket") != std::string::npos,
             "HTTP socket response body should contain the server name");
-    require(response.find("/socket-bridge") != std::string::npos,
+    require(response.find("/test-page") != std::string::npos,
             "HTTP socket response body should echo the request path");
 
     rsp::os::closeSocket(*socket);
+
+    const auto notFoundSocket = client->connectHttpSocket(httpdNodeId, 2000, "test-httpd-socket");
+    require(notFoundSocket.has_value(), "client should open a second bridged HTTP socket");
+
+    const std::string notFoundRequest =
+        "GET /missing HTTP/1.1\r\n"
+        "Host: test-httpd-socket\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+    require(sendAll(*notFoundSocket, notFoundRequest),
+            "client should send 404 HTTP request through bridged socket");
+
+    std::array<uint8_t, 4096> notFoundBuffer{};
+    const int notFoundReceived = rsp::os::recvSocket(
+        *notFoundSocket, notFoundBuffer.data(), static_cast<uint32_t>(notFoundBuffer.size()));
+    require(notFoundReceived > 0, "client should receive 404 HTTP response through bridged socket");
+    const std::string notFoundResponse(reinterpret_cast<const char*>(notFoundBuffer.data()),
+                                       static_cast<std::size_t>(notFoundReceived));
+
+    require(notFoundResponse.find("HTTP/1.1 404 Not Found") != std::string::npos,
+            "HTTP socket response should contain '404 Not Found'");
+    require(notFoundResponse.find("/missing") != std::string::npos,
+            "HTTP 404 response body should echo the request path");
+
+    rsp::os::closeSocket(*notFoundSocket);
     httpdService->removeConnection(httpdConnId);
     client->removeConnection(clientConnId);
     serverTransport->stop();
@@ -359,6 +415,7 @@ void testClientConnectsToHttpdSocketAndExchangesData() {
 int main() {
     try {
         testHttpdRegistersWithResourceManager();
+        testHttpdLoadsKeypairFromConfig();
         testClientDiscoversHttpdThroughResourceQuery();
         testClientConnectsToHttpdAndExchangesData();
         testClientConnectsToHttpdSocketAndExchangesData();

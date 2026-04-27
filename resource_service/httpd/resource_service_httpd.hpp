@@ -2,9 +2,11 @@
 
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 #include "common/base_types.hpp"
+#include "common/keypair.hpp"
 #include "resource_service/httpd/httpd.pb.h"
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -33,6 +35,11 @@ struct HttpdConfig {
     // Human-readable server name embedded in the service schema and HTTP
     // Server response header.  Defaults to "rsp-httpd".
     std::string serverName = "rsp-httpd";
+
+    // Optional keypair files.  When present, rsp_httpd uses this identity so
+    // its Node ID is deterministic across restarts.
+    std::optional<std::string> keypairPublicKeyPath;
+    std::optional<std::string> keypairPrivateKeyPath;
 };
 
 HttpdConfig loadHttpdConfig(const std::string& path);
@@ -66,6 +73,9 @@ public:
 
     // Create an instance with a freshly generated P-256 key pair.
     static Ptr create(const HttpdConfig& cfg);
+
+    // Create an instance with a caller-provided key pair.
+    static Ptr create(rsp::KeyPair keyPair, const HttpdConfig& cfg);
 
     ~HttpdResourceService() override;
 

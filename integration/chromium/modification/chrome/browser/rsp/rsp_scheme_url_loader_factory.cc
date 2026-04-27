@@ -137,16 +137,16 @@ void RspSchemeURLLoaderFactory::Create(
     content::BrowserContext* browser_context,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver) {
   auto* prefs = user_prefs::UserPrefs::Get(browser_context);
-  const std::string rm_addr = prefs->GetString(prefs::kRspDefaultRmAddr);
+  const std::string pref_rm_addr = prefs->GetString(prefs::kRspDefaultRmAddr);
+  const std::string rm_addr = pref_rm_addr.empty() ? "127.0.0.1:3939"
+                                                    : pref_rm_addr;
   const std::string rs_node_id = prefs->GetString(prefs::kRspDefaultRsNodeId);
 
-  std::string connection_key;
-  if (!rm_addr.empty()) {
-    RspTabConfig config;
-    config.rm_addr = rm_addr;
-    config.rs_node_id = rs_node_id;
-    connection_key = RspConnectionManager::GetInstance()->GetOrCreate(config);
-  }
+  RspTabConfig config;
+  config.rm_addr = rm_addr;
+  config.rs_node_id = rs_node_id;
+  std::string connection_key =
+      RspConnectionManager::GetInstance()->GetOrCreate(config);
 
   new RspSchemeURLLoaderFactory(std::move(connection_key),
                                 std::move(factory_receiver));
@@ -168,8 +168,7 @@ void RspSchemeURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   if (connection_key_.empty()) {
-    DVLOG(1) << "RspSchemeURLLoaderFactory: no default RSP connection. "
-                "Set RM address and RS node ID in chrome://settings/rsp";
+    LOG(ERROR) << "RspSchemeURLLoaderFactory: no RSP connection";
     mojo::Remote<network::mojom::URLLoaderClient> c(std::move(client));
     c->OnComplete(
         network::URLLoaderCompletionStatus(net::ERR_FAILED));
