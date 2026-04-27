@@ -949,6 +949,8 @@ bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const 
 
     if (selectedEncoding == nullptr) {
         if (destinationNodeId.has_value()) {
+            std::cerr << "[RM] routeAndSend: no encoding for node "
+                      << destinationNodeId->toString() << "\n";
             eraseResourceAdvertisement(*destinationNodeId);
         }
         return false;
