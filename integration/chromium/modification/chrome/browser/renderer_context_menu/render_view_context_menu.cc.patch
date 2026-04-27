@@ -1,8 +1,42 @@
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-index 0487fb8..329719f 100644
+index 0487fb8722..bc3c542e42 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-@@ -709,6 +709,7 @@ bool IsCommandForOpenLink(int id) {
+@@ -442,6 +442,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
+        {IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 3},
+        {IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW, 4},
+        {IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD, 5},
++      {IDC_CONTENT_CONTEXT_OPENLINKRSPTAB, 164},
+        {IDC_CONTENT_CONTEXT_SAVELINKAS, 6},
+        {IDC_CONTENT_CONTEXT_SAVEAVAS, 7},
+        {IDC_CONTENT_CONTEXT_SAVEIMAGEAS, 8},
+@@ -599,7 +600,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the RenderViewContextMenuItem enum in
+        //     tools/metrics/histograms/metadata/ui/enums.xml.
+-       {0, 164}});
++      {0, 165}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
+ 
+   // LINT.IfChange(ContextMenuOptionDesktop)
+@@ -608,6 +609,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
+   static const base::NoDestructor<std::map<int, int>> kSpecificMap(
+       {{IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, 0},
+        {IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD, 1},
++       {IDC_CONTENT_CONTEXT_OPENLINKRSPTAB, 33},
+        {IDC_CONTENT_CONTEXT_COPYLINKLOCATION, 2},
+        {IDC_CONTENT_CONTEXT_COPY, 3},
+        {IDC_CONTENT_CONTEXT_SAVELINKAS, 4},
+@@ -644,7 +646,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the ContextMenuOptionDesktop enum in
+        //     tools/metrics/histograms/metadata/enums.xml.
+-       {0, 32}});
++      {0, 34}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:ContextMenuOptionDesktop)
+ 
+   return *(type == UmaEnumIdLookupType::GeneralEnumId ? kGeneralMap
+@@ -709,6 +711,7 @@ bool IsCommandForOpenLink(int id) {
    return id == IDC_CONTENT_CONTEXT_OPENLINKNEWTAB ||
           id == IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW ||
           id == IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD ||
@@ -10,7 +44,7 @@ index 0487fb8..329719f 100644
           id == IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW ||
           (id >= IDC_OPEN_LINK_IN_PROFILE_FIRST &&
            id <= IDC_OPEN_LINK_IN_PROFILE_LAST);
-@@ -1843,6 +1844,10 @@ void RenderViewContextMenu::AppendLinkItems() {
+@@ -1843,6 +1846,10 @@ void RenderViewContextMenu::AppendLinkItems() {
                   : IDS_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
      }
  
@@ -21,7 +55,7 @@ index 0487fb8..329719f 100644
      AppendOpenInWebAppLinkItems();
      AppendOpenWithLinkItems();
  
-@@ -3109,6 +3114,9 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+@@ -3109,6 +3116,9 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
        return navigation_allowed &&
               IsOpenLinkOTREnabled(GetProfile(), params_.link_url);
  
@@ -31,7 +65,7 @@ index 0487fb8..329719f 100644
      case IDC_PRINT:
        return IsPrintPreviewEnabled();
  
-@@ -3352,6 +3360,14 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
+@@ -3352,6 +3362,14 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
            /*started_from_context_menu=*/true);
        break;
  
