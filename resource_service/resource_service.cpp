@@ -18,6 +18,10 @@ ResourceService::ClientConnectionID ResourceService::connectToResourceManager(co
         throw std::runtime_error("failed to send resource advertisement");
     }
 
+    enableReconnect(connectionId, [this](ClientConnectionID id) {
+        sendResourceAdvertisement(id);
+    });
+
     return connectionId;
 }
 

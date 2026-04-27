@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -111,6 +112,8 @@ public:
     RSPCLIENT_API int run() const override;
 
     RSPCLIENT_API std::optional<ClientConnectionID> connectToResourceManager(const std::string& transport, const std::string& encoding);
+    RSPCLIENT_API void enableReconnect(ClientConnectionID connectionId,
+                                       std::function<void(ClientConnectionID)> onReconnected = {});
     RSPCLIENT_API bool hasConnections() const;
     RSPCLIENT_API bool hasConnection(ClientConnectionID connectionId) const;
     RSPCLIENT_API std::size_t connectionCount() const;

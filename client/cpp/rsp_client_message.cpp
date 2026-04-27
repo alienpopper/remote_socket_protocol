@@ -175,7 +175,17 @@ std::optional<RSPClientMessage::ClientConnectionID> RSPClientMessage::connectToR
 
     {
         std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.emplace(connectionId, ClientConnectionState{selectedTransport, result.encoding, signingQueue});
+        ClientConnectionState state;
+        state.transport = selectedTransport;
+        state.encoding = result.encoding;
+        state.signingQueue = signingQueue;
+        state.reconnect = nullptr;
+        // Store for use by doReconnect
+        state.reconnect = std::make_shared<ReconnectContext>();
+        state.reconnect->transportSpec = transport;
+        state.reconnect->encodingType = encoding;
+        state.reconnect->stopping.store(true); // disabled until enableReconnect() is called
+        connections_.emplace(connectionId, std::move(state));
     }
 
     return connectionId;
@@ -291,6 +301,24 @@ bool RSPClientMessage::removeConnection(ClientConnectionID connectionId) {
         connections_.erase(iterator);
     }
 
+    // Abort any in-progress reconnect before stopping resources.
+    // Setting stopping=true and calling transport->stop() causes
+    // TcpTransport::reconnect() to return nullptr, which makes doReconnect exit.
+    if (removedConnection.reconnect != nullptr) {
+        removedConnection.reconnect->stopping.store(true);
+    }
+
+    if (removedConnection.transport != nullptr) {
+        removedConnection.transport->stop();
+    }
+
+    if (removedConnection.reconnect != nullptr) {
+        std::lock_guard<std::mutex> lock(removedConnection.reconnect->threadMutex);
+        if (removedConnection.reconnect->thread.joinable()) {
+            removedConnection.reconnect->thread.join();
+        }
+    }
+
     if (removedConnection.encoding != nullptr) {
         removedConnection.encoding->stop();
     }
@@ -299,11 +327,229 @@ bool RSPClientMessage::removeConnection(ClientConnectionID connectionId) {
         removedConnection.signingQueue->stop();
     }
 
-    if (removedConnection.transport != nullptr) {
-        removedConnection.transport->stop();
+    return true;
+}
+
+void RSPClientMessage::enableReconnect(ClientConnectionID connectionId,
+                                       std::function<void(ClientConnectionID)> onReconnected) {
+    std::shared_ptr<ReconnectContext> ctx;
+    rsp::encoding::EncodingHandle encoding;
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        auto it = connections_.find(connectionId);
+        if (it == connections_.end()) {
+            return;
+        }
+        if (it->second.reconnect == nullptr) {
+            it->second.reconnect = std::make_shared<ReconnectContext>();
+        }
+        it->second.reconnect->onReconnected = std::move(onReconnected);
+        it->second.reconnect->stopping.store(false);
+        ctx = it->second.reconnect;
+        encoding = it->second.encoding;
     }
 
-    return true;
+    const auto weakSelf = weak_from_this();
+    encoding->setDisconnectCallback(
+        [weakSelf, connectionId, ctx](const rsp::NodeID&) {
+            const auto self = weakSelf.lock();
+            if (self == nullptr) {
+                return;
+            }
+            self->triggerReconnect(connectionId, ctx);
+        });
+}
+
+void RSPClientMessage::triggerReconnect(ClientConnectionID connectionId,
+                                        std::shared_ptr<ReconnectContext> ctx) {
+    if (ctx == nullptr || ctx->stopping.load()) {
+        return;
+    }
+    bool expected = false;
+    if (!ctx->inProgress.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(ctx->threadMutex);
+    if (ctx->thread.joinable()) {
+        ctx->thread.detach();
+    }
+    ctx->thread = std::thread([this, connectionId, ctx]() {
+        doReconnect(connectionId, ctx);
+    });
+}
+
+void RSPClientMessage::doReconnect(ClientConnectionID connectionId,
+                                   std::shared_ptr<ReconnectContext> ctx) {
+    rsp::transport::TransportHandle transport;
+    std::string transportSpec;
+    std::string encodingType;
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        const auto it = connections_.find(connectionId);
+        if (it == connections_.end()) {
+            ctx->inProgress.store(false);
+            return;
+        }
+        transport = it->second.transport;
+        transportSpec = ctx->transportSpec;
+        encodingType = ctx->encodingType;
+    }
+
+    if (transport == nullptr || ctx->stopping.load()) {
+        ctx->inProgress.store(false);
+        return;
+    }
+
+    // Block until TCP reconnects (TcpTransport::reconnect has exponential backoff).
+    const auto connection = transport->reconnect();
+    if (connection == nullptr || ctx->stopping.load()) {
+        ctx->inProgress.store(false);
+        return;
+    }
+
+    // Re-run ASCII handshake + AuthN pipeline to get a fresh encoding.
+    struct ConnectResult {
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool complete = false;
+        std::string error;
+        rsp::encoding::EncodingHandle encoding;
+    } result;
+
+    auto finish = [&](rsp::encoding::EncodingHandle enc, std::string error) {
+        std::lock_guard<std::mutex> lock(result.mutex);
+        result.encoding = std::move(enc);
+        result.error = std::move(error);
+        result.complete = true;
+        result.condition.notify_all();
+    };
+
+    const auto authnQueue = std::make_shared<rsp::message_queue::MessageQueueAuthN>(
+        keyPair_.duplicate(),
+        bootId_,
+        [&](const rsp::encoding::EncodingHandle& enc) { finish(enc, {}); },
+        [&](const rsp::encoding::EncodingHandle& enc) {
+            if (enc != nullptr) {
+                enc->stop();
+            }
+            finish(nullptr, "identity handshake failed");
+        },
+        [](const rsp::NodeID&, const rsp::proto::Identity&) {});
+    authnQueue->setWorkerCount(1);
+    authnQueue->start();
+
+    const auto handshakeQueue = std::make_shared<rsp::message_queue::MessageQueueAsciiHandshakeClient>(
+        incomingMessages_,
+        keyPair_.duplicate(),
+        encodingType,
+        [authnQueue, &finish](const rsp::encoding::EncodingHandle& enc) {
+            if (authnQueue == nullptr || !authnQueue->push(enc)) {
+                if (enc != nullptr) {
+                    enc->stop();
+                }
+                finish(nullptr, "failed to enqueue encoding for identity handshake");
+            }
+        },
+        [&finish](const rsp::transport::TransportHandle&) {
+            finish(nullptr, "ASCII handshake failed");
+        });
+    handshakeQueue->setWorkerCount(1);
+    handshakeQueue->start();
+
+    // Push the reconnected transport through the handshake pipeline.
+    // We wrap the existing transport in a minimal TransportHandle that presents
+    // the new connection to the handshake queue.
+    struct SingleConnectionTransport : rsp::transport::Transport {
+        explicit SingleConnectionTransport(rsp::transport::ConnectionHandle c) : conn_(std::move(c)) {}
+        rsp::transport::ConnectionHandle connect(const std::string&) override { return conn_; }
+        rsp::transport::ConnectionHandle reconnect() override { return nullptr; }
+        void stop() override { if (conn_) conn_->close(); }
+        rsp::transport::ConnectionHandle connection() const override { return conn_; }
+        rsp::transport::ConnectionHandle conn_;
+    };
+    const auto wrapTransport = std::make_shared<SingleConnectionTransport>(connection);
+
+    if (!handshakeQueue->push(wrapTransport)) {
+        handshakeQueue->stop();
+        authnQueue->stop();
+        ctx->inProgress.store(false);
+        return;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(result.mutex);
+        result.condition.wait(lock, [&result]() { return result.complete; });
+    }
+    handshakeQueue->stop();
+    authnQueue->stop();
+
+    if (result.encoding == nullptr || ctx->stopping.load()) {
+        ctx->inProgress.store(false);
+        return;
+    }
+
+    if (!result.encoding->start()) {
+        result.encoding->stop();
+        ctx->inProgress.store(false);
+        return;
+    }
+
+    const auto newSigningQueue = std::make_shared<rsp::MessageQueueSign>(
+        [encodingHandle = result.encoding](rsp::proto::RSPMessage message) {
+            const auto outgoing = encodingHandle == nullptr ? nullptr : encodingHandle->outgoingMessages();
+            if (outgoing == nullptr || !outgoing->push(std::move(message))) {
+                std::cerr << "RSP client reconnect: failed to enqueue signed message" << std::endl;
+            }
+        },
+        [](rsp::proto::RSPMessage, std::string reason) {
+            std::cerr << "RSP client reconnect: failed to sign message: " << reason << std::endl;
+        },
+        keyPair_.duplicate());
+    newSigningQueue->setWorkerCount(1);
+    newSigningQueue->start();
+
+    // Swap in the new encoding and signing queue atomically.
+    rsp::encoding::EncodingHandle oldEncoding;
+    rsp::MessageQueueHandle oldSigningQueue;
+    {
+        std::lock_guard<std::mutex> lock(connectionsMutex_);
+        const auto it = connections_.find(connectionId);
+        if (it == connections_.end() || ctx->stopping.load()) {
+            result.encoding->stop();
+            newSigningQueue->stop();
+            ctx->inProgress.store(false);
+            return;
+        }
+        oldEncoding = it->second.encoding;
+        oldSigningQueue = it->second.signingQueue;
+        it->second.encoding = result.encoding;
+        it->second.signingQueue = newSigningQueue;
+    }
+
+    if (oldSigningQueue != nullptr) {
+        oldSigningQueue->stop();
+    }
+    if (oldEncoding != nullptr) {
+        oldEncoding->stop();
+    }
+
+    // Set disconnect callback on the new encoding so future drops also reconnect.
+    const auto weakSelf = weak_from_this();
+    result.encoding->setDisconnectCallback(
+        [weakSelf, connectionId, ctx](const rsp::NodeID&) {
+            const auto self = weakSelf.lock();
+            if (self == nullptr) {
+                return;
+            }
+            self->triggerReconnect(connectionId, ctx);
+        });
+
+    if (ctx->onReconnected) {
+        ctx->onReconnected(connectionId);
+    }
+
+    ctx->inProgress.store(false);
 }
 
 rsp::transport::TransportHandle RSPClientMessage::createTransport(const std::string& transportName) const {

@@ -5,14 +5,17 @@
 #include "common/node.hpp"
 #include "common/transport/transport.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace rsp::client::full {
@@ -37,6 +40,8 @@ public:
     void stop();
 
     ClientConnectionID connectToResourceManager(const std::string& transportSpec, const std::string& encoding);
+    void enableReconnect(ClientConnectionID connectionId,
+                         std::function<void(ClientConnectionID)> onReconnected = {});
     bool send(const rsp::proto::RSPMessage& message) const;
     bool sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const;
     bool hasConnections() const;
@@ -59,10 +64,28 @@ protected:
     rsp::proto::RSPMessage prepareOutboundMessage(const rsp::proto::RSPMessage& message) const;
 
 private:
+    // Per-connection reconnect state, shared with the disconnect callback that
+    // fires from the encoding's read thread.
+    struct ReconnectContext {
+        std::string transportSpec;
+        std::string encodingType;
+        std::function<void(ClientConnectionID)> onReconnected;
+        std::atomic<bool> inProgress{false};
+        std::atomic<bool> stopping{false};
+        std::mutex threadMutex;
+        std::condition_variable stopCondition;
+        std::thread thread;
+
+        ReconnectContext() = default;
+        ReconnectContext(const ReconnectContext&) = delete;
+        ReconnectContext& operator=(const ReconnectContext&) = delete;
+    };
+
     struct ClientConnectionState {
         rsp::transport::TransportHandle transport;
         rsp::encoding::EncodingHandle encoding;
         rsp::MessageQueueHandle signingQueue;
+        std::shared_ptr<ReconnectContext> reconnect; // null = reconnect not enabled
     };
 
     struct PendingPingState {
@@ -74,6 +97,8 @@ private:
     bool isForThisNode(const rsp::proto::RSPMessage& message) const;
     std::optional<ClientConnectionState> connectionState(ClientConnectionID connectionId) const;
     void handlePingReply(const rsp::proto::RSPMessage& message);
+    void triggerReconnect(ClientConnectionID connectionId, std::shared_ptr<ReconnectContext> ctx);
+    void doReconnect(ClientConnectionID connectionId, std::shared_ptr<ReconnectContext> ctx);
 
     mutable std::mutex connectionsMutex_;
     std::map<ClientConnectionID, ClientConnectionState> connections_;

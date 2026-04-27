@@ -362,6 +362,24 @@ std::optional<RSPClient::ClientConnectionID> RSPClient::connectToResourceManager
     return messageClient_->connectToResourceManager(transport, encoding);
 }
 
+void RSPClient::enableReconnect(ClientConnectionID connectionId,
+                                std::function<void(ClientConnectionID)> onReconnected) {
+    // Wrap the caller's callback so that after each reconnect, we also renew
+    // the RM log subscriptions (NodeConnected/Disconnected events) and wake
+    // the refresh thread to re-register any pending names.
+    auto wrappedCallback = [this, userCallback = std::move(onReconnected)](ClientConnectionID id) {
+        {
+            std::lock_guard<std::mutex> lock(refreshMutex_);
+            sendLogSubscribeToRM();
+            refreshCv_.notify_all();
+        }
+        if (userCallback) {
+            userCallback(id);
+        }
+    };
+    messageClient_->enableReconnect(connectionId, std::move(wrappedCallback));
+}
+
 bool RSPClient::hasConnections() const {
     return messageClient_->hasConnections();
 }

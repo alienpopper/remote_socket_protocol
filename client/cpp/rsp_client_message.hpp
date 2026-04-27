@@ -7,12 +7,15 @@
 #include "common/transport/transport.hpp"
 #include "messages.pb.h"
 
+#include <atomic>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace rsp::client {
@@ -36,6 +39,8 @@ public:
     RSPCLIENT_API int run() const;
 
     RSPCLIENT_API std::optional<ClientConnectionID> connectToResourceManager(const std::string& transport, const std::string& encoding);
+    RSPCLIENT_API void enableReconnect(ClientConnectionID connectionId,
+                                       std::function<void(ClientConnectionID)> onReconnected = {});
     RSPCLIENT_API bool send(const rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API bool sendOnConnection(ClientConnectionID connectionId, const rsp::proto::RSPMessage& message) const;
     RSPCLIENT_API bool hasConnections() const;
@@ -52,10 +57,27 @@ public:
     RSPCLIENT_API const rsp::proto::Uuid& bootId() const;
 
 private:
+    // Per-connection state shared between connection management and the
+    // disconnect callback that fires from the encoding's read thread.
+    struct ReconnectContext {
+        std::string transportSpec;
+        std::string encodingType;
+        std::function<void(ClientConnectionID)> onReconnected;
+        std::atomic<bool> inProgress{false};
+        std::atomic<bool> stopping{false};
+        std::mutex threadMutex;
+        std::thread thread;
+
+        ReconnectContext() = default;
+        ReconnectContext(const ReconnectContext&) = delete;
+        ReconnectContext& operator=(const ReconnectContext&) = delete;
+    };
+
     struct ClientConnectionState {
         rsp::transport::TransportHandle transport;
         rsp::encoding::EncodingHandle encoding;
         rsp::MessageQueueHandle signingQueue;
+        std::shared_ptr<ReconnectContext> reconnect; // null = reconnect not enabled
     };
 
     explicit RSPClientMessage(KeyPair keyPair);
@@ -63,6 +85,8 @@ private:
     rsp::transport::TransportHandle createTransport(const std::string& transportName) const;
     rsp::proto::RSPMessage prepareOutboundMessage(const rsp::proto::RSPMessage& message) const;
     std::optional<ClientConnectionState> connectionState(ClientConnectionID connectionId) const;
+    void triggerReconnect(ClientConnectionID connectionId, std::shared_ptr<ReconnectContext> ctx);
+    void doReconnect(ClientConnectionID connectionId, std::shared_ptr<ReconnectContext> ctx);
 
     KeyPair keyPair_;
     rsp::proto::Uuid bootId_;
