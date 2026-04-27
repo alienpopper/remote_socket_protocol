@@ -1,0 +1,61 @@
+# Multi-RM Routing and Failover Plan
+
+## Problem
+Current RM routing is direct-only (connected peer NodeID match). `RouteUpdate` exists in the protocol, but RM does not yet maintain or use a distributed route table. Service discovery is also RM-local today, and service binaries are effectively single-RM by default.
+
+## Proposed approach
+Build an authenticated RM peer mesh and implement distance-vector routing using hop count as the primary metric. Add route propagation, route aging, and peer reconnect so traffic converges onto the best path, fails over quickly, and restores to optimal routes when links recover.
+
+Assumptions for v1:
+- "Most optimal path" = lowest hop count, with deterministic tie-break by peer NodeID.
+- Reuse existing `RouteUpdate`/`RouteEntry` messages first; avoid protocol shape changes unless required by testing.
+
+## Todos
+1. **RM peer connectivity and lifecycle**
+   - Add RM peer config (e.g., `rm_peers`) in `resource_manager/resource_manager_main.cpp`.
+   - Establish outbound RM<->RM authenticated sessions and keep peer state (node ID, transport, liveness).
+   - Add reconnect/backoff behavior for lost peer links.
+
+2. **Routing table and propagation**
+   - Extend `ResourceManager` (`resource_manager/resource_manager.hpp/.cpp`) with route state:
+     destination node -> next hop -> metric -> freshness.
+   - Accept and process `RouteUpdate` only from authenticated RM peers.
+   - Emit periodic + triggered `RouteUpdate` announcements.
+   - Add split-horizon/poison-reverse behavior and route aging to reduce loops and stale paths.
+
+3. **Forwarding path selection**
+   - Update `routeAndSend` to prefer direct links, then best next-hop route.
+   - On send failure, invalidate affected next-hop routes and retry one alternate route.
+   - Remove stale/closed encodings from active routing candidates so failover is immediate.
+
+4. **Cross-RM service discovery**
+   - Propagate signed `resource_advertisement` visibility across RM peers with dedupe controls.
+   - Keep discovery results route-aware: only return services with currently reachable destinations.
+   - Expire stale remote advertisements when origin routes are no longer reachable.
+
+5. **Service multi-homing (redundancy)**
+   - Update resource-service entrypoints/config parsing to allow multiple RM endpoints:
+     - `resource_service/bsd_sockets/resource_service_bsd_sockets_main.cpp`
+     - `resource_service/httpd/resource_service_httpd*.cpp`
+     - `resource_service/sshd/resource_service_sshd.cpp`
+   - Maintain service availability if at least one RM connection is healthy.
+   - Re-advertise service presence after reconnection.
+
+6. **Compatibility, docs, and observability**
+   - Preserve current single-RM behavior/config as backward-compatible defaults.
+   - Add route/peer lifecycle logging (peer up/down, route install/withdraw, failover events).
+   - Update `resource_manager.md` and service READMEs for new mesh/multi-RM config and behavior.
+
+7. **Tests**
+   - Add RM mesh tests (memory transport) for:
+     - shortest-path selection,
+     - failover on RM/link loss,
+     - recovery/reconvergence to optimal path,
+     - multi-homed service reachability through alternate RM,
+     - cross-RM resource discovery visibility.
+   - Keep existing suite and integration targets passing (`make test` + affected integration tests).
+
+## Key considerations
+- Route injection must be restricted to authenticated/authorized RM peers.
+- Preserve end-to-end signature semantics for transit payloads; forwarding RMs should route, not rewrite endpoint identity.
+- Route convergence timers (update interval, TTL, hold-down) should be configurable with conservative defaults.
