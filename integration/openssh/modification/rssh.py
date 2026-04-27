@@ -7,12 +7,17 @@ execs ssh with rsp_ssh as the ProxyCommand.
 Usage:
   rssh [user@]<name>[%transport] [ssh-options...]
   rssh [user@]{node-id}[%transport]  [ssh-options...]
+  rssh list
 
 Target formats:
   house                     resolve 'house' via RSP name service
   user@house                same, log in as 'user'
   house%tcp:10.0.0.1:3939   override RM transport
   {cf605c79-...}            connect by RSP service node ID directly
+
+Commands:
+  list                      list all SSH servers visible to the RM,
+                            with friendly names resolved from the NS
 
 ssh-options are passed through verbatim to the underlying ssh invocation.
 
@@ -86,6 +91,57 @@ def _load_config() -> dict:
     )
 
 
+def _cmd_list(config: dict, rsp_ssh: str) -> int:
+    """Enumerate all sshd servers from the RM with NS name resolution."""
+    conn_config: dict = {"rsp_transport": config["rsp_transport"]}
+    if "endorsement_node_id" in config:
+        conn_config["endorsement_node_id"] = config["endorsement_node_id"]
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+        json.dump(conn_config, tf)
+        temp_config = tf.name
+
+    try:
+        result = subprocess.run(
+            [rsp_ssh, "--list", temp_config],
+            capture_output=True,
+            text=True,
+        )
+        # Always forward stderr (diagnostic messages from rsp_ssh).
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        if result.returncode != 0:
+            return result.returncode
+
+        rows: list[tuple[str, str]] = []
+        for line in result.stdout.splitlines():
+            parts = line.split("\t", 1)
+            if not parts[0]:
+                continue
+            node_id = parts[0]
+            name = parts[1] if len(parts) > 1 else ""
+            rows.append((node_id, name))
+
+        if not rows:
+            print("No SSH servers found.")
+            return 0
+
+        # Sort: named entries first (alphabetically), then unnamed by UUID.
+        rows.sort(key=lambda r: (not r[1], r[1].lower() or r[0].lower()))
+
+        node_col = max(len("NODE ID"), max(len(r[0]) for r in rows))
+        name_col = max(len("NAME"), max(len(r[1]) for r in rows))
+
+        header = f"{'NODE ID':<{node_col}}  {'NAME':<{name_col}}"
+        print(header)
+        print("-" * len(header))
+        for node_id, name in rows:
+            print(f"{node_id:<{node_col}}  {name}")
+        return 0
+    finally:
+        os.unlink(temp_config)
+
+
 def _parse_target(target: str) -> tuple[str | None, str | None, str | None, str | None]:
     """Parse [user@]<name|{node-id}>[%transport].
 
@@ -157,6 +213,9 @@ def main() -> int:
     except RuntimeError as e:
         print(f"rssh: {e}", file=sys.stderr)
         return 1
+
+    if target == "list":
+        return _cmd_list(config, rsp_ssh)
 
     user, service_name, service_node_id, transport_override = _parse_target(target)
 

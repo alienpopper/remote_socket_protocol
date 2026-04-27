@@ -10,6 +10,10 @@
 // The host/user arguments to ssh are handled by ssh itself; rsp_ssh only
 // needs the config file that specifies which RSP node and port to connect to.
 //
+// List mode:
+//   rsp_ssh --list [config]
+//   Prints all sshd servers visible to the RM, with friendly names from the NS.
+//
 // Default config path: /etc/rsp-ssh/rsp_ssh.conf.json
 
 #define RSPCLIENT_STATIC
@@ -100,6 +104,23 @@ Config loadConfig(const std::string& path) {
     return cfg;
 }
 
+Config loadListConfig(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open config file: " + path);
+    }
+
+    json j;
+    file >> j;
+
+    Config cfg;
+    cfg.rspTransport = j.at("rsp_transport").get<std::string>();
+    if (j.contains("endorsement_node_id")) {
+        cfg.endorsementNodeId = j["endorsement_node_id"].get<std::string>();
+    }
+    return cfg;
+}
+
 void log(const std::string& message) {
     // ProxyCommand: stderr is passed through to the terminal; stdout is the
     // SSH data channel, so all diagnostics must go to stderr.
@@ -166,7 +187,84 @@ void pumpFd(int srcFd, int dstFd, const std::string& label) {
 
 }  // namespace
 
+int runList(const std::string& configPath) {
+    Config cfg;
+    try {
+        cfg = loadListConfig(configPath);
+    } catch (const std::exception& ex) {
+        log(std::string("Config error: ") + ex.what());
+        return 1;
+    }
+
+    auto client = rsp::client::RSPClient::create();
+
+    const auto connId = client->connectToResourceManager(
+        cfg.rspTransport, rsp::message_queue::kAsciiHandshakeEncoding);
+    if (!connId.has_value()) {
+        log("Failed to connect to resource manager: " + cfg.rspTransport);
+        return 1;
+    }
+
+    if (!cfg.endorsementNodeId.empty()) {
+        const rsp::NodeID esNodeId{cfg.endorsementNodeId};
+        if (!client->ping(esNodeId)) {
+            log("Endorsement service unreachable: " + cfg.endorsementNodeId);
+            return 1;
+        }
+        if (!acquireEndorsement(*client, esNodeId, ETYPE_ACCESS, EVALUE_ACCESS_NETWORK, "network access") ||
+            !acquireEndorsement(*client, esNodeId, ETYPE_ROLE, EVALUE_ROLE_CLIENT, "client role")) {
+            return 1;
+        }
+    }
+
+    const auto rmNodeId = client->peerNodeID(*connId);
+    if (!rmNodeId.has_value()) {
+        log("Failed to get RM node ID");
+        return 1;
+    }
+
+    const auto queryResult = client->resourceList(*rmNodeId, "");
+    if (!queryResult.has_value()) {
+        log("Resource list query failed");
+        return 1;
+    }
+
+    std::vector<rsp::NodeID> sshdNodes;
+    std::vector<rsp::NodeID> nsNodes;
+    for (const auto& svc : queryResult->services) {
+        bool isSshd = false;
+        bool isNS   = false;
+        for (const auto& url : svc.acceptedTypeUrls) {
+            if (url == "type.rsp/rsp.proto.ConnectSshd")       isSshd = true;
+            if (url == "type.rsp/rsp.proto.NameCreateRequest") isNS   = true;
+        }
+        if (isSshd && svc.nodeId != rsp::NodeID{}) sshdNodes.push_back(svc.nodeId);
+        if (isNS   && svc.nodeId != rsp::NodeID{}) nsNodes.push_back(svc.nodeId);
+    }
+
+    // For each sshd, reverse-lookup its friendly name from the NS.
+    // Output is tab-separated to stdout for the caller to format.
+    for (const auto& sshdId : sshdNodes) {
+        std::string name;
+        for (const auto& nsId : nsNodes) {
+            const auto result = client->nameQuery(
+                nsId, "", sshdId, rsp::resource_service::kSshdNameType, 1);
+            if (result.has_value() && !result->records.empty()) {
+                name = result->records[0].name;
+                break;
+            }
+        }
+        std::cout << sshdId.toString() << '\t' << name << '\n';
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
+    // --list mode: enumerate sshd servers and their friendly names.
+    if (argc >= 2 && std::string(argv[1]) == "--list") {
+        const std::string configPath = (argc > 2) ? argv[2] : "/etc/rsp-ssh/rsp_ssh.conf.json";
+        return runList(configPath);
+    }
     const std::string configPath = (argc > 1) ? argv[1] : "/etc/rsp-ssh/rsp_ssh.conf.json";
 
     Config cfg;
