@@ -7,6 +7,8 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +31,114 @@ static nlohmann::json mergeConfigs(const std::vector<std::string>& paths) {
         }
     }
     return merged;
+}
+
+static rsp::Buffer stringToBuffer(const std::string& value) {
+    if (value.empty()) {
+        return rsp::Buffer();
+    }
+    return rsp::Buffer(reinterpret_cast<const uint8_t*>(value.data()), static_cast<uint32_t>(value.size()));
+}
+
+static std::optional<rsp::NodeID> parseConfiguredRequestor(const nlohmann::json& entry) {
+    const char* requestorField = nullptr;
+    if (entry.contains("requestor")) {
+        requestorField = "requestor";
+    } else if (entry.contains("subject")) {
+        requestorField = "subject";
+    }
+
+    if (requestorField == nullptr) {
+        return std::nullopt;
+    }
+
+    if (!entry[requestorField].is_string()) {
+        throw std::runtime_error(std::string("\"endorsements[].") + requestorField + "\" must be a string");
+    }
+
+    const std::string requestor = entry[requestorField].get<std::string>();
+    if (requestor == "*" || requestor == "any" || requestor == "ANY") {
+        return std::nullopt;
+    }
+
+    return rsp::NodeID(requestor);
+}
+
+static double parseConfiguredValiditySeconds(const nlohmann::json& entry) {
+    if (entry.contains("valid_for_seconds")) {
+        if (!entry["valid_for_seconds"].is_number()) {
+            throw std::runtime_error("\"endorsements[].valid_for_seconds\" must be numeric");
+        }
+        const double value = entry["valid_for_seconds"].get<double>();
+        if (value <= 0.0) {
+            throw std::runtime_error("\"endorsements[].valid_for_seconds\" must be greater than zero");
+        }
+        return value;
+    }
+
+    if (entry.contains("valid_hours")) {
+        if (!entry["valid_hours"].is_number()) {
+            throw std::runtime_error("\"endorsements[].valid_hours\" must be numeric");
+        }
+        const double value = entry["valid_hours"].get<double>();
+        if (value <= 0.0) {
+            throw std::runtime_error("\"endorsements[].valid_hours\" must be greater than zero");
+        }
+        return HOURS(value);
+    }
+
+    if (entry.contains("valid_days")) {
+        if (!entry["valid_days"].is_number()) {
+            throw std::runtime_error("\"endorsements[].valid_days\" must be numeric");
+        }
+        const double value = entry["valid_days"].get<double>();
+        if (value <= 0.0) {
+            throw std::runtime_error("\"endorsements[].valid_days\" must be greater than zero");
+        }
+        return DAYS(value);
+    }
+
+    return DAYS(1);
+}
+
+static std::vector<rsp::endorsement_service::EndorsementService::ConfiguredEndorsement>
+parseConfiguredEndorsements(const nlohmann::json& config) {
+    std::vector<rsp::endorsement_service::EndorsementService::ConfiguredEndorsement> endorsements;
+
+    if (!config.contains("endorsements")) {
+        return endorsements;
+    }
+
+    if (!config["endorsements"].is_array()) {
+        throw std::runtime_error("\"endorsements\" must be an array");
+    }
+
+    for (const auto& entry : config["endorsements"]) {
+        if (!entry.is_object()) {
+            throw std::runtime_error("\"endorsements\" entries must be objects");
+        }
+
+        if (!entry.contains("endorsement_type") || !entry["endorsement_type"].is_string()) {
+            throw std::runtime_error("\"endorsements[].endorsement_type\" must be a GUID string");
+        }
+
+        std::string endorsementValue;
+        if (entry.contains("endorsement_value")) {
+            if (!entry["endorsement_value"].is_string()) {
+                throw std::runtime_error("\"endorsements[].endorsement_value\" must be a string");
+            }
+            endorsementValue = entry["endorsement_value"].get<std::string>();
+        }
+
+        rsp::endorsement_service::EndorsementService::ConfiguredEndorsement configuredEndorsement;
+        configuredEndorsement.requestor = parseConfiguredRequestor(entry);
+        configuredEndorsement.endorsementType = rsp::GUID(entry["endorsement_type"].get<std::string>());
+        configuredEndorsement.endorsementValue = stringToBuffer(endorsementValue);
+        configuredEndorsement.validForSeconds = parseConfiguredValiditySeconds(entry);
+        endorsements.push_back(std::move(configuredEndorsement));
+    }
+
+    return endorsements;
 }
 
 static void printUsage(const char* progName) {
@@ -102,10 +212,18 @@ int main(int argc, char** argv) {
     }
 
     try {
+        endorsementService->setConfiguredEndorsements(parseConfiguredEndorsements(config));
+    } catch (const std::exception& e) {
+        std::cerr << "error parsing endorsements config: " << e.what() << '\n';
+        return 1;
+    }
+
+    try {
         endorsementService->connectToResourceManager(rmTransportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
         std::cout << "rsp_es: connected to " << rmTransportSpec
                   << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n';
         std::cout << "endorsement service node ID: " << endorsementService->nodeId().toString() << '\n';
+        std::cout << "configured endorsements: " << endorsementService->configuredEndorsementCount() << '\n';
         std::cout.flush();
         return endorsementService->run();
     } catch (const std::exception& exception) {

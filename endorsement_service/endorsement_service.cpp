@@ -32,6 +32,16 @@ rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     return protoNodeId;
 }
 
+bool buffersEqual(const rsp::Buffer& lhs, const rsp::Buffer& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    if (lhs.empty()) {
+        return true;
+    }
+    return std::memcmp(lhs.data(), rhs.data(), lhs.size()) == 0;
+}
+
 }  // namespace
 
 namespace rsp::endorsement_service {
@@ -48,6 +58,16 @@ EndorsementService::EndorsementService(KeyPair keyPair)
     : rsp::client::full::RSPClient(std::move(keyPair)) {
 }
 
+void EndorsementService::setConfiguredEndorsements(std::vector<ConfiguredEndorsement> configuredEndorsements) {
+    std::lock_guard<std::mutex> lock(configuredEndorsementsMutex_);
+    configuredEndorsements_ = std::move(configuredEndorsements);
+}
+
+size_t EndorsementService::configuredEndorsementCount() const {
+    std::lock_guard<std::mutex> lock(configuredEndorsementsMutex_);
+    return configuredEndorsements_.size();
+}
+
 bool EndorsementService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (message.has_identity() || message.identities_size() > 0) {
         return true;
@@ -58,6 +78,34 @@ bool EndorsementService::handleNodeSpecificMessage(const rsp::proto::RSPMessage&
     }
 
     return false;
+}
+
+EndorsementService::ConfiguredEndorsementMatch EndorsementService::findMatchingConfiguredEndorsement(
+    const rsp::NodeID& requestorNodeId,
+    const rsp::Endorsement& requestedValues) const {
+    ConfiguredEndorsementMatch match;
+
+    std::lock_guard<std::mutex> lock(configuredEndorsementsMutex_);
+    match.hasConfiguredEndorsements = !configuredEndorsements_.empty();
+    for (const auto& configuredEndorsement : configuredEndorsements_) {
+        if (configuredEndorsement.requestor.has_value() &&
+            configuredEndorsement.requestor.value() != requestorNodeId) {
+            continue;
+        }
+
+        if (configuredEndorsement.endorsementType != requestedValues.endorsementType()) {
+            continue;
+        }
+
+        if (!buffersEqual(configuredEndorsement.endorsementValue, requestedValues.endorsementValue())) {
+            continue;
+        }
+
+        match.endorsement = configuredEndorsement;
+        break;
+    }
+
+    return match;
 }
 
 bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMessage& message) {
@@ -111,13 +159,32 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
             return send(reply);
         }
 
+        const auto configuredMatch = findMatchingConfiguredEndorsement(*sourceNodeId, requestedValues);
+        if (configuredMatch.hasConfiguredEndorsements && !configuredMatch.endorsement.has_value()) {
+            done.set_status(rsp::proto::ENDORSEMENT_FAILED);
+            rsp::packServiceMessage(reply, done);
+            return send(reply);
+        }
+
         rsp::DateTime validUntil;
-        validUntil += DAYS(1);
+        rsp::GUID endorsementType = requestedValues.endorsementType();
+        rsp::Buffer endorsementValue = requestedValues.endorsementValue();
+        double validForSeconds = DAYS(1);
+
+        if (configuredMatch.endorsement.has_value()) {
+            endorsementType = configuredMatch.endorsement->endorsementType;
+            endorsementValue = configuredMatch.endorsement->endorsementValue;
+            if (configuredMatch.endorsement->validForSeconds > 0.0) {
+                validForSeconds = configuredMatch.endorsement->validForSeconds;
+            }
+        }
+
+        validUntil += validForSeconds;
         const rsp::Endorsement issuedEndorsement = rsp::Endorsement::createSigned(
             keyPair(),
             requestedValues.subject(),
-            requestedValues.endorsementType(),
-            requestedValues.endorsementValue(),
+            endorsementType,
+            endorsementValue,
             validUntil);
 
         done.set_status(rsp::proto::ENDORSEMENT_SUCCESS);

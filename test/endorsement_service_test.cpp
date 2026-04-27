@@ -270,7 +270,7 @@ void testClientPingsEndorsementService() {
     serverTransport->stop();
 }
 
-void testClientRequestsNetworkAccessEndorsement() {
+void testClientRequestsNetworkAccessEndorsementFromConfig() {
     auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
     TestResourceManager resourceManager({serverTransport});
 
@@ -286,6 +286,15 @@ void testClientRequestsNetworkAccessEndorsement() {
 
     auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
+
+    rsp::endorsement_service::EndorsementService::ConfiguredEndorsement configuredEndorsement;
+    configuredEndorsement.requestor = clientNodeId;
+    configuredEndorsement.endorsementType = ETYPE_ACCESS;
+    configuredEndorsement.endorsementValue = stringToBuffer(EVALUE_ACCESS_NETWORK.toString());
+    configuredEndorsement.validForSeconds = HOURS(6);
+    es->setConfiguredEndorsements({configuredEndorsement});
+    require(es->configuredEndorsementCount() == 1,
+            "endorsement service should expose one configured endorsement before requests begin");
 
     const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
     const auto clientConnectionId = client->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
@@ -316,8 +325,16 @@ void testClientRequestsNetworkAccessEndorsement() {
             "issued endorsement should verify against the endorsement service key");
 
     const double lifetimeSeconds = issuedEndorsement.validUntil().secondsSinceEpoch() - requestStart.secondsSinceEpoch();
-    require(lifetimeSeconds >= DAYS(1) - 5.0 && lifetimeSeconds <= DAYS(1) + 5.0,
-            "issued endorsement should be valid for approximately one day from issuance");
+    require(lifetimeSeconds >= HOURS(6) - 5.0 && lifetimeSeconds <= HOURS(6) + 5.0,
+            "issued endorsement should use the configured validity duration");
+
+    const auto deniedReply = client->beginEndorsementRequest(
+        esNodeId,
+        ETYPE_ROLE,
+        stringToBuffer(EVALUE_ROLE_CLIENT.toString()));
+    require(deniedReply.has_value(), "client should receive a reply for role requests not present in config");
+    require(deniedReply->status == rsp::client::EndorsementResult::Status::Failed,
+            "endorsement service should deny begin requests that do not match configured endorsements");
 
     require(es->removeConnection(esConnectionId),
             "endorsement service should remove its resource manager connection after the endorsement test");
@@ -537,8 +554,8 @@ int main() {
         testClientPingsEndorsementService();
         std::cout << "testClientPingsEndorsementService: PASSED\n";
 
-        testClientRequestsNetworkAccessEndorsement();
-        std::cout << "testClientRequestsNetworkAccessEndorsement: PASSED\n";
+        testClientRequestsNetworkAccessEndorsementFromConfig();
+        std::cout << "testClientRequestsNetworkAccessEndorsementFromConfig: PASSED\n";
 
         testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity();
         std::cout << "testBeginEndorsementRequestWithoutIdentityReturnsUnknownIdentity: PASSED\n";
