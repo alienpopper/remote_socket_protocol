@@ -231,6 +231,7 @@ static std::optional<NameResult> sendNameRequestImpl(
     }
 
     if (!messageClient->send(request)) {
+        std::cerr << "[RSPClient] sendNameRequest: send failed (no connections?)\n";
         std::lock_guard<std::mutex> lock(stateMutex);
         nameReplyPending = false;
         return std::nullopt;
@@ -240,6 +241,10 @@ static std::optional<NameResult> sendNameRequestImpl(
     const bool replied = stateChanged.wait_for(lock, std::chrono::seconds(5), [&]() {
         return stopping || !nameReplyPending;
     });
+
+    if (!replied) {
+        std::cerr << "[RSPClient] sendNameRequest: timed out waiting for reply\n";
+    }
 
     if (!replied || stopping || !nameReplyResult.has_value()) {
         nameReplyPending = false;
