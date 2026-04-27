@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/new_tab_button.cc b/chrome/browser/ui/views/tabs/new_tab_button.cc
-index 67a7c1be1f..8b30f31e02 100644
+index 67a7c1b..8b30f31 100644
 --- a/chrome/browser/ui/views/tabs/new_tab_button.cc
 +++ b/chrome/browser/ui/views/tabs/new_tab_button.cc
 @@ -28,6 +28,7 @@

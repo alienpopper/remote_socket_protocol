@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 0edb2cf51a..24a6cf7196 100644
+index 0edb2cf..24a6cf7 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -76,6 +76,9 @@

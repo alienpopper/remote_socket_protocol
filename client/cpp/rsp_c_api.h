@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include "client/cpp/rsp_client_export.hpp"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,18 +19,18 @@ typedef struct RspBridge* RspBridgeHandle;
 // (e.g. "localhost:8080"), and starts the background run loop.
 // |rs_node_id| is the bsd_sockets Resource Service node ID string.
 // Returns NULL on failure.
-RspBridgeHandle rsp_bridge_create(const char* rm_addr,
-                                   const char* rs_node_id);
+RSPCLIENT_API RspBridgeHandle rsp_bridge_create(const char* rm_addr,
+                                                const char* rs_node_id);
 
 // Opens a TCP connection to |host_port| (e.g. "example.com:80") through the
 // bsd_sockets RS identified by this handle.
 // Returns a raw socket handle (caller must close/closesocket it) or -1 on
 // failure.
-intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port);
+RSPCLIENT_API intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port);
 
 // Stops the RSP client and releases all resources. The handle is invalid
 // after this call.
-void rsp_bridge_destroy(RspBridgeHandle handle);
+RSPCLIENT_API void rsp_bridge_destroy(RspBridgeHandle handle);
 
 #ifdef __cplusplus
 }

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index f208731640..fcf198c0cd 100644
+index f208731..fcf198c 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
 @@ -114,6 +114,10 @@ void CloseWindow(BrowserWindowInterface* browser);

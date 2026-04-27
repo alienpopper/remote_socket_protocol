@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 17a00488bc..826c882d60 100644
+index 17a0048..826c882 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -61,6 +61,7 @@

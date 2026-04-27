@@ -1,5 +1,5 @@
 diff --git a/chrome/common/url_constants.h b/chrome/common/url_constants.h
-index 0f9862d51b..41b31b321d 100644
+index 0f9862d..41b31b3 100644
 --- a/chrome/common/url_constants.h
 +++ b/chrome/common/url_constants.h
 @@ -168,6 +168,9 @@ inline constexpr char kChromeSearchRemoteNtpHost[] = "remote-ntp";
