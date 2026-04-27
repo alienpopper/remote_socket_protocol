@@ -840,7 +840,8 @@ bool ResourceManager::sendLocalMessage(const rsp::proto::RSPMessage& message) co
 
     if (selectedEncoding.encoding == nullptr || selectedEncoding.signingQueue == nullptr) {
         if (message.has_log_record()) {
-            std::cerr << "[RM] sendLocalMessage: no encoding found for log_record destination\n";
+            std::cerr << "[RM] sendLocalMessage: no encoding found for log_record destination "
+                      << message.destination().value() << " (active=" << activeEncodings_.size() << ")\n";
         }
         return false;
     }

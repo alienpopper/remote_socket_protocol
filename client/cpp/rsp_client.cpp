@@ -733,7 +733,11 @@ void RSPClient::runRefreshThread() {
             if (reregister.count(entry.nsNodeId)) {
                 nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
             } else {
-                nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
+                const auto result = nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
+                if (!result.has_value() || result->status == NameResult::Status::NotFound) {
+                    // Record was lost (NS restarted); re-create it.
+                    nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                }
             }
         }
     }
