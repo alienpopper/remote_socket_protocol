@@ -959,6 +959,7 @@ bool ResourceManager::routeAndSend(const rsp::proto::RSPMessage& message) const 
     const auto outgoingMessages = selectedEncoding->outgoingMessages();
     const bool sent = outgoingMessages != nullptr && outgoingMessages->push(message);
     if (!sent && destinationNodeId.has_value()) {
+        std::cerr << "[RM] routeAndSend: push failed for node " << destinationNodeId->toString() << "\n";
         eraseResourceAdvertisement(*destinationNodeId);
     }
 
