@@ -100,17 +100,27 @@ std::string BuildHttpRequest(const network::ResourceRequest& request) {
   return out;
 }
 
-std::string ReadUntil(intptr_t socket, const std::string& delimiter) {
+struct HeaderReadResult {
+  std::string headers;
+  std::string body_prefix;
+};
+
+HeaderReadResult ReadHeaders(intptr_t socket, const std::string& delimiter) {
   std::string buf;
   std::array<char, 4096> tmp;
-  while (buf.find(delimiter) == std::string::npos) {
+  size_t header_end = std::string::npos;
+  while ((header_end = buf.find(delimiter)) == std::string::npos) {
     const SocketIoResult n = SocketRead(socket, tmp.data(), tmp.size());
     if (n <= 0) {
-      return std::string();
+      return HeaderReadResult();
     }
     buf.append(tmp.data(), static_cast<size_t>(n));
   }
-  return buf.substr(0, buf.find(delimiter) + delimiter.size());
+  header_end += delimiter.size();
+  HeaderReadResult result;
+  result.headers = buf.substr(0, header_end);
+  result.body_prefix = buf.substr(header_end);
+  return result;
 }
 
 void ReadAll(intptr_t socket, std::string& out) {
@@ -144,15 +154,16 @@ HttpResult DoHttpRequest(intptr_t socket,
     remaining = remaining.subspan(static_cast<size_t>(n));
   }
 
-  const std::string header_text = ReadUntil(socket, "\r\n\r\n");
-  if (header_text.empty()) {
+  HeaderReadResult header_read = ReadHeaders(socket, "\r\n\r\n");
+  if (header_read.headers.empty()) {
     result.net_error = net::ERR_EMPTY_RESPONSE;
     CloseSocket(socket);
     return result;
   }
 
-  const std::string raw = net::HttpUtil::AssembleRawHeaders(header_text);
+  const std::string raw = net::HttpUtil::AssembleRawHeaders(header_read.headers);
   result.headers = base::MakeRefCounted<net::HttpResponseHeaders>(raw);
+  result.body = std::move(header_read.body_prefix);
   ReadAll(socket, result.body);
   CloseSocket(socket);
   result.net_error = net::OK;
