@@ -303,6 +303,9 @@ PublishStats SubscriptionManager::publish(const rsp::proto::LogRecord& record,
         }
     }
 
+    std::cerr << "[SM] publish: " << candidates.size() << " candidate(s), type="
+              << record.payload().type_url() << "\n";
+
     if (schemaSnapshot == nullptr) {
         return stats;
     }
