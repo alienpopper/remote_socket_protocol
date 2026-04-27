@@ -174,6 +174,11 @@ public:
         rsp::NodeID owner,
         const rsp::GUID& type,
         const rsp::GUID& value);
+    // Watch for any node connecting to RM and call |callback| when one does.
+    // Also subscribes to NodeConnectedEvent if not already subscribed.
+    // Used when no NS was found at startup — the callback can query the RM and
+    // call registerNameWithRefresh when it discovers an NS.
+    RSPCLIENT_API void watchNodeConnectedEvents(std::function<void(rsp::NodeID)> callback);
 
     RSPCLIENT_API std::optional<StreamResult> connectTCPEx(rsp::NodeID nodeId,
                                                            const std::string& hostPort,
@@ -370,6 +375,7 @@ private:
     std::vector<RefreshEntry> refreshRegistrations_;
     std::map<rsp::NodeID, std::string> nsBootIds_;    // last known boot_id per NS node
     std::set<rsp::NodeID> pendingReregistrations_;    // NSes that need re-registration
+    std::function<void(rsp::NodeID)> nodeConnectedCallback_; // called for unknown connecting nodes
     bool logSubActive_ = false;
     std::mutex refreshMutex_;
     std::condition_variable refreshCv_;

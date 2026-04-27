@@ -757,6 +757,19 @@ void RSPClient::sendLogSubscribeToRM() {
     }
 }
 
+void RSPClient::watchNodeConnectedEvents(std::function<void(rsp::NodeID)> callback) {
+    std::lock_guard<std::mutex> lock(refreshMutex_);
+    nodeConnectedCallback_ = std::move(callback);
+    if (!refreshThread_.joinable()) {
+        refreshStopping_ = false;
+        refreshThread_ = std::thread([this] { runRefreshThread(); });
+    }
+    if (!logSubActive_) {
+        sendLogSubscribeToRM();
+        logSubActive_ = true;
+    }
+}
+
 void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
     if (!message.has_log_record() || !message.log_record().has_payload()) {
         return;
@@ -774,29 +787,34 @@ void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(refreshMutex_);
-    bool isKnownNS = false;
-    for (const auto& entry : refreshRegistrations_) {
-        if (entry.nsNodeId == *connectedNodeId) {
-            isKnownNS = true;
-            break;
+    std::function<void(rsp::NodeID)> unknownNodeCallback;
+    {
+        std::lock_guard<std::mutex> lock(refreshMutex_);
+        bool isKnownNS = false;
+        for (const auto& entry : refreshRegistrations_) {
+            if (entry.nsNodeId == *connectedNodeId) {
+                isKnownNS = true;
+                break;
+            }
+        }
+        if (!isKnownNS) {
+            unknownNodeCallback = nodeConnectedCallback_;
+        } else {
+            const std::string newBootId = event.identity().has_boot_id()
+                ? event.identity().boot_id().value()
+                : std::string();
+            const auto it = nsBootIds_.find(*connectedNodeId);
+            if (it != nsBootIds_.end() && it->second == newBootId && !newBootId.empty()) {
+                return; // same boot_id = transport reconnect, no re-registration needed
+            }
+            nsBootIds_[*connectedNodeId] = newBootId;
+            pendingReregistrations_.insert(*connectedNodeId);
+            refreshCv_.notify_all();
         }
     }
-    if (!isKnownNS) {
-        return;
+    if (unknownNodeCallback) {
+        unknownNodeCallback(*connectedNodeId);
     }
-
-    const std::string newBootId = event.identity().has_boot_id()
-        ? event.identity().boot_id().value()
-        : std::string();
-    const auto it = nsBootIds_.find(*connectedNodeId);
-    if (it != nsBootIds_.end() && it->second == newBootId && !newBootId.empty()) {
-        return; // same boot_id = transport reconnect, no re-registration needed
-    }
-
-    nsBootIds_[*connectedNodeId] = newBootId;
-    pendingReregistrations_.insert(*connectedNodeId);
-    refreshCv_.notify_all();
 }
 
 

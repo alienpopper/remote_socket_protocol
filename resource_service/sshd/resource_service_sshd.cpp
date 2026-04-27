@@ -356,6 +356,41 @@ int main(int argc, char* argv[]) {
                 }
                 std::cerr << "[rsp-sshd] Querying RM " << rmNodeIdOpt->toString()
                           << " for name service nodes\n";
+
+                // Extracted as a lambda so the same logic is reused on initial
+                // query and on subsequent NodeConnectedEvent retries.
+                auto tryRegisterWithNS = [&](const rsp::client::ResourceQueryResult& result) {
+                    int count = 0;
+                    for (const auto& svc : result.services) {
+                        bool isNS = false;
+                        for (const auto& url : svc.acceptedTypeUrls) {
+                            if (url == "type.rsp/rsp.proto.NameCreateRequest") {
+                                isNS = true;
+                                break;
+                            }
+                        }
+                        if (!isNS) continue;
+                        const rsp::NodeID nsNodeId = svc.nodeId;
+                        if (nsNodeId == rsp::NodeID{}) continue;
+
+                        const auto reply = nsClient->registerNameWithRefresh(
+                            nsNodeId,
+                            hostname,
+                            sshdNodeId,
+                            rsp::resource_service::kSshdNameType,
+                            sshdNodeId);
+                        if (reply.has_value()) {
+                            std::cerr << "[rsp-sshd] Registered hostname '" << hostname
+                                      << "' with NS node " << nsNodeId.toString() << '\n';
+                            ++count;
+                        } else {
+                            std::cerr << "[rsp-sshd] Warning: nameCreate failed for NS "
+                                      << nsNodeId.toString() << '\n';
+                        }
+                    }
+                    return count;
+                };
+
                 const auto queryResult = nsClient->resourceList(*rmNodeIdOpt, "");
                 if (!queryResult.has_value()) {
                     std::cerr << "[rsp-sshd] Warning: resource list query timed out\n";
@@ -363,36 +398,37 @@ int main(int argc, char* argv[]) {
                 }
                 std::cerr << "[rsp-sshd] Resource list returned "
                           << queryResult->services.size() << " service(s)\n";
-                int nsCount = 0;
-                for (const auto& svc : queryResult->services) {
-                    bool isNS = false;
-                    for (const auto& url : svc.acceptedTypeUrls) {
-                        if (url == "type.rsp/rsp.proto.NameCreateRequest") {
-                            isNS = true;
-                            break;
-                        }
-                    }
-                    if (!isNS) continue;
-                    const rsp::NodeID nsNodeId = svc.nodeId;
-                    if (nsNodeId == rsp::NodeID{}) continue;
-
-                    const auto reply = nsClient->registerNameWithRefresh(
-                        nsNodeId,
-                        hostname,
-                        sshdNodeId,
-                        rsp::resource_service::kSshdNameType,
-                        sshdNodeId);
-                    if (reply.has_value()) {
-                        std::cerr << "[rsp-sshd] Registered hostname '" << hostname
-                                  << "' with NS node " << nsNodeId.toString() << '\n';
-                        ++nsCount;
-                    } else {
-                        std::cerr << "[rsp-sshd] Warning: nameCreate failed for NS "
-                                  << nsNodeId.toString() << '\n';
-                    }
-                }
+                int nsCount = tryRegisterWithNS(*queryResult);
                 if (nsCount == 0) {
-                    std::cerr << "[rsp-sshd] Warning: no name servers found; hostname not registered\n";
+                    std::cerr << "[rsp-sshd] Warning: no name servers found; "
+                                 "will retry when a node connects to RM\n";
+                    // NS is not yet up. Subscribe to NodeConnectedEvent so we
+                    // re-query and register once NS comes online.
+                    nsClient->watchNodeConnectedEvents(
+                        [nsClient, rmNodeIdOpt, hostname, sshdNodeId](rsp::NodeID) {
+                            const auto retryResult =
+                                nsClient->resourceList(*rmNodeIdOpt, "");
+                            if (!retryResult.has_value()) return;
+                            for (const auto& svc : retryResult->services) {
+                                bool isNS = false;
+                                for (const auto& url : svc.acceptedTypeUrls) {
+                                    if (url == "type.rsp/rsp.proto.NameCreateRequest") {
+                                        isNS = true; break;
+                                    }
+                                }
+                                if (!isNS) continue;
+                                const rsp::NodeID nsNodeId = svc.nodeId;
+                                if (nsNodeId == rsp::NodeID{}) continue;
+                                const auto reply = nsClient->registerNameWithRefresh(
+                                    nsNodeId, hostname, sshdNodeId,
+                                    rsp::resource_service::kSshdNameType, sshdNodeId);
+                                if (reply.has_value()) {
+                                    std::cerr << "[rsp-sshd] Registered hostname '"
+                                              << hostname << "' with NS node "
+                                              << nsNodeId.toString() << '\n';
+                                }
+                            }
+                        });
                 }
             } catch (const std::exception& ex) {
                 std::cerr << "[rsp-sshd] Warning: NS registration failed: " << ex.what() << '\n';
