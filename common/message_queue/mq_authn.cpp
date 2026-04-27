@@ -48,10 +48,12 @@ bool validateReceivedIdentity(const rsp::proto::RSPMessage& identityMessage,
 }  // namespace
 
 MessageQueueAuthN::MessageQueueAuthN(rsp::KeyPair keyPair,
+                                     rsp::proto::Uuid bootId,
                                      SuccessCallback success,
                                      FailureCallback failure,
                                      StoreIdentityCallback storeIdentity)
     : keyPair_(std::move(keyPair)),
+      bootId_(std::move(bootId)),
       success_(std::move(success)),
       failure_(std::move(failure)),
       storeIdentity_(std::move(storeIdentity)) {
@@ -93,6 +95,7 @@ bool MessageQueueAuthN::performInitialIdentityExchange(rsp::encoding::Encoding& 
             rsp::proto::RSPMessage identityMessage;
             identityMessage.mutable_identity()->mutable_nonce()->CopyFrom(incomingMessage.challenge_request().nonce());
             *identityMessage.mutable_identity()->mutable_public_key() = keyPair_.publicKey();
+            *identityMessage.mutable_identity()->mutable_boot_id() = bootId_;
             *identityMessage.mutable_signature() = rsp::signMessage(keyPair_, identityMessage);
 
             {

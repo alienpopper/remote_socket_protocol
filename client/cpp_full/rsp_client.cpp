@@ -177,6 +177,7 @@ RSPClient::ClientConnectionID RSPClient::connectToResourceManager(const std::str
 
     const auto authnQueue = std::make_shared<rsp::message_queue::MessageQueueAuthN>(
         keyPair().duplicate(),
+        bootId(),
         [&](const rsp::encoding::EncodingHandle& establishedEncoding) { finish(establishedEncoding, std::string()); },
         [&](const rsp::encoding::EncodingHandle& establishedEncoding) {
             if (establishedEncoding != nullptr) {

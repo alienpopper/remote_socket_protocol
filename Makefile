@@ -723,8 +723,6 @@ $(RSP_CLI_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB)
 RSP_SSHD_OBJECTS := \
 	$(FULL_CLIENT_LIBRARY_OBJECTS) \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
-	$(OBJ_DIR)/common/endorsement/field_resolver.o \
-	$(OBJ_DIR)/common/logging/logging.o \
 	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
@@ -739,8 +737,6 @@ rsp-sshd: $(RSP_SSHD_TARGET)
 RSP_HTTPD_OBJECTS := \
 	$(FULL_CLIENT_LIBRARY_OBJECTS) \
 	$(OBJ_DIR)/common/endorsement/endorsement.o \
-	$(OBJ_DIR)/common/endorsement/field_resolver.o \
-	$(OBJ_DIR)/common/logging/logging.o \
 	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
@@ -994,7 +990,7 @@ $(OBJ_DIR)/common/encoding/protobuf/protobuf_encoding.o: common/message_queue/mq
 
 $(OBJ_DIR)/common/encoding/json/json_encoding.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
+$(OBJ_DIR)/resource_manager/resource_manager.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER) $(LOGGING_GENERATED_HEADER) $(LOGGING_DESC_HEADER)
 
 $(OBJ_DIR)/resource_service/resource_service.o: $(PROTOBUF_GENERATED_HEADER)
 
@@ -1010,7 +1006,7 @@ $(OBJ_DIR)/client/cpp_full/rsp_client.o: common/message_queue/mq.hpp $(PROTOBUF_
 
 $(OBJ_DIR)/client/cpp/rsp_client_message.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
-$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(SSHD_GENERATED_HEADER) $(HTTPD_GENERATED_HEADER) $(NAME_SERVICE_GENERATED_HEADER)
+$(OBJ_DIR)/client/cpp/rsp_client.o: common/message_queue/mq.hpp $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER) $(BSD_SOCKETS_GENERATED_HEADER) $(SSHD_GENERATED_HEADER) $(HTTPD_GENERATED_HEADER) $(NAME_SERVICE_GENERATED_HEADER) $(LOGGING_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/client_test.o: common/message_queue/mq.hpp $(PROTOBUF_GENERATED_HEADER)
 

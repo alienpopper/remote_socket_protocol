@@ -6,6 +6,7 @@
 #include "common/ping_trace.hpp"
 #include "common/service_message.hpp"
 
+#include "logging/logging.pb.h"
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
 #include "resource_service/sshd/sshd.pb.h"
 #include "resource_service/httpd/httpd.pb.h"
@@ -330,6 +331,15 @@ bool RSPClient::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message)
 
     if (isNameServiceReply(message)) {
         handleNameServiceReply(message);
+        return true;
+    }
+
+    if (message.has_log_subscribe_reply()) {
+        return true;
+    }
+
+    if (message.has_log_record()) {
+        handleLogRecord(message);
         return true;
     }
 
@@ -694,6 +704,10 @@ std::optional<NameResult> RSPClient::registerNameWithRefresh(
             refreshStopping_ = false;
             refreshThread_ = std::thread([this] { runRefreshThread(); });
         }
+        if (!logSubActive_) {
+            sendLogSubscribeToRM();
+            logSubActive_ = true;
+        }
     }
     return result;
 }
@@ -702,17 +716,89 @@ void RSPClient::runRefreshThread() {
     static constexpr auto kRefreshInterval = std::chrono::seconds(150); // TTL/2
     while (true) {
         std::vector<RefreshEntry> entries;
+        std::set<rsp::NodeID> reregister;
         {
             std::unique_lock<std::mutex> lock(refreshMutex_);
-            refreshCv_.wait_for(lock, kRefreshInterval, [this] { return refreshStopping_; });
+            refreshCv_.wait_for(lock, kRefreshInterval, [this] {
+                return refreshStopping_ || !pendingReregistrations_.empty();
+            });
             if (refreshStopping_) break;
             entries = refreshRegistrations_;
+            reregister = std::move(pendingReregistrations_);
+            pendingReregistrations_.clear();
+            sendLogSubscribeToRM(); // renew subscription periodically
         }
         for (const auto& entry : entries) {
-            nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
+            if (reregister.count(entry.nsNodeId)) {
+                nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+            } else {
+                nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
+            }
         }
     }
 }
+
+void RSPClient::sendLogSubscribeToRM() {
+    // Send a LogSubscribeRequest to all connected RMs (no destination = broadcast on all connections).
+    // The RM's NodeInputQueue routes this to its own log subscription handler.
+    // Duration is 5 minutes; we renew every kRefreshInterval (150s).
+    for (const auto& connId : messageClient_->connectionIds()) {
+        const auto rmNodeId = messageClient_->peerNodeID(connId);
+        if (!rmNodeId.has_value()) {
+            continue;
+        }
+        rsp::proto::RSPMessage request;
+        *request.mutable_destination() = toProtoNodeId(*rmNodeId);
+        auto* sub = request.mutable_log_subscribe_request();
+        sub->set_payload_type_url("type.rsp/rsp.proto.NodeConnectedEvent");
+        sub->mutable_filter()->mutable_field_exists()->mutable_path()->add_segments("node_id");
+        sub->set_duration_ms(300000); // 5 minutes
+        messageClient_->send(request);
+    }
+}
+
+void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
+    if (!message.has_log_record() || !message.log_record().has_payload()) {
+        return;
+    }
+    const auto& payload = message.log_record().payload();
+    if (payload.type_url() != "type.rsp/rsp.proto.NodeConnectedEvent") {
+        return;
+    }
+    rsp::proto::NodeConnectedEvent event;
+    if (!event.ParseFromString(payload.value())) {
+        return;
+    }
+    const auto connectedNodeId = rsp::nodeIdFromSourceField(event.node_id());
+    if (!connectedNodeId.has_value()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(refreshMutex_);
+    bool isKnownNS = false;
+    for (const auto& entry : refreshRegistrations_) {
+        if (entry.nsNodeId == *connectedNodeId) {
+            isKnownNS = true;
+            break;
+        }
+    }
+    if (!isKnownNS) {
+        return;
+    }
+
+    const std::string newBootId = event.identity().has_boot_id()
+        ? event.identity().boot_id().value()
+        : std::string();
+    const auto it = nsBootIds_.find(*connectedNodeId);
+    if (it != nsBootIds_.end() && it->second == newBootId && !newBootId.empty()) {
+        return; // same boot_id = transport reconnect, no re-registration needed
+    }
+
+    nsBootIds_[*connectedNodeId] = newBootId;
+    pendingReregistrations_.insert(*connectedNodeId);
+    refreshCv_.notify_all();
+}
+
 
 std::optional<StreamResult> RSPClient::connectTCPEx(rsp::NodeID nodeId,
                                                      const std::string& hostPort,

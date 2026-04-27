@@ -17,6 +17,7 @@ public:
                                                      const rsp::proto::Identity& identity)>;
 
     MessageQueueAuthN(rsp::KeyPair keyPair,
+                      rsp::proto::Uuid bootId,
                       SuccessCallback success,
                       FailureCallback failure,
                       StoreIdentityCallback storeIdentity);
@@ -29,6 +30,7 @@ private:
     bool performInitialIdentityExchange(rsp::encoding::Encoding& encoding) const;
 
     rsp::KeyPair keyPair_;
+    rsp::proto::Uuid bootId_;
     SuccessCallback success_;
     FailureCallback failure_;
     StoreIdentityCallback storeIdentity_;

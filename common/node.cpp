@@ -286,6 +286,9 @@ RSPNode::RSPNode(KeyPair keyPair)
       }),
             loggingSubscriptions_(keyPair_.nodeID()) {
     rsp::os::randomFill(instanceSeed_.data(), static_cast<uint32_t>(instanceSeed_.size()));
+    std::string bootIdBytes(16, '\0');
+    rsp::os::randomFill(reinterpret_cast<uint8_t*>(bootIdBytes.data()), 16);
+    bootId_.set_value(bootIdBytes);
     inputQueue_->setWorkerCount(1);
     inputQueue_->start();
     outputQueue_->setWorkerCount(1);
@@ -325,6 +328,10 @@ size_t RSPNode::pendingOutputCount() const {
 
 const std::array<uint8_t, 16>& RSPNode::instanceSeed() const {
     return instanceSeed_;
+}
+
+const rsp::proto::Uuid& RSPNode::bootId() const {
+    return bootId_;
 }
 
 const KeyPair& RSPNode::keyPair() const {

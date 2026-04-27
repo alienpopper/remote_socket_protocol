@@ -53,6 +53,9 @@ RSPClientMessage::Ptr RSPClientMessage::create(KeyPair keyPair) {
 
 RSPClientMessage::RSPClientMessage(KeyPair keyPair)
     : keyPair_(std::move(keyPair)), incomingMessages_(std::make_shared<rsp::BufferedMessageQueue>()) {
+    std::string bootIdBytes(16, '\0');
+    rsp::os::randomFill(reinterpret_cast<uint8_t*>(bootIdBytes.data()), 16);
+    bootId_.set_value(bootIdBytes);
 }
 
 int RSPClientMessage::run() const {
@@ -95,6 +98,7 @@ std::optional<RSPClientMessage::ClientConnectionID> RSPClientMessage::connectToR
 
     const auto authnQueue = std::make_shared<rsp::message_queue::MessageQueueAuthN>(
         keyPair_.duplicate(),
+        bootId_,
         [&](const rsp::encoding::EncodingHandle& establishedEncoding) { finish(establishedEncoding, std::string()); },
         [&](const rsp::encoding::EncodingHandle& establishedEncoding) {
             if (establishedEncoding != nullptr) {
@@ -240,6 +244,10 @@ std::optional<rsp::NodeID> RSPClientMessage::peerNodeID(ClientConnectionID conne
 
 rsp::NodeID RSPClientMessage::nodeId() const {
     return keyPair_.nodeID();
+}
+
+const rsp::proto::Uuid& RSPClientMessage::bootId() const {
+    return bootId_;
 }
 
 bool RSPClientMessage::hasConnections() const {

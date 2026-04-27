@@ -7,6 +7,10 @@
 #include "common/ping_trace.hpp"
 #include "os/os_random.hpp"
 
+#include "logging/logging.pb.h"
+#include "logging/logging_desc.hpp"
+#include "common/service_message.hpp"
+
 #include <cstring>
 #include <cctype>
 #include <functional>
@@ -22,6 +26,15 @@
 namespace rsp::resource_manager {
 
 namespace {
+
+SchemaSnapshot buildLoggingSchemaSnapshot() {
+    rsp::proto::ServiceSchema schema;
+    schema.set_proto_file_name("logging/logging.proto");
+    schema.set_proto_file_descriptor_set(
+        std::string(reinterpret_cast<const char*>(rsp::schema::kLoggingDescriptor),
+                    rsp::schema::kLoggingDescriptorSize));
+    return SchemaSnapshot({schema});
+}
 
 rsp::proto::NodeId toProtoNodeId(const rsp::NodeID& nodeId) {
     rsp::proto::NodeId protoNodeId;
@@ -506,11 +519,13 @@ ResourceManager::ResourceManager()
           })),
       authnQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthN>(
           keyPair().duplicate(),
+          bootId(),
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNSuccess(encoding); },
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNFailure(encoding); },
           [this](const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity) {
               cacheAuthenticatedIdentity(peerNodeId, identity);
-          })) {
+          })),
+      loggingSchemaSnapshot_(buildLoggingSchemaSnapshot()) {
     incomingMessages_->setWorkerCount(1);
     incomingMessages_->start();
         rebuildAuthorizationQueue();
@@ -543,12 +558,14 @@ ResourceManager::ResourceManager(std::vector<rsp::transport::ListeningTransportH
           })),
       authnQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthN>(
           keyPair().duplicate(),
+          bootId(),
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNSuccess(encoding); },
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNFailure(encoding); },
           [this](const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity) {
               cacheAuthenticatedIdentity(peerNodeId, identity);
           })),
-      clientTransports_(std::move(clientTransports)) {
+      clientTransports_(std::move(clientTransports)),
+      loggingSchemaSnapshot_(buildLoggingSchemaSnapshot()) {
     incomingMessages_->setWorkerCount(1);
     incomingMessages_->start();
         rebuildAuthorizationQueue();
@@ -583,12 +600,14 @@ ResourceManager::ResourceManager(rsp::KeyPair keyPair,
           })),
       authnQueue_(std::make_shared<rsp::message_queue::MessageQueueAuthN>(
           this->keyPair().duplicate(),
+          this->bootId(),
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNSuccess(encoding); },
           [this](const rsp::encoding::EncodingHandle& encoding) { handleAuthNFailure(encoding); },
           [this](const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity) {
               cacheAuthenticatedIdentity(peerNodeId, identity);
           })),
-      clientTransports_(std::move(clientTransports)) {
+      clientTransports_(std::move(clientTransports)),
+      loggingSchemaSnapshot_(buildLoggingSchemaSnapshot()) {
     incomingMessages_->setWorkerCount(1);
     incomingMessages_->start();
         rebuildAuthorizationQueue();
@@ -1078,6 +1097,13 @@ void ResourceManager::cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, 
     *message.mutable_source() = toProtoNodeId(peerNodeId);
     *message.add_identities() = identity;
     observeMessage(message);
+
+    rsp::proto::NodeConnectedEvent event;
+    *event.mutable_node_id() = toProtoNodeId(peerNodeId);
+    *event.mutable_identity() = identity;
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    publishLogRecord(record, &loggingSchemaSnapshot_);
 }
 
 std::shared_ptr<const rsp::KeyPair> ResourceManager::verificationKeyForNodeId(const rsp::NodeID& nodeId) const {

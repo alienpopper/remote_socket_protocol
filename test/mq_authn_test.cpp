@@ -115,6 +115,7 @@ void testAuthNSuccess() {
 
     rsp::message_queue::MessageQueueAuthN queue(
         localKeyPair.duplicate(),
+        rsp::proto::Uuid(),
         [&successCalled](const rsp::encoding::EncodingHandle&) { successCalled = true; },
         [&failureCalled](const rsp::encoding::EncodingHandle&) { failureCalled = true; },
         [&storedIdentity](const rsp::NodeID&, const rsp::proto::Identity& identity) { storedIdentity = identity; });
@@ -188,6 +189,7 @@ void testAuthNFailureOnInvalidIdentity() {
 
     rsp::message_queue::MessageQueueAuthN queue(
         localKeyPair.duplicate(),
+        rsp::proto::Uuid(),
         [&successCalled](const rsp::encoding::EncodingHandle&) { successCalled = true; },
         [&failureCalled](const rsp::encoding::EncodingHandle&) { failureCalled = true; },
         [&storeIdentityCalled](const rsp::NodeID&, const rsp::proto::Identity&) { storeIdentityCalled = true; });

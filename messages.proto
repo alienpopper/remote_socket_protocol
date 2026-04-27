@@ -100,6 +100,7 @@ message Endorsement {
 message Identity {
     optional Uuid nonce = 1;
     PublicKey public_key = 2;
+    optional Uuid boot_id = 3;
 }
 
 //Reply should be an Identity

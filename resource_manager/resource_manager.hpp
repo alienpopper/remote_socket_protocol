@@ -89,6 +89,7 @@ private:
     ConnectionQueueHandle handshakeQueue_;
     EncodingQueueHandle authnQueue_;
     std::vector<rsp::transport::ListeningTransportHandle> clientTransports_;
+    SchemaSnapshot loggingSchemaSnapshot_;
 };
 
 }  // namespace rsp::resource_manager

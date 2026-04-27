@@ -5,6 +5,7 @@
 #include "common/keypair.hpp"
 #include "common/message_queue/mq.hpp"
 #include "common/transport/transport.hpp"
+#include "messages.pb.h"
 
 #include <cstddef>
 #include <map>
@@ -48,6 +49,7 @@ public:
     RSPCLIENT_API std::size_t pendingMessageCount() const;
     RSPCLIENT_API std::optional<rsp::NodeID> peerNodeID(ClientConnectionID connectionId) const;
     RSPCLIENT_API rsp::NodeID nodeId() const;
+    RSPCLIENT_API const rsp::proto::Uuid& bootId() const;
 
 private:
     struct ClientConnectionState {
@@ -63,6 +65,7 @@ private:
     std::optional<ClientConnectionState> connectionState(ClientConnectionID connectionId) const;
 
     KeyPair keyPair_;
+    rsp::proto::Uuid bootId_;
     mutable std::mutex connectionsMutex_;
     std::map<ClientConnectionID, ClientConnectionState> connections_;
     rsp::MessageQueueHandle incomingMessages_;

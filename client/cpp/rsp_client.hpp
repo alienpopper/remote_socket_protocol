@@ -368,11 +368,16 @@ private:
         rsp::GUID value;
     };
     std::vector<RefreshEntry> refreshRegistrations_;
+    std::map<rsp::NodeID, std::string> nsBootIds_;    // last known boot_id per NS node
+    std::set<rsp::NodeID> pendingReregistrations_;    // NSes that need re-registration
+    bool logSubActive_ = false;
     std::mutex refreshMutex_;
     std::condition_variable refreshCv_;
     bool refreshStopping_ = false;
     std::thread refreshThread_;
     void runRefreshThread();
+    void sendLogSubscribeToRM();
+    void handleLogRecord(const rsp::proto::RSPMessage& message);
 };
 
 }  // namespace rsp::client

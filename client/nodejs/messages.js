@@ -436,6 +436,15 @@ const SCHEMA = {
                     "repeated": false,
                     "has_presence": true,
                     "oneof": null
+                },
+                {
+                    "name": "boot_id",
+                    "number": 3,
+                    "kind": "message",
+                    "type": "Uuid",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
                 }
             ],
             "oneofs": []
@@ -3880,6 +3889,89 @@ const SCHEMA = {
                 {
                     "name": "reason",
                     "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NodeConnectedEvent": {
+            "fields": [
+                {
+                    "name": "node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "identity",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "Identity",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NodeDisconnectedEvent": {
+            "fields": [
+                {
+                    "name": "node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NodeStartedEvent": {
+            "fields": [
+                {
+                    "name": "node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "service_type",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null
+                }
+            ],
+            "oneofs": []
+        },
+        "NodeStoppingEvent": {
+            "fields": [
+                {
+                    "name": "node_id",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "NodeId",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null
+                },
+                {
+                    "name": "service_type",
+                    "number": 2,
                     "kind": "scalar",
                     "type": "string",
                     "repeated": false,

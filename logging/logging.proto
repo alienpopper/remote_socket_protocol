@@ -18,3 +18,28 @@ message LogCounterSample {
 message LogDeliveryFailure {
     string reason = 1;
 }
+
+// Emitted by the RM when a peer completes identity authentication.
+// boot_id inside identity changes on each process restart; same boot_id
+// means a transport reconnect (no re-registration needed).
+message NodeConnectedEvent {
+    NodeId node_id = 1;
+    Identity identity = 2;
+}
+
+// Emitted by the RM when a peer's encoding connection is dropped.
+message NodeDisconnectedEvent {
+    NodeId node_id = 1;
+}
+
+// Emitted by a node after it is fully started and ready to serve.
+message NodeStartedEvent {
+    NodeId node_id = 1;
+    string service_type = 2;
+}
+
+// Emitted by a node just before it stops (best-effort; not emitted on crash).
+message NodeStoppingEvent {
+    NodeId node_id = 1;
+    string service_type = 2;
+}

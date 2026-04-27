@@ -11,6 +11,7 @@
 #include "common/logging/logging.hpp"
 #include "common/keypair.hpp"
 #include "common/message_queue/mq.hpp"
+#include "messages.pb.h"
 
 namespace rsp {
 
@@ -73,6 +74,7 @@ protected:
                           const rsp::resource_manager::SchemaSnapshot* schemaSnapshot);
 
     const std::array<uint8_t, 16>& instanceSeed() const;
+    const rsp::proto::Uuid& bootId() const;
     const KeyPair& keyPair() const;
     rsp::MessageQueueHandle inputQueue() const;
     rsp::MessageQueueHandle outputQueue() const;
@@ -83,6 +85,7 @@ private:
 
     KeyPair keyPair_;
     std::array<uint8_t, 16> instanceSeed_;
+    rsp::proto::Uuid bootId_;
     rsp::MessageQueueHandle inputQueue_;
     rsp::MessageQueueHandle outputQueue_;
     mutable IdentityCache identityCache_;
