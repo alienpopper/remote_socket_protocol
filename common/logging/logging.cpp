@@ -307,22 +307,27 @@ PublishStats SubscriptionManager::publish(const rsp::proto::LogRecord& record,
               << record.payload().type_url() << "\n";
 
     if (schemaSnapshot == nullptr) {
+        std::cerr << "[SM] publish: no schemaSnapshot, skipping delivery\n";
         return stats;
     }
 
     const auto* payloadDescriptor = schemaSnapshot->findMessageDescriptor(typeNameFromUrl(record.payload().type_url()));
     auto* payloadFactory = schemaSnapshot->messageFactory();
     if (payloadDescriptor == nullptr || payloadFactory == nullptr) {
+        std::cerr << "[SM] publish: payloadDescriptor=" << (payloadDescriptor ? "ok" : "null")
+                  << " payloadFactory=" << (payloadFactory ? "ok" : "null") << "\n";
         return stats;
     }
 
     const auto* payloadPrototype = payloadFactory->GetPrototype(payloadDescriptor);
     if (payloadPrototype == nullptr) {
+        std::cerr << "[SM] publish: payloadPrototype null\n";
         return stats;
     }
 
     std::unique_ptr<google::protobuf::Message> unpackedPayload(payloadPrototype->New());
     if (unpackedPayload == nullptr || !unpackedPayload->ParseFromString(record.payload().value())) {
+        std::cerr << "[SM] publish: payload parse failed\n";
         return stats;
     }
 
@@ -333,10 +338,13 @@ PublishStats SubscriptionManager::publish(const rsp::proto::LogRecord& record,
         }
 
         if (candidate.payloadTypeUrl != record.payload().type_url()) {
+            std::cerr << "[SM] publish: type_url mismatch: candidate=" << candidate.payloadTypeUrl
+                      << " record=" << record.payload().type_url() << "\n";
             continue;
         }
 
         if (!evaluateFilterTree(candidate.filter, *unpackedPayload, schemaSnapshot)) {
+            std::cerr << "[SM] publish: filter rejected candidate\n";
             continue;
         }
 
@@ -359,11 +367,13 @@ PublishStats SubscriptionManager::publish(const rsp::proto::LogRecord& record,
         *envelope.mutable_log_record() = deliverRecord;
 
         if (!deliver(envelope)) {
+            std::cerr << "[SM] publish: deliver failed, removing subscriptions for node\n";
             failedSubscribers.insert(candidate.subscriberNodeId);
             stats.removed_subscriptions_on_failure += removeAllForNode(candidate.subscriberNodeId);
             continue;
         }
 
+        std::cerr << "[SM] publish: delivered to " << candidate.subscriberNodeId.toString() << "\n";
         ++stats.delivered_messages;
     }
 
