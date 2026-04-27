@@ -10,7 +10,6 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/rsp/rsp_config.h"
 #include "chrome/browser/rsp/rsp_connection_manager.h"
@@ -33,8 +32,8 @@ namespace rsp {
 
 namespace {
 
-// Handles a single rsp://host[:port]/path request by opening a TCP socket
-// through the bsd_sockets RS and performing a plain HTTP/1.1 request.
+// Handles a single rsp://<httpd-node-id>/path request by opening a plain HTTP
+// byte stream to an RSP httpd Resource Service and performing HTTP/1.1 over it.
 class RspSchemeURLLoader : public network::mojom::URLLoader {
  public:
   RspSchemeURLLoader(
@@ -48,12 +47,12 @@ class RspSchemeURLLoader : public network::mojom::URLLoader {
   ~RspSchemeURLLoader() override = default;
 
   void Start() {
-    const std::string host = std::string(request_.url.host());
-    const int port = request_.url.EffectiveIntPort();
+    const std::string httpd_node_id = std::string(request_.url.host());
+    const std::string virtual_host = std::string(request_.url.host());
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&RspSchemeURLLoader::DoConnect, connection_key_, host,
-                       port),
+        base::BindOnce(&RspSchemeURLLoader::DoConnect, connection_key_,
+                       httpd_node_id, virtual_host),
         base::BindOnce(&RspSchemeURLLoader::OnConnected,
                        weak_factory_.GetWeakPtr()));
   }
@@ -66,12 +65,10 @@ class RspSchemeURLLoader : public network::mojom::URLLoader {
 
  private:
   static intptr_t DoConnect(const std::string& connection_key,
-                            const std::string& host,
-                            int port) {
-    const std::string host_port =
-        base::StringPrintf("%s:%d", host.c_str(), port);
-    return RspConnectionManager::GetInstance()->ConnectTCPSocket(connection_key,
-                                                                 host_port);
+                            const std::string& httpd_node_id,
+                            const std::string& virtual_host) {
+    return RspConnectionManager::GetInstance()->ConnectHttpSocket(
+        connection_key, httpd_node_id, virtual_host);
   }
 
   void OnConnected(intptr_t socket) {
@@ -80,7 +77,8 @@ class RspSchemeURLLoader : public network::mojom::URLLoader {
           network::URLLoaderCompletionStatus(net::ERR_CONNECTION_FAILED));
       return;
     }
-    // Rewrite rsp:// → http:// so the HTTP helper sends the right scheme.
+    // Rewrite rsp:// → http:// so the HTTP helper emits plain HTTP bytes over
+    // the already-established RSP httpd stream. TLS is intentionally not used.
     network::ResourceRequest http_request = request_;
     GURL::Replacements rep;
     rep.SetSchemeStr("http");
@@ -143,7 +141,7 @@ void RspSchemeURLLoaderFactory::Create(
   const std::string rs_node_id = prefs->GetString(prefs::kRspDefaultRsNodeId);
 
   std::string connection_key;
-  if (!rm_addr.empty() && !rs_node_id.empty()) {
+  if (!rm_addr.empty()) {
     RspTabConfig config;
     config.rm_addr = rm_addr;
     config.rs_node_id = rs_node_id;

@@ -108,6 +108,10 @@ HttpdResourceService::Ptr HttpdResourceService::create(const HttpdConfig& cfg) {
 
 HttpdResourceService::HttpdResourceService(rsp::KeyPair keyPair, const HttpdConfig& cfg)
     : BsdSocketsResourceService(std::move(keyPair)), cfg_(cfg) {
+    if (!rsp::os::initializeSockets()) {
+        throw std::runtime_error("[rsp-httpd] Failed to initialize socket subsystem");
+    }
+    builtinSocketsInitialized_ = true;
     startBuiltinServer();
 }
 
@@ -120,6 +124,10 @@ HttpdResourceService::~HttpdResourceService() {
     }
     if (builtinThread_.joinable()) {
         builtinThread_.join();
+    }
+    if (builtinSocketsInitialized_) {
+        rsp::os::shutdownSockets();
+        builtinSocketsInitialized_ = false;
     }
 }
 

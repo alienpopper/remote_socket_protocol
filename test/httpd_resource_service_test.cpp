@@ -8,6 +8,7 @@
 #include "resource_manager/resource_manager.hpp"
 #include "os/os_socket.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <functional>
@@ -33,6 +34,20 @@ bool waitForCondition(const std::function<bool()>& condition) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     return condition();
+}
+
+bool sendAll(rsp::os::SocketHandle socket, const std::string& data) {
+    const auto* bytes = reinterpret_cast<const uint8_t*>(data.data());
+    std::size_t remaining = data.size();
+    while (remaining > 0) {
+        const int sent = rsp::os::sendSocket(socket, bytes, static_cast<uint32_t>(remaining));
+        if (sent <= 0) {
+            return false;
+        }
+        bytes += sent;
+        remaining -= static_cast<std::size_t>(sent);
+    }
+    return true;
 }
 
 std::optional<rsp::NodeID> fromProtoNodeId(const rsp::proto::NodeId& nodeId) {
@@ -265,6 +280,80 @@ void testClientConnectsToHttpdAndExchangesData() {
     serverTransport->stop();
 }
 
+// ---------------------------------------------------------------------------
+// testClientConnectsToHttpdSocketAndExchangesData
+//
+// Exercises the native socket bridge used by Chromium's rsp:// loader: the
+// client sends ConnectHttp with async stream data, bridges the RSP stream to a
+// local socket pair, and performs a plain HTTP/1.1 exchange over that socket.
+// ---------------------------------------------------------------------------
+
+void testClientConnectsToHttpdSocketAndExchangesData() {
+    auto serverTransport = std::make_shared<rsp::transport::MemoryTransport>();
+
+    const std::string channel =
+        "httpd-socket-test-" + std::to_string(rsp::GUID().high()) + "-" + std::to_string(rsp::GUID().low());
+    require(serverTransport->listen(channel), "memory transport listener should start");
+    const std::string transportSpec = "memory:" + channel;
+
+    class TestRM : public rsp::resource_manager::ResourceManager {
+    public:
+        using rsp::resource_manager::ResourceManager::ResourceManager;
+    };
+    TestRM resourceManager({serverTransport});
+
+    rsp::resource_service::HttpdConfig cfg;
+    cfg.rspTransport  = transportSpec;
+    cfg.listenAddress = "127.0.0.1:0";
+    cfg.serverName    = "test-httpd-socket";
+
+    auto httpdService = rsp::resource_service::HttpdResourceService::create(cfg);
+    const rsp::NodeID httpdNodeId = httpdService->nodeId();
+
+    const auto httpdConnId = httpdService->connectToResourceManager(
+        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
+    require(httpdConnId != rsp::GUID{}, "httpd service should connect");
+
+    auto client = rsp::client::RSPClient::create();
+    const auto clientConnId = client->connectToResourceManager(
+        transportSpec, rsp::message_queue::kAsciiHandshakeEncoding).value();
+    require(client->hasConnection(clientConnId), "client should connect");
+
+    require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
+            "resource manager should authenticate both connections");
+    require(waitForCondition([&resourceManager, &httpdNodeId]() {
+                return resourceManager.hasResourceAdvertisement(httpdNodeId);
+            }),
+            "resource manager should have the httpd advertisement");
+
+    const auto socket = client->connectHttpSocket(httpdNodeId, 2000, "test-httpd-socket");
+    require(socket.has_value(), "client should open a bridged HTTP socket");
+
+    const std::string httpRequest =
+        "GET /socket-bridge HTTP/1.1\r\n"
+        "Host: test-httpd-socket\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+    require(sendAll(*socket, httpRequest), "client should send HTTP request through bridged socket");
+
+    std::array<uint8_t, 4096> buffer{};
+    const int received = rsp::os::recvSocket(*socket, buffer.data(), static_cast<uint32_t>(buffer.size()));
+    require(received > 0, "client should receive HTTP response through bridged socket");
+    const std::string response(reinterpret_cast<const char*>(buffer.data()), static_cast<std::size_t>(received));
+
+    require(response.find("HTTP/1.1 200 OK") != std::string::npos,
+            "HTTP socket response should contain '200 OK'");
+    require(response.find("test-httpd-socket") != std::string::npos,
+            "HTTP socket response body should contain the server name");
+    require(response.find("/socket-bridge") != std::string::npos,
+            "HTTP socket response body should echo the request path");
+
+    rsp::os::closeSocket(*socket);
+    httpdService->removeConnection(httpdConnId);
+    client->removeConnection(clientConnId);
+    serverTransport->stop();
+}
+
 }  // namespace
 
 int main() {
@@ -272,6 +361,7 @@ int main() {
         testHttpdRegistersWithResourceManager();
         testClientDiscoversHttpdThroughResourceQuery();
         testClientConnectsToHttpdAndExchangesData();
+        testClientConnectsToHttpdSocketAndExchangesData();
         std::cout << "httpd resource service test passed" << std::endl;
         return 0;
     } catch (const std::exception& ex) {

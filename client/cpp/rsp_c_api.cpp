@@ -6,6 +6,7 @@
 
 #include "client/cpp/rsp_client.hpp"
 
+#include <exception>
 #include <string>
 #include <thread>
 
@@ -26,8 +27,7 @@ RspBridgeHandle rsp_bridge_create(const char* rm_addr,
     auto client = rsp::client::RSPClient::create();
     const std::string transport = std::string("tcp:") + rm_addr;
 
-    auto conn_id = client->connectToResourceManager(transport,
-                                                     "encoding:protobuf");
+    auto conn_id = client->connectToResourceManager(transport, "protobuf");
     if (!conn_id.has_value()) {
         return nullptr;
     }
@@ -56,6 +56,26 @@ intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port) {
         /*retryMs=*/1000);
 
     return socket.has_value() ? static_cast<intptr_t>(*socket) : -1;
+}
+
+intptr_t rsp_bridge_connect_http(RspBridgeHandle handle,
+                                 const char* httpd_node_id,
+                                 const char* virtual_host) {
+    if (!handle || !httpd_node_id) {
+        return -1;
+    }
+
+    try {
+        const rsp::NodeID node_id(httpd_node_id);
+        auto socket = handle->client->connectHttpSocket(
+            node_id,
+            /*timeoutMs=*/5000,
+            virtual_host == nullptr ? std::string() : std::string(virtual_host));
+
+        return socket.has_value() ? static_cast<intptr_t>(*socket) : -1;
+    } catch (const std::exception&) {
+        return -1;
+    }
 }
 
 void rsp_bridge_destroy(RspBridgeHandle handle) {

@@ -16,9 +16,8 @@ class BrowserContext;
 namespace rsp {
 
 // URLLoaderFactory for the rsp:// scheme.
-// Phase 2 stub: rejects all requests with net::ERR_NOT_IMPLEMENTED.
-// Future phases will resolve rsp:// names via the RSP Name Service and
-// route the resulting connections through the RSP network stack.
+// rsp://<node-id>/... opens a plain HTTP stream to an RSP httpd Resource
+// Service node and sends HTTP/1.1 over RSP. TLS is intentionally not used.
 class RspSchemeURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
  public:
   // Creates a factory and binds it to |factory_receiver|.  The factory

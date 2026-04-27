@@ -119,6 +119,7 @@ private:
     void handleBuiltinRequest(rsp::os::SocketHandle clientSock);
 
     HttpdConfig cfg_;
+    bool builtinSocketsInitialized_{false};
     std::atomic<bool>    builtinStopping_{false};
     std::atomic<uint16_t> builtinPort_{0};
     rsp::os::SocketHandle builtinListenSock_{-1};

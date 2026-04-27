@@ -50,6 +50,14 @@ class RspConnectionManager {
   intptr_t ConnectTCPSocket(const std::string& connection_key,
                             const std::string& host_port);
 
+  // Opens a plain HTTP byte stream to an httpd Resource Service node. The
+  // target node is supplied per rsp:// URL authority. TLS is not used.
+  // Returns the raw socket handle on success, or -1 on failure.
+  // The caller owns the socket and must close/closesocket it when done.
+  intptr_t ConnectHttpSocket(const std::string& connection_key,
+                             const std::string& httpd_node_id,
+                             const std::string& virtual_host);
+
   RspConnectionManager(const RspConnectionManager&) = delete;
   RspConnectionManager& operator=(const RspConnectionManager&) = delete;
 

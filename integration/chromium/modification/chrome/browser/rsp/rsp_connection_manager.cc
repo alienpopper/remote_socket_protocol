@@ -131,3 +131,32 @@ intptr_t RspConnectionManager::ConnectTCPSocket(
   }
   return socket;
 }
+
+intptr_t RspConnectionManager::ConnectHttpSocket(
+    const std::string& connection_key,
+    const std::string& httpd_node_id,
+    const std::string& virtual_host) {
+  RspBridgeHandle bridge = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    auto it = impl_->connections.find(connection_key);
+    if (it == impl_->connections.end()) {
+      LOG(ERROR) << "RspConnectionManager::ConnectHttpSocket: key not found: "
+                 << connection_key;
+      return -1;
+    }
+    bridge = it->second.bridge;
+  }
+
+  if (!bridge) {
+    return -1;
+  }
+
+  const intptr_t socket = rsp_bridge_connect_http(
+      bridge, httpd_node_id.c_str(), virtual_host.c_str());
+  if (socket < 0) {
+    LOG(WARNING) << "RspConnectionManager::ConnectHttpSocket: failed for "
+                 << httpd_node_id;
+  }
+  return socket;
+}

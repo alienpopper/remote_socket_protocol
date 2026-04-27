@@ -266,11 +266,16 @@ public:
     RSPCLIENT_API std::optional<StreamResult> connectHttpEx(rsp::NodeID nodeId,
                                                             uint32_t timeoutMilliseconds = 0,
                                                             bool asyncData = false,
-                                                            bool shareSocket = false);
+                                                            bool shareSocket = false,
+                                                            const std::string& virtualHost = std::string());
     RSPCLIENT_API std::optional<rsp::GUID> connectHttp(rsp::NodeID nodeId,
                                                         uint32_t timeoutMilliseconds = 0,
                                                         bool asyncData = false,
-                                                        bool shareSocket = false);
+                                                        bool shareSocket = false,
+                                                        const std::string& virtualHost = std::string());
+    RSPCLIENT_API std::optional<rsp::os::SocketHandle> connectHttpSocket(rsp::NodeID nodeId,
+                                                                          uint32_t timeoutMilliseconds = 0,
+                                                                          const std::string& virtualHost = std::string());
     RSPCLIENT_API bool streamSend(const rsp::GUID& socketId, const std::string& data);
     RSPCLIENT_API std::optional<StreamResult> streamRecvEx(const rsp::GUID& socketId,
                                                            uint32_t maxBytes = 4096,

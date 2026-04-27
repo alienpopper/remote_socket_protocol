@@ -1326,12 +1326,16 @@ std::optional<rsp::os::SocketHandle> RSPClient::connectSshdSocket(rsp::NodeID no
 std::optional<StreamResult> RSPClient::connectHttpEx(rsp::NodeID nodeId,
                                                       uint32_t timeoutMilliseconds,
                                                       bool asyncData,
-                                                      bool shareSocket) {
+                                                      bool shareSocket,
+                                                      const std::string& virtualHost) {
     const rsp::GUID socketId;
     rsp::proto::RSPMessage request;
     *request.mutable_destination() = toProtoNodeId(nodeId);
     rsp::proto::ConnectHttp connectReq;
     *connectReq.mutable_stream_id() = toProtoStreamId(socketId);
+    if (!virtualHost.empty()) {
+        connectReq.set_virtual_host(virtualHost);
+    }
     if (timeoutMilliseconds > 0) {
         connectReq.set_timeout_ms(timeoutMilliseconds);
     }
@@ -1377,13 +1381,40 @@ std::optional<StreamResult> RSPClient::connectHttpEx(rsp::NodeID nodeId,
 std::optional<rsp::GUID> RSPClient::connectHttp(rsp::NodeID nodeId,
                                                   uint32_t timeoutMilliseconds,
                                                   bool asyncData,
-                                                  bool shareSocket) {
-    const auto reply = connectHttpEx(nodeId, timeoutMilliseconds, asyncData, shareSocket);
+                                                  bool shareSocket,
+                                                  const std::string& virtualHost) {
+    const auto reply = connectHttpEx(nodeId, timeoutMilliseconds, asyncData, shareSocket, virtualHost);
     if (!reply.has_value() || reply->status != StreamStatus::Success) {
         return std::nullopt;
     }
 
     return reply->streamId;
+}
+
+std::optional<rsp::os::SocketHandle> RSPClient::connectHttpSocket(rsp::NodeID nodeId,
+                                                                    uint32_t timeoutMilliseconds,
+                                                                    const std::string& virtualHost) {
+    rsp::os::SocketHandle applicationSocket = rsp::os::invalidSocket();
+    rsp::os::SocketHandle bridgeSocket = rsp::os::invalidSocket();
+    if (!rsp::os::createSocketPair(applicationSocket, bridgeSocket)) {
+        return std::nullopt;
+    }
+
+    const auto socketId = connectHttp(nodeId,
+                                      timeoutMilliseconds,
+                                      /*asyncData=*/true,
+                                      /*shareSocket=*/false,
+                                      virtualHost);
+    if (!socketId.has_value()) {
+        rsp::os::closeSocket(applicationSocket);
+        rsp::os::closeSocket(bridgeSocket);
+        return std::nullopt;
+    }
+
+    const auto bridgeState = attachNativeStreamBridge(*socketId, bridgeSocket);
+    startNativeStreamBridgeWorker(*socketId, bridgeState);
+
+    return applicationSocket;
 }
 
 std::shared_ptr<RSPClient::NativeStreamBridgeState> RSPClient::attachNativeStreamBridge(

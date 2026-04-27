@@ -28,6 +28,15 @@ RSPCLIENT_API RspBridgeHandle rsp_bridge_create(const char* rm_addr,
 // failure.
 RSPCLIENT_API intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port);
 
+// Opens a plain HTTP byte stream to an httpd Resource Service node. |httpd_node_id|
+// is the RSP node ID from the rsp:// authority; |virtual_host| is optional and
+// is forwarded in ConnectHttp for vhost routing. TLS is intentionally disabled.
+// Returns a raw socket handle (caller must close/closesocket it) or -1 on
+// failure.
+RSPCLIENT_API intptr_t rsp_bridge_connect_http(RspBridgeHandle handle,
+                                               const char* httpd_node_id,
+                                               const char* virtual_host);
+
 // Stops the RSP client and releases all resources. The handle is invalid
 // after this call.
 RSPCLIENT_API void rsp_bridge_destroy(RspBridgeHandle handle);
