@@ -742,11 +742,15 @@ void RSPClient::sendLogSubscribeToRM() {
     // Send a LogSubscribeRequest to all connected RMs.
     // Must include source so the RM can identify the subscriber via senderNodeIdFromMessage().
     // Duration is 5 minutes; we renew every kRefreshInterval (150s).
-    for (const auto& connId : messageClient_->connectionIds()) {
+    const auto connIds = messageClient_->connectionIds();
+    std::cerr << "[RSPClient] sendLogSubscribeToRM: " << connIds.size() << " connection(s)\n";
+    for (const auto& connId : connIds) {
         const auto rmNodeId = messageClient_->peerNodeID(connId);
         if (!rmNodeId.has_value()) {
+            std::cerr << "[RSPClient] sendLogSubscribeToRM: no peerNodeId for connection\n";
             continue;
         }
+        std::cerr << "[RSPClient] sendLogSubscribeToRM: subscribing to RM " << rmNodeId->toString() << "\n";
         rsp::proto::RSPMessage request;
         *request.mutable_source() = toProtoNodeId(messageClient_->nodeId());
         *request.mutable_destination() = toProtoNodeId(*rmNodeId);
@@ -759,10 +763,12 @@ void RSPClient::sendLogSubscribeToRM() {
 }
 
 void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
+    std::cerr << "[RSPClient] handleLogRecord called\n";
     if (!message.has_log_record() || !message.log_record().has_payload()) {
         return;
     }
     const auto& payload = message.log_record().payload();
+    std::cerr << "[RSPClient] handleLogRecord: type_url=" << payload.type_url() << "\n";
     if (payload.type_url() != "type.rsp/rsp.proto.NodeConnectedEvent") {
         return;
     }

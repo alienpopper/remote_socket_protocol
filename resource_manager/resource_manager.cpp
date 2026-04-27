@@ -1103,6 +1103,7 @@ void ResourceManager::cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, 
     *event.mutable_identity() = identity;
     rsp::proto::LogRecord record;
     record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    std::cerr << "[RM] cacheAuthenticatedIdentity: node=" << peerNodeId.toString() << "\n";
     publishLogRecord(record, &loggingSchemaSnapshot_);
 }
 
