@@ -1,15 +1,16 @@
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index f208731..fcf198c 100644
+index f208731640..e5ca1d58de 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -114,6 +114,10 @@ void CloseWindow(BrowserWindowInterface* browser);
+@@ -114,6 +114,11 @@ void CloseWindow(BrowserWindowInterface* browser);
  content::WebContents& NewTab(BrowserWindowInterface* browser,
                               NewTabTypes context = NewTabTypes::kNewTabCommand);
  void NewTabToRight(BrowserWindowInterface* browser);
 +
 +// Opens a new RSP tab using the given RM/RS config.
-+// Phase 3 stub: opens an OTR RSP profile tab with placeholder config.
++// If `url` is non-empty, navigates the new RSP tab to it.
 +void NewRspTab(BrowserWindowInterface* browser);
++void NewRspTab(BrowserWindowInterface* browser, const GURL& url);
  void NewTabFromClipboardURL(BrowserWindowInterface* browser);
  void CloseTab(BrowserWindowInterface* browser);
  bool CanZoomIn(content::WebContents* contents);

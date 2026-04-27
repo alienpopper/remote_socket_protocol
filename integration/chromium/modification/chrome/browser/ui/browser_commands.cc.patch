@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index 14662e9..8572570 100644
+index 14662e913d..f2cfa92c87 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
 @@ -41,6 +41,10 @@
@@ -13,38 +13,49 @@ index 14662e9..8572570 100644
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
  #include "chrome/browser/search/search.h"
  #include "chrome/browser/search_engines/template_url_service_factory.h"
-@@ -1132,6 +1136,40 @@ void NewIncognitoWindow(Profile* profile) {
+@@ -1132,6 +1136,51 @@ void NewIncognitoWindow(Profile* profile) {
    NewEmptyWindow(profile->GetPrimaryOTRProfile(/*create_if_needed=*/true));
  }
  
 +void NewRspTab(BrowserWindowInterface* browser) {
++  NewRspTab(browser, GURL("chrome://newtab"));
++}
++
++void NewRspTab(BrowserWindowInterface* browser, const GURL& url) {
 +  CHECK(browser);
 +  base::RecordAction(base::UserMetricsAction("NewRspTab"));
 +
 +  // TODO(rsp): Show RspTabConfigDialog to let the user choose RM/RS.
-+  // For now, use a placeholder config so the OTR profile machinery can
-+  // be exercised end-to-end.
++  // For now, use the configured defaults. Without an RS node ID, the tab still
++  // opens and navigates normally, but HTTP requests are not routed through RSP.
 +  RspTabConfig config;
-+  // Use the user-configured default RM if set; fall back to placeholder.
 +  const std::string& default_rm =
 +      browser->GetProfile()->GetOriginalProfile()->GetPrefs()->GetString(
 +          rsp::prefs::kRspDefaultRmAddr);
-+  config.rm_addr = default_rm.empty() ? "localhost:8080" : default_rm;
-+  config.rs_node_id = "placeholder";
++  const std::string& default_rs_node_id =
++      browser->GetProfile()->GetOriginalProfile()->GetPrefs()->GetString(
++          rsp::prefs::kRspDefaultRsNodeId);
++  config.rm_addr = default_rm.empty() ? "127.0.0.1:3939" : default_rm;
++  config.rs_node_id = default_rs_node_id;
 +
-+  const std::string rsp_conn_key =
-+      RspConnectionManager::GetInstance()->GetOrCreate(config);
++  std::string rsp_conn_key;
++  if (!config.rs_node_id.empty()) {
++    rsp_conn_key = RspConnectionManager::GetInstance()->GetOrCreate(config);
++  }
 +
 +  Profile* rsp_profile = browser->GetProfile()->GetOriginalProfile()
 +      ->GetOffTheRecordProfile(
 +          Profile::OTRProfileID::CreateUniqueForRspTab(),
 +          /*create_if_needed=*/true);
 +
-+  RspConnectionManager::GetInstance()->RegisterProfile(
-+      rsp_profile, rsp_conn_key);
++  if (!rsp_conn_key.empty()) {
++    RspConnectionManager::GetInstance()->RegisterProfile(
++        rsp_profile, rsp_conn_key);
++  }
 +
++  const GURL navigation_url = url.is_empty() ? GURL("chrome://newtab") : url;
 +  NavigateParams params(browser->GetBrowserForMigrationOnly(),
-+                        GURL("chrome://newtab"),
++                        navigation_url,
 +                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
 +  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 +  params.initiating_profile = rsp_profile;
