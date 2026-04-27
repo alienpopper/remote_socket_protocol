@@ -739,8 +739,8 @@ void RSPClient::runRefreshThread() {
 }
 
 void RSPClient::sendLogSubscribeToRM() {
-    // Send a LogSubscribeRequest to all connected RMs (no destination = broadcast on all connections).
-    // The RM's NodeInputQueue routes this to its own log subscription handler.
+    // Send a LogSubscribeRequest to all connected RMs.
+    // Must include source so the RM can identify the subscriber via senderNodeIdFromMessage().
     // Duration is 5 minutes; we renew every kRefreshInterval (150s).
     for (const auto& connId : messageClient_->connectionIds()) {
         const auto rmNodeId = messageClient_->peerNodeID(connId);
@@ -748,6 +748,7 @@ void RSPClient::sendLogSubscribeToRM() {
             continue;
         }
         rsp::proto::RSPMessage request;
+        *request.mutable_source() = toProtoNodeId(messageClient_->nodeId());
         *request.mutable_destination() = toProtoNodeId(*rmNodeId);
         auto* sub = request.mutable_log_subscribe_request();
         sub->set_payload_type_url("type.rsp/rsp.proto.NodeConnectedEvent");
