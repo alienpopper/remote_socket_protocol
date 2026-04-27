@@ -730,7 +730,10 @@ void RSPClient::runRefreshThread() {
         }
         for (const auto& entry : entries) {
             if (reregister.count(entry.nsNodeId)) {
-                nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                const auto result = nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                std::cerr << "[RSPClient] re-registration of '" << entry.name << "' to NS "
+                          << entry.nsNodeId.toString() << ": "
+                          << (result.has_value() ? "ok" : "failed") << "\n";
             } else {
                 nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
             }
@@ -789,6 +792,8 @@ void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
             break;
         }
     }
+    std::cerr << "[RSPClient] handleLogRecord: node=" << connectedNodeId->toString()
+              << " isKnownNS=" << isKnownNS << " registrations=" << refreshRegistrations_.size() << "\n";
     if (!isKnownNS) {
         return;
     }
