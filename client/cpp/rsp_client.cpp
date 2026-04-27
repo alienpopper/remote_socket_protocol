@@ -715,28 +715,43 @@ std::optional<NameResult> RSPClient::registerNameWithRefresh(
 
 void RSPClient::runRefreshThread() {
     static constexpr auto kRefreshInterval = std::chrono::seconds(150); // TTL/2
+    static constexpr auto kRetryInterval   = std::chrono::seconds(15);  // retry after failure
     while (true) {
         std::vector<RefreshEntry> entries;
         std::set<rsp::NodeID> reregister;
         {
             std::unique_lock<std::mutex> lock(refreshMutex_);
-            refreshCv_.wait_for(lock, kRefreshInterval, [this] {
+            const bool hasFailed = !failedRegistrations_.empty();
+            refreshCv_.wait_for(lock, hasFailed ? kRetryInterval : kRefreshInterval, [this] {
                 return refreshStopping_ || !pendingReregistrations_.empty();
             });
             if (refreshStopping_) break;
             entries = refreshRegistrations_;
             reregister = std::move(pendingReregistrations_);
             pendingReregistrations_.clear();
+            // Treat previously-failed entries as pending re-registration.
+            for (const auto& nsNodeId : failedRegistrations_) {
+                reregister.insert(nsNodeId);
+            }
+            failedRegistrations_.clear();
             sendLogSubscribeToRM(); // renew subscription periodically
         }
         for (const auto& entry : entries) {
             if (reregister.count(entry.nsNodeId)) {
-                nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                const auto result = nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                if (!result.has_value() || result->status == NameResult::Status::Error) {
+                    std::lock_guard<std::mutex> lock(refreshMutex_);
+                    failedRegistrations_.insert(entry.nsNodeId);
+                }
             } else {
                 const auto result = nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
                 if (!result.has_value() || result->status == NameResult::Status::NotFound) {
                     // Record was lost (NS restarted); re-create it.
-                    nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                    const auto createResult = nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
+                    if (!createResult.has_value() || createResult->status == NameResult::Status::Error) {
+                        std::lock_guard<std::mutex> lock(refreshMutex_);
+                        failedRegistrations_.insert(entry.nsNodeId);
+                    }
                 }
             }
         }

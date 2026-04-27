@@ -375,6 +375,7 @@ private:
     std::vector<RefreshEntry> refreshRegistrations_;
     std::map<rsp::NodeID, std::string> nsBootIds_;    // last known boot_id per NS node
     std::set<rsp::NodeID> pendingReregistrations_;    // NSes that need re-registration
+    std::set<rsp::NodeID> failedRegistrations_;       // NSes with transient failures, retry soon
     std::function<void(rsp::NodeID)> nodeConnectedCallback_; // called for unknown connecting nodes
     bool logSubActive_ = false;
     std::mutex refreshMutex_;
