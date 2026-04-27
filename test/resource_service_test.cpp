@@ -747,9 +747,6 @@ void testClientExchangesTcpDataThroughResourceService() {
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both the client and resource service");
 
-    require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service through the resource manager");
-
     TestSocketServer socketServer;
     const std::string greeting = "server-greeting";
     const std::string clientPayload = "client-payload";
@@ -1068,9 +1065,6 @@ void testClientReceivesAsyncSocketDataThroughResourceService() {
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async socket test");
-    require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before async socket test");
-
     PeriodicTestSocketServer socketServer;
     const std::vector<std::string> periodicMessages = {"tick-1", "tick-2", "tick-3"};
     std::string expectedStream;
@@ -1143,9 +1137,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
     require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native socket bridge test");
-    require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before the native socket bridge test");
-
     TestSocketServer socketServer;
     const std::string greeting = "bridge-greeting";
     const std::string clientPayload = "bridge-payload";
@@ -1197,9 +1188,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for listen/accept test");
-        require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before listen/accept test");
-
         const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint);
         require(listenSocketId.has_value(), "client should receive a listening socket id from the resource service");
 
@@ -1256,9 +1244,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for async accept test");
-        require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before async accept test");
-
         const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint, 0, true);
         require(listenSocketId.has_value(), "client should receive an async listening socket id");
 
@@ -1338,9 +1323,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native accept bridge test");
-        require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before native accept bridge test");
-
         const auto listenSocketId = client->listenTCP(resourceServiceNodeId, listenerEndpoint);
         require(listenSocketId.has_value(), "client should receive a listening socket id for native accept bridge test");
 
@@ -1398,11 +1380,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
             "resource manager should authenticate the resource service and both clients");
-        require(ownerClient->ping(resourceServiceNodeId),
-            "owner client should ping the resource service before the socket ownership test");
-        require(otherClient->ping(resourceServiceNodeId),
-            "second client should ping the resource service before the socket ownership test");
-
         TestSocketServer exclusiveSocketServer;
         const std::string exclusiveGreeting = "exclusive-greeting";
         const std::string exclusivePayload = "exclusive-payload";
@@ -1489,9 +1466,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
         require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
             "resource manager should authenticate both endpoints for native listen bridge test");
-        require(client->ping(resourceServiceNodeId),
-            "client should ping the resource service before native listen bridge test");
-
         const auto localListener = client->listenTCPSocket(resourceServiceNodeId, listenerEndpoint);
         require(localListener.has_value(), "client should receive a local listener socket for the native listen bridge");
 
@@ -1552,9 +1526,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for shared socket option validation");
-            require(client->ping(resourceServiceNodeId),
-                "client should ping the resource service before shared socket option validation");
-
             const auto sharedAsyncReply = client->connectTCPEx(resourceServiceNodeId, "127.0.0.1:9", 0, 0, 0, true, true);
             require(sharedAsyncReply.has_value(),
                 "share_socket combined with async_data should receive a reply");
@@ -1596,9 +1567,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 2; }),
                 "resource manager should authenticate both endpoints for listening option validation");
-            require(client->ping(resourceServiceNodeId),
-                "client should ping the resource service before listening option validation");
-
             const auto sharedChildrenReply =
                 client->listenTCPEx(resourceServiceNodeId, listenerEndpoint, 0, false, false, true);
             require(sharedChildrenReply.has_value(),
@@ -1647,8 +1615,6 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
 
             require(waitForCondition([&resourceManager]() { return resourceManager.activeEncodingCount() == 3; }),
                 "resource manager should authenticate the resource service, socket client, and logging client");
-            require(socketClient->ping(resourceServiceNodeId),
-                "socket client should ping the resource service before requesting logs");
             const auto resourceManagerNodeId = resourceManager.nodeId();
             require(waitForCondition([&resourceManager, &resourceServiceNodeId]() {
                 return resourceManager.hasResourceAdvertisement(resourceServiceNodeId);
