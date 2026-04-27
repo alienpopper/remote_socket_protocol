@@ -150,9 +150,10 @@ ResolvedValue resolveFieldPath(
     }
 
     // For optional/singular message fields, check presence.
+    // Return bool(true) so field_exists() works on message-type fields.
     if (result.field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
         if (!ref->HasField(*result.message, result.field)) return std::monostate{};
-        return std::monostate{};  // sub-messages aren't scalars
+        return true;
     }
 
     return readScalar(*result.message, result.field, ref);
