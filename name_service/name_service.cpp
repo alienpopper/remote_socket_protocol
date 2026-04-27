@@ -123,6 +123,7 @@ rsp::proto::ResourceAdvertisement NameService::buildResourceAdvertisement() cons
 
 bool NameService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) {
     if (rsp::hasServiceMessage<rsp::proto::NameCreateRequest>(message)) {
+        std::cerr << "[NS] handleNodeSpecificMessage: dispatching NameCreateRequest\n";
         return handleCreateRequest(message);
     }
     if (rsp::hasServiceMessage<rsp::proto::NameReadRequest>(message)) {
@@ -144,10 +145,13 @@ bool NameService::handleNodeSpecificMessage(const rsp::proto::RSPMessage& messag
 }
 
 bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
+    std::cerr << "[NS] handleCreateRequest called\n";
     rsp::proto::NameCreateRequest request;
     if (!rsp::unpackServiceMessage(message, &request)) {
+        std::cerr << "[NS] handleCreateRequest: unpack failed\n";
         return false;
     }
+    std::cerr << "[NS] handleCreateRequest: name=" << request.record().name() << "\n";
 
     const auto& record = request.record();
     const auto key = makeKey(record);
@@ -192,11 +196,14 @@ bool NameService::handleCreateRequest(const rsp::proto::RSPMessage& message) {
     rsp::proto::RSPMessage response;
     const auto requesterNodeId = rsp::senderNodeIdFromMessage(message);
     if (!requesterNodeId.has_value()) {
+        std::cerr << "[NS] handleCreateRequest: no requester node ID\n";
         return false;
     }
     *response.mutable_destination() = toProtoNodeId(*requesterNodeId);
     rsp::packServiceMessage(response, reply);
+    std::cerr << "[NS] handleCreateRequest: sending reply to " << requesterNodeId->toString() << "\n";
     const bool sent = send(response);
+    std::cerr << "[NS] handleCreateRequest: send result=" << sent << "\n";
 
     // Enqueue ping check after sending reply (cannot block the message worker thread).
     if (pingCheck.has_value()) {
