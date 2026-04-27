@@ -658,6 +658,9 @@ ResourceManager::~ResourceManager() {
     }
 
     for (const auto& activeEncoding : encodings) {
+        if (activeEncoding.encoding != nullptr) {
+            activeEncoding.encoding->setDisconnectCallback(nullptr);
+        }
         if (activeEncoding.signingQueue != nullptr) {
             activeEncoding.signingQueue->stop();
         }
@@ -1021,7 +1024,8 @@ void ResourceManager::handleAuthNSuccess(const rsp::encoding::EncodingHandle& en
         return;
     }
 
-    if (!encoding->start()) {
+    const auto peerNodeId = encoding->peerNodeID();
+    if (!peerNodeId.has_value()) {
         encoding->stop();
         return;
     }
@@ -1040,15 +1044,31 @@ void ResourceManager::handleAuthNSuccess(const rsp::encoding::EncodingHandle& en
     signingQueue->setWorkerCount(1);
     signingQueue->start();
 
+    encoding->setDisconnectCallback([this, encoding, peerNodeId = *peerNodeId](const rsp::NodeID&) {
+        handleEncodingDisconnect(encoding, peerNodeId);
+    });
+
     {
         std::lock_guard<std::mutex> lock(encodingsMutex_);
         activeEncodings_.push_back(ActiveEncodingState{encoding, signingQueue});
     }
 
-    const rsp::NodeID peerNodeId = *encoding->peerNodeID();
-    encoding->setDisconnectCallback([this, encoding, peerNodeId](const rsp::NodeID&) {
-        handleEncodingDisconnect(encoding, peerNodeId);
-    });
+    if (!encoding->start()) {
+        encoding->setDisconnectCallback(nullptr);
+        {
+            std::lock_guard<std::mutex> lock(encodingsMutex_);
+            const auto it = std::find_if(activeEncodings_.begin(), activeEncodings_.end(),
+                                         [&encoding](const ActiveEncodingState& state) {
+                                             return state.encoding == encoding;
+                                         });
+            if (it != activeEncodings_.end()) {
+                activeEncodings_.erase(it);
+            }
+        }
+        signingQueue->stop();
+        encoding->stop();
+        return;
+    }
 
     NewEncodingCallback callback;
     {
