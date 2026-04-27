@@ -605,6 +605,15 @@ include third_party/Makefile
 
 CPPFLAGS += -I$(BORINGSSL_INCLUDE_DIR) -I$(PROTOBUF_INCLUDE_DIR) -I$(ABSEIL_INCLUDE_DIR) -I$(PROTOBUF_GENERATED_DIR)
 
+$(OBJ_DIR)/resource_manager/resource_manager_main.o \
+$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets_main.o \
+$(OBJ_DIR)/resource_service/httpd/resource_service_httpd.o \
+$(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o \
+$(OBJ_DIR)/endorsement_service/endorsement_service_main.o \
+$(OBJ_DIR)/name_service/name_service_main.o \
+$(OBJ_DIR)/integration/openssh/modification/rsp_ssh.o \
+$(OBJ_DIR)/integration/openssh/modification/rsp_sshd.o: $(NLOHMANN_JSON_INCLUDE_HEADER)
+
 $(TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
