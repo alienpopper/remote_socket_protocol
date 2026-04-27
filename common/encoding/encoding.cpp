@@ -153,6 +153,8 @@ const rsp::KeyPair& Encoding::localKeyPair() const {
 }
 
 void Encoding::readLoop() {
+    std::cerr << "[Encoding] readLoop started, peerNodeId=" 
+              << (peerNodeId_.has_value() ? peerNodeId_->toString() : "none") << "\n";
     while (true) {
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
@@ -163,6 +165,7 @@ void Encoding::readLoop() {
 
         rsp::proto::RSPMessage message;
         if (!readMessage(message)) {
+            std::cerr << "[Encoding] readLoop: readMessage failed, exiting\n";
             std::lock_guard<std::mutex> lock(stateMutex_);
             running_ = false;
             break;
@@ -170,6 +173,8 @@ void Encoding::readLoop() {
 
         recordClassifiedEvent(message, localKeyPair_, "read_complete", false);
 
+        std::cerr << "[Encoding] readLoop: received message has_service_message=" 
+                  << message.has_service_message() << "\n";
         enqueueReceived(std::move(message));
     }
 }
