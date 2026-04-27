@@ -71,6 +71,7 @@ private:
     void handleAuthorizedMessage(rsp::proto::RSPMessage message);
     void handleAuthorizationFailure(rsp::proto::RSPMessage message);
     void cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, const rsp::proto::Identity& identity);
+    void handleEncodingDisconnect(const rsp::encoding::EncodingHandle& encoding, const rsp::NodeID& nodeId);
     std::shared_ptr<const rsp::KeyPair> verificationKeyForNodeId(const rsp::NodeID& nodeId) const;
     void sendSignatureFailure(const rsp::proto::RSPMessage& rejectedMessage, const std::string& reason) const;
     void sendEndorsementNeeded(const rsp::proto::RSPMessage& rejectedMessage) const;

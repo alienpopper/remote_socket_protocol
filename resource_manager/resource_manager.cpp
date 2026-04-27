@@ -12,6 +12,7 @@
 #include "common/service_message.hpp"
 
 #include <cstring>
+#include <algorithm>
 #include <cctype>
 #include <functional>
 #include <iomanip>
@@ -483,12 +484,6 @@ protected:
         }
 
         owner_.observeMessage(message);
-
-        if (message.has_service_message()) {
-            const auto dest = fromProtoNodeId(message.destination());
-            std::cerr << "[RM] routing service_message to "
-                      << (dest.has_value() ? dest->toString() : "unknown") << "\n";
-        }
 
         if (!owner_.routeAndSend(message)) {
             std::cerr << "ResourceManager failed to route incoming message" << std::endl;
@@ -1053,6 +1048,11 @@ void ResourceManager::handleAuthNSuccess(const rsp::encoding::EncodingHandle& en
         activeEncodings_.push_back(ActiveEncodingState{encoding, signingQueue});
     }
 
+    const rsp::NodeID peerNodeId = *encoding->peerNodeID();
+    encoding->setDisconnectCallback([this, encoding, peerNodeId](const rsp::NodeID&) {
+        handleEncodingDisconnect(encoding, peerNodeId);
+    });
+
     NewEncodingCallback callback;
     {
         std::lock_guard<std::mutex> lock(newEncodingCallbackMutex_);
@@ -1095,12 +1095,6 @@ void ResourceManager::handleAuthorizedMessage(rsp::proto::RSPMessage message) {
 
     observeMessage(message);
 
-    if (message.has_service_message()) {
-        const auto dest = fromProtoNodeId(message.destination());
-        std::cerr << "[RM] handleAuthorizedMessage: routing service_message to "
-                  << (dest.has_value() ? dest->toString() : "unknown") << "\n";
-    }
-
     if (!routeAndSend(message)) {
         std::cerr << "ResourceManager failed to route incoming message" << std::endl;
     }
@@ -1121,7 +1115,30 @@ void ResourceManager::cacheAuthenticatedIdentity(const rsp::NodeID& peerNodeId, 
     *event.mutable_identity() = identity;
     rsp::proto::LogRecord record;
     record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
-    std::cerr << "[RM] cacheAuthenticatedIdentity: node=" << peerNodeId.toString() << "\n";
+    publishLogRecord(record, &loggingSchemaSnapshot_);
+}
+
+void ResourceManager::handleEncodingDisconnect(const rsp::encoding::EncodingHandle& encoding, const rsp::NodeID& nodeId) {
+    rsp::MessageQueueHandle signingQueueToStop;
+    {
+        std::lock_guard<std::mutex> lock(encodingsMutex_);
+        const auto it = std::find_if(activeEncodings_.begin(), activeEncodings_.end(),
+            [&encoding](const ActiveEncodingState& s) {
+                return s.encoding == encoding;
+            });
+        if (it != activeEncodings_.end()) {
+            signingQueueToStop = it->signingQueue;
+            activeEncodings_.erase(it);
+        }
+    }
+    if (signingQueueToStop != nullptr) {
+        signingQueueToStop->stop();
+    }
+
+    rsp::proto::NodeDisconnectedEvent event;
+    *event.mutable_node_id() = toProtoNodeId(nodeId);
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
     publishLogRecord(record, &loggingSchemaSnapshot_);
 }
 

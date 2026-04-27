@@ -5,6 +5,7 @@
 #include "common/transport/transport.hpp"
 #include "messages.pb.h"
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -30,6 +31,7 @@ public:
     rsp::MessageQueueHandle outgoingMessages() const;
     bool dispatchSend(const rsp::proto::RSPMessage& message);
     std::optional<rsp::NodeID> peerNodeID() const;
+    void setDisconnectCallback(std::function<void(const rsp::NodeID&)> callback);
 
 protected:
     rsp::transport::ConnectionHandle connection() const;
@@ -55,6 +57,7 @@ private:
     std::optional<rsp::NodeID> peerNodeId_;
     bool running_;
     std::thread readThread_;
+    std::function<void(const rsp::NodeID&)> disconnectCallback_;
 };
 
 using EncodingHandle = std::shared_ptr<Encoding>;

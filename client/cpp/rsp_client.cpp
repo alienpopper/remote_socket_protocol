@@ -231,7 +231,6 @@ static std::optional<NameResult> sendNameRequestImpl(
     }
 
     if (!messageClient->send(request)) {
-        std::cerr << "[RSPClient] sendNameRequest: send failed (no connections?)\n";
         std::lock_guard<std::mutex> lock(stateMutex);
         nameReplyPending = false;
         return std::nullopt;
@@ -241,10 +240,6 @@ static std::optional<NameResult> sendNameRequestImpl(
     const bool replied = stateChanged.wait_for(lock, std::chrono::seconds(5), [&]() {
         return stopping || !nameReplyPending;
     });
-
-    if (!replied) {
-        std::cerr << "[RSPClient] sendNameRequest: timed out waiting for reply\n";
-    }
 
     if (!replied || stopping || !nameReplyResult.has_value()) {
         nameReplyPending = false;
@@ -735,10 +730,7 @@ void RSPClient::runRefreshThread() {
         }
         for (const auto& entry : entries) {
             if (reregister.count(entry.nsNodeId)) {
-                const auto result = nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
-                std::cerr << "[RSPClient] re-registration of '" << entry.name << "' to NS "
-                          << entry.nsNodeId.toString() << ": "
-                          << (result.has_value() ? "ok" : "failed") << "\n";
+                nameCreate(entry.nsNodeId, entry.name, entry.owner, entry.type, entry.value);
             } else {
                 nameRefresh(entry.nsNodeId, entry.name, entry.owner, entry.type);
             }
@@ -747,18 +739,12 @@ void RSPClient::runRefreshThread() {
 }
 
 void RSPClient::sendLogSubscribeToRM() {
-    // Send a LogSubscribeRequest to all connected RMs.
-    // Must include source so the RM can identify the subscriber via senderNodeIdFromMessage().
-    // Duration is 5 minutes; we renew every kRefreshInterval (150s).
     const auto connIds = messageClient_->connectionIds();
-    std::cerr << "[RSPClient] sendLogSubscribeToRM: " << connIds.size() << " connection(s)\n";
     for (const auto& connId : connIds) {
         const auto rmNodeId = messageClient_->peerNodeID(connId);
         if (!rmNodeId.has_value()) {
-            std::cerr << "[RSPClient] sendLogSubscribeToRM: no peerNodeId for connection\n";
             continue;
         }
-        std::cerr << "[RSPClient] sendLogSubscribeToRM: subscribing to RM " << rmNodeId->toString() << "\n";
         rsp::proto::RSPMessage request;
         *request.mutable_source() = toProtoNodeId(messageClient_->nodeId());
         *request.mutable_destination() = toProtoNodeId(*rmNodeId);
@@ -771,12 +757,10 @@ void RSPClient::sendLogSubscribeToRM() {
 }
 
 void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
-    std::cerr << "[RSPClient] handleLogRecord called\n";
     if (!message.has_log_record() || !message.log_record().has_payload()) {
         return;
     }
     const auto& payload = message.log_record().payload();
-    std::cerr << "[RSPClient] handleLogRecord: type_url=" << payload.type_url() << "\n";
     if (payload.type_url() != "type.rsp/rsp.proto.NodeConnectedEvent") {
         return;
     }
@@ -797,8 +781,6 @@ void RSPClient::handleLogRecord(const rsp::proto::RSPMessage& message) {
             break;
         }
     }
-    std::cerr << "[RSPClient] handleLogRecord: node=" << connectedNodeId->toString()
-              << " isKnownNS=" << isKnownNS << " registrations=" << refreshRegistrations_.size() << "\n";
     if (!isKnownNS) {
         return;
     }
@@ -1649,11 +1631,6 @@ void RSPClient::receiveLoop() {
 }
 
 void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
-    if (message.has_log_record() || message.has_log_subscribe_reply()) {
-        std::cerr << "[RSPClient] dispatchIncomingMessage: has_log_record=" << message.has_log_record()
-                  << " has_log_sub_reply=" << message.has_log_subscribe_reply()
-                  << " shouldHandleLocally=" << shouldHandleLocally(message) << "\n";
-    }
     if (!shouldHandleLocally(message)) {
         return;
     }

@@ -153,8 +153,7 @@ const rsp::KeyPair& Encoding::localKeyPair() const {
 }
 
 void Encoding::readLoop() {
-    std::cerr << "[Encoding] readLoop started, peerNodeId=" 
-              << (peerNodeId_.has_value() ? peerNodeId_->toString() : "none") << "\n";
+    bool connectionLost = false;
     while (true) {
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
@@ -165,18 +164,37 @@ void Encoding::readLoop() {
 
         rsp::proto::RSPMessage message;
         if (!readMessage(message)) {
-            std::cerr << "[Encoding] readLoop: readMessage failed, exiting\n";
-            std::lock_guard<std::mutex> lock(stateMutex_);
-            running_ = false;
+            bool wasRunning = false;
+            {
+                std::lock_guard<std::mutex> lock(stateMutex_);
+                wasRunning = running_;
+                running_ = false;
+            }
+            connectionLost = wasRunning;
             break;
         }
 
         recordClassifiedEvent(message, localKeyPair_, "read_complete", false);
-
-        std::cerr << "[Encoding] readLoop: received message has_service_message=" 
-                  << message.has_service_message() << "\n";
         enqueueReceived(std::move(message));
     }
+
+    if (connectionLost) {
+        std::function<void(const rsp::NodeID&)> cb;
+        std::optional<rsp::NodeID> nodeId;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            cb = disconnectCallback_;
+            nodeId = peerNodeId_;
+        }
+        if (cb && nodeId.has_value()) {
+            cb(*nodeId);
+        }
+    }
+}
+
+void Encoding::setDisconnectCallback(std::function<void(const rsp::NodeID&)> callback) {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    disconnectCallback_ = std::move(callback);
 }
 
 std::string toProtoNodeIdValue(const rsp::NodeID& nodeId) {

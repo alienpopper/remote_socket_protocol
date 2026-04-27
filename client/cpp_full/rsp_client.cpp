@@ -467,8 +467,6 @@ bool RSPClient::isForThisNode(const rsp::proto::RSPMessage& message) const {
 }
 
 void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
-    std::cerr << "[full RSPClient] dispatchIncomingMessage: has_service_message=" << message.has_service_message()
-              << " isForThisNode=" << isForThisNode(message) << "\n";
     if (!isForThisNode(message)) {
         std::cerr << "RSP full client dropped a message that was not addressed to this node" << std::endl;
         return;
