@@ -1639,6 +1639,11 @@ void RSPClient::receiveLoop() {
 }
 
 void RSPClient::dispatchIncomingMessage(rsp::proto::RSPMessage message) {
+    if (message.has_log_record() || message.has_log_subscribe_reply()) {
+        std::cerr << "[RSPClient] dispatchIncomingMessage: has_log_record=" << message.has_log_record()
+                  << " has_log_sub_reply=" << message.has_log_subscribe_reply()
+                  << " shouldHandleLocally=" << shouldHandleLocally(message) << "\n";
+    }
     if (!shouldHandleLocally(message)) {
         return;
     }
