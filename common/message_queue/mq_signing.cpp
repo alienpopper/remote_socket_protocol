@@ -567,6 +567,13 @@ void hashRSPMessage(MessageHasher& hasher, const rsp::proto::RSPMessage& message
         hashIdentity(hasher, message.identities(index));
     }
 
+    // field 102: encrypted_fields (repeated — always hash count)
+    hasher.tag(102);
+    hasher.feedUint32(static_cast<uint32_t>(message.encrypted_fields_size()));
+    for (int index = 0; index < message.encrypted_fields_size(); ++index) {
+        hashMessageReflective(hasher, message.encrypted_fields(index));
+    }
+
     // field 200: service_message (google.protobuf.Any)
     if (message.has_service_message()) {
         hasher.tag(200);

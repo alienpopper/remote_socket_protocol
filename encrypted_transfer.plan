@@ -1,6 +1,23 @@
 # Encrypted Transfer Plan
 # ECDHE Session Key Establishment for RSP
 
+## Current Status (implemented protobuf scaffolding)
+
+The protobuf-level field encryption scaffolding is now in place without
+enabling cryptography yet:
+
+- `messages.proto` defines a custom field option:
+  `extend google.protobuf.FieldOptions { bool encrypted = 50001; }`
+- Sensitive fields can now be annotated with
+  `[(rsp.proto.encrypted) = true]`
+- `RSPMessage` now carries `repeated EncryptedField encrypted_fields = 102`
+  so encrypted payload pieces can be attached per field path
+- JS/Python schema generation now preserves field option metadata via
+  `field.encrypted` in generated schemas
+
+No key exchange, key derivation, encryption, or decryption is implemented in
+this phase.
+
 ## Motivation
 
 Certain RSP workflows require confidential payloads — e.g. a password sent from
@@ -27,7 +44,10 @@ not need encryption and makes protection visible in code review.
 
 ## Protocol
 
-### Phase 1 — Initiator sends KeyExchangeRequest (RSPMessage field 28)
+Current `messages.proto` already uses core message fields 28-32 for logging.
+Encrypted-channel core messages should use the next free core tags: 33, 34, 35.
+
+### Phase 1 — Initiator sends KeyExchangeRequest (RSPMessage field 33)
 
     KeyExchangeRequest {
         bytes   ephemeral_public_key   // DER-encoded P-256 public key (ECDH, not the node signing key)
@@ -40,7 +60,7 @@ not need encryption and makes protection visible in code review.
 The initiator generates a fresh ephemeral P-256 key pair for this session.  The
 private half is zeroed immediately after key derivation (forward secrecy).
 
-### Phase 2 — Responder sends KeyExchangeReply (RSPMessage field 29)
+### Phase 2 — Responder sends KeyExchangeReply (RSPMessage field 34)
 
     KeyExchangeReply {
         bytes   ephemeral_public_key   // DER-encoded P-256 public key (ECDH)
@@ -64,7 +84,7 @@ Both participants compute the same session_key without ever transmitting it.
 The info string domain-separates keys so they cannot be cross-replayed between
 different node pairs.
 
-### Encrypted payloads — EncryptedPayload (RSPMessage field 30)
+### Encrypted payloads — EncryptedPayload (RSPMessage field 35)
 
     EncryptedPayload {
         bytes    session_id    // = the nonce from the KeyExchangeRequest that created this session
@@ -117,7 +137,7 @@ Only ECDH_P256_AES256GCM_HKDF = 1 is implemented initially.
 - Add KeyExchangeRequest message
 - Add KeyExchangeReply message
 - Add EncryptedPayload message
-- Add fields 28, 29, 30 to RSPMessage oneof
+- Add fields 33, 34, 35 to RSPMessage oneof (`28-32` are already used by log subscribe/unsubscribe and log record)
 
 ### common/message_queue/mq_signing.cpp + mq_signing.hpp
 - hashKeyExchangeRequest
@@ -144,9 +164,10 @@ Only ECDH_P256_AES256GCM_HKDF = 1 is implemented initially.
 - establishSecureChannel(NodeID peer) -> session_id
 - sendEncrypted(session_id, RSPMessage inner) -> bool
 - invalidateSecureChannel(session_id)
-- _dispatchMessage: handle key_exchange_request (auto-respond, cache session),
-                    key_exchange_reply (complete pending initiation, cache session),
-                    encrypted_payload (look up session by session_id, decrypt, re-dispatch inner)
+- handleNodeSpecificMessage: handle key_exchange_request (auto-respond, cache session),
+                             key_exchange_reply (complete pending initiation, cache session),
+                             encrypted_payload (look up session by session_id, decrypt, re-dispatch inner)
+- dispatchIncomingMessage: enqueue decrypted inner messages for normal local processing
 - Member: SecureChannelCache secure_channel_cache_
 
 ### test/secure_channel_test.cpp
@@ -170,8 +191,8 @@ endorsement_service/).  The client:
 
     1. Resolves ES node from Name Service
     2. Calls establishSecureChannel(esNodeId) -> session_id
-    3. Builds PasswordAuthRequest{username, password_hash}
-    4. Calls sendEncrypted(session_id, passwordAuthRequest)
+    3. Builds an inner RSPMessage carrying service_message=PasswordAuthRequest{username, password_hash}
+    4. Calls sendEncrypted(session_id, innerMessage)
     5. ES decrypts, verifies credentials, issues endorsement
 
 ## Out of Scope

@@ -592,7 +592,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-python-http-server test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
 
 $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto $(GENERATE_MESSAGES_SCRIPT)
 	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
@@ -688,7 +688,7 @@ $(RUNTIME_PROTO_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LIT
 	$(CXX) $(CXXFLAGS) $(RUNTIME_PROTO_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
 $(TRANSCODING_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(TRANSCODING_TEST_OBJECTS)
-	$(CXX) $(CXXFLAGS) $(TRANSCODING_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(TRANSCODING_TEST_OBJECTS) $(PROTOBUF_GENERATED_OBJECT) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
 $(MQ_AUTHN_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MQ_AUTHN_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(MQ_AUTHN_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
@@ -842,6 +842,9 @@ test-nodejs-express: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 test-nodejs-express-stress: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/nodejs_express_stress_integration.js $(NODEJS_PING_FIXTURE_TARGET)
 
+test-nodejs-encrypted-proto: $(NODEJS_MESSAGES_JS)
+	node test/nodejs_encrypted_proto_schema_test.js
+
 test-openssh-stress: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMENT_SERVICE_TARGET)
 	bash test/openssh_stress_integration.sh $(BIN_DIR)
 
@@ -853,6 +856,9 @@ test-remote-sshd-ns: $(RSP_SSHD_TARGET) $(RSP_SSH_TARGET) $(TARGET) $(ENDORSEMEN
 
 test-python-http-server: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 	node test/python_http_server_integration.js $(NODEJS_PING_FIXTURE_TARGET)
+
+test-python-encrypted-proto: $(PYTHON_MESSAGES_PY)
+	python3 test/python_encrypted_proto_schema_test.py
 
 test-bsd-sockets-web-service: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/bsd_sockets_web_service_integration.js $(NODEJS_PING_FIXTURE_TARGET)
@@ -1045,7 +1051,7 @@ $(OBJ_DIR)/tools/rsp_cli/rsp_cli_main.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_
 
 $(OBJ_DIR)/test/runtime_proto_test.o: $(PROTOBUF_INCLUDE_HEADER)
 
-$(OBJ_DIR)/test/transcoding_test.o: $(PROTOBUF_INCLUDE_HEADER)
+$(OBJ_DIR)/test/transcoding_test.o: $(PROTOBUF_INCLUDE_HEADER) $(PROTOBUF_GENERATED_HEADER)
 
 $(OBJ_DIR)/test/node_test.o: $(PROTOBUF_GENERATED_HEADER)
 

@@ -73,7 +73,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -87,7 +88,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -101,7 +103,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -115,7 +118,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -129,7 +133,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -143,7 +148,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -157,7 +163,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "error",
@@ -166,7 +173,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -175,7 +183,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "new_stream_remote_address",
@@ -184,7 +193,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "new_stream_id",
@@ -193,7 +203,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_error_code",
@@ -202,7 +213,8 @@ const SCHEMA = {
                     "type": "int32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "data",
@@ -211,7 +223,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -225,7 +238,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "data",
@@ -234,7 +248,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "index",
@@ -243,7 +258,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -257,7 +273,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "max_bytes",
@@ -266,7 +283,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "index",
@@ -275,7 +293,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "wait_ms",
@@ -284,7 +303,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -298,7 +318,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -312,7 +333,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "algorithm",
@@ -321,7 +343,8 @@ const SCHEMA = {
                     "type": "SIGNATURE_ALGORITHMS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "signature",
@@ -330,7 +353,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -344,7 +368,8 @@ const SCHEMA = {
                     "type": "SIGNATURE_ALGORITHMS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "public_key",
@@ -353,7 +378,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -367,7 +393,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "endorsement_service",
@@ -376,7 +403,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "endorsement_type",
@@ -385,7 +413,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "endorsement_value",
@@ -394,7 +423,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "valid_until",
@@ -403,7 +433,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "signature",
@@ -412,7 +443,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -426,7 +458,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "public_key",
@@ -435,7 +468,8 @@ const SCHEMA = {
                     "type": "PublicKey",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "boot_id",
@@ -444,7 +478,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -458,7 +493,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -472,7 +508,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "hops_away",
@@ -481,7 +518,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "last_seen",
@@ -490,7 +528,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -504,7 +543,8 @@ const SCHEMA = {
                     "type": "RouteEntry",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -518,7 +558,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "ipv6",
@@ -527,7 +568,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -541,7 +583,8 @@ const SCHEMA = {
                     "type": "Address",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "end_address",
@@ -550,7 +593,8 @@ const SCHEMA = {
                     "type": "Address",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -564,7 +608,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "end_port",
@@ -573,7 +618,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -587,7 +633,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "source_addresses",
@@ -596,7 +643,8 @@ const SCHEMA = {
                     "type": "Address",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -610,7 +658,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "listen_address",
@@ -619,7 +668,8 @@ const SCHEMA = {
                     "type": "Address",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "allowed_range",
@@ -628,7 +678,8 @@ const SCHEMA = {
                     "type": "PortRange",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -642,7 +693,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "server_name",
@@ -651,7 +703,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -665,7 +718,8 @@ const SCHEMA = {
                     "type": "ResourceTCPConnect",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "resource_type"
+                    "oneof": "resource_type",
+                    "encrypted": false
                 },
                 {
                     "name": "tcp_listen",
@@ -674,7 +728,8 @@ const SCHEMA = {
                     "type": "ResourceTCPListen",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "resource_type"
+                    "oneof": "resource_type",
+                    "encrypted": false
                 },
                 {
                     "name": "sshd",
@@ -683,7 +738,8 @@ const SCHEMA = {
                     "type": "ResourceSSHD",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "resource_type"
+                    "oneof": "resource_type",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -706,7 +762,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "proto_file_descriptor_set",
@@ -715,7 +772,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "accepted_type_urls",
@@ -724,7 +782,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": true,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schema_hash",
@@ -733,7 +792,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schema_version",
@@ -742,7 +802,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -756,7 +817,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schema_hash",
@@ -765,7 +827,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -779,7 +842,8 @@ const SCHEMA = {
                     "type": "ServiceSchema",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -793,7 +857,8 @@ const SCHEMA = {
                     "type": "ResourceRecord",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schemas",
@@ -802,7 +867,8 @@ const SCHEMA = {
                     "type": "ServiceSchema",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -816,7 +882,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "max_records",
@@ -825,7 +892,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -839,7 +907,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schema",
@@ -848,7 +917,8 @@ const SCHEMA = {
                     "type": "ServiceSchema",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -862,7 +932,8 @@ const SCHEMA = {
                     "type": "DiscoveredService",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -876,7 +947,8 @@ const SCHEMA = {
                     "type": "ERROR_CODE",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -885,7 +957,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -899,7 +972,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "sequence",
@@ -908,7 +982,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "time_sent",
@@ -917,7 +992,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -931,7 +1007,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "sequence",
@@ -940,7 +1017,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "time_sent",
@@ -949,7 +1027,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "time_replied",
@@ -958,7 +1037,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -972,7 +1052,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "filter",
@@ -981,7 +1062,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "duration_ms",
@@ -990,7 +1072,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1004,7 +1087,8 @@ const SCHEMA = {
                     "type": "LOG_SUBSCRIPTION_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "subscription_id",
@@ -1013,7 +1097,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "expires_at",
@@ -1022,7 +1107,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -1031,7 +1117,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1045,7 +1132,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1059,7 +1147,8 @@ const SCHEMA = {
                     "type": "LOG_SUBSCRIPTION_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "subscription_id",
@@ -1068,7 +1157,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -1077,7 +1167,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1091,7 +1182,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "producer_node_id",
@@ -1100,7 +1192,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "time_created",
@@ -1109,7 +1202,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "payload",
@@ -1118,7 +1212,8 @@ const SCHEMA = {
                     "type": "Any",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1132,7 +1227,8 @@ const SCHEMA = {
                     "type": "Endorsement",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "auth_data",
@@ -1141,7 +1237,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1155,7 +1252,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "challenge",
@@ -1164,7 +1262,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1178,7 +1277,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "challenge_reply",
@@ -1187,7 +1287,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1201,7 +1302,8 @@ const SCHEMA = {
                     "type": "ENSDORSMENT_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "new_endorsement",
@@ -1210,7 +1312,8 @@ const SCHEMA = {
                     "type": "Endorsement",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1224,7 +1327,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1233,7 +1337,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1247,7 +1352,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1256,7 +1362,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1270,7 +1377,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1279,7 +1387,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1293,7 +1402,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1307,7 +1417,8 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1329,7 +1440,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1338,7 +1450,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1352,7 +1465,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1361,7 +1475,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1375,7 +1490,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1384,7 +1500,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1398,7 +1515,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1412,7 +1530,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1426,7 +1545,8 @@ const SCHEMA = {
                     "type": "EndorsementType",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1440,7 +1560,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1454,7 +1575,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1468,7 +1590,8 @@ const SCHEMA = {
                     "type": "ERDASTEndEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "and",
@@ -1477,7 +1600,8 @@ const SCHEMA = {
                     "type": "ERDASTEndAnd",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "or",
@@ -1486,7 +1610,8 @@ const SCHEMA = {
                     "type": "ERDASTEndOr",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "true_value",
@@ -1495,7 +1620,8 @@ const SCHEMA = {
                     "type": "ERDASTTrue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "false_value",
@@ -1504,7 +1630,8 @@ const SCHEMA = {
                     "type": "ERDASTFalse",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "all_of",
@@ -1513,7 +1640,8 @@ const SCHEMA = {
                     "type": "ERDASTEndAllOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "any_of",
@@ -1522,7 +1650,8 @@ const SCHEMA = {
                     "type": "ERDASTEndAnyOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "type_equals",
@@ -1531,7 +1660,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTypeEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "value_equals",
@@ -1540,7 +1670,8 @@ const SCHEMA = {
                     "type": "ERDASTEndValueEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "signer_equals",
@@ -1549,7 +1680,8 @@ const SCHEMA = {
                     "type": "ERDASTEndSignerEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -1579,7 +1711,8 @@ const SCHEMA = {
                     "type": "ERDASTEndTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1593,7 +1726,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1602,7 +1736,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1616,7 +1751,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1625,7 +1761,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1639,7 +1776,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -1648,7 +1786,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1662,7 +1801,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1676,7 +1816,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1690,7 +1831,63 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": true,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "EncryptedField": {
+            "fields": [
+                {
+                    "name": "path",
+                    "number": 1,
+                    "kind": "message",
+                    "type": "ERDASTFieldPath",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "iv",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "ciphertext",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "tag",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "algorithm",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1704,7 +1901,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "string_value",
@@ -1713,7 +1911,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "int_value",
@@ -1722,7 +1921,8 @@ const SCHEMA = {
                     "type": "int64",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "uint_value",
@@ -1731,7 +1931,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "bool_value",
@@ -1740,7 +1941,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "enum_value",
@@ -1749,7 +1951,8 @@ const SCHEMA = {
                     "type": "int32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -1775,7 +1978,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -1784,7 +1988,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldValue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1798,7 +2003,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1812,7 +2018,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "sub_path",
@@ -1821,7 +2028,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -1830,7 +2038,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldValue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1844,7 +2053,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": true,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1858,7 +2068,8 @@ const SCHEMA = {
                     "type": "bytes",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "string_value",
@@ -1867,7 +2078,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "int_value",
@@ -1876,7 +2088,8 @@ const SCHEMA = {
                     "type": "int64",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "uint_value",
@@ -1885,7 +2098,8 @@ const SCHEMA = {
                     "type": "uint64",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "bool_value",
@@ -1894,7 +2108,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 },
                 {
                     "name": "enum_value",
@@ -1903,7 +2118,8 @@ const SCHEMA = {
                     "type": "int32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "value"
+                    "oneof": "value",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -1929,7 +2145,8 @@ const SCHEMA = {
                     "type": "LogASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -1938,7 +2155,8 @@ const SCHEMA = {
                     "type": "LogASTFieldValue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1952,7 +2170,8 @@ const SCHEMA = {
                     "type": "LogASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1966,7 +2185,8 @@ const SCHEMA = {
                     "type": "LogASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "sub_path",
@@ -1975,7 +2195,8 @@ const SCHEMA = {
                     "type": "LogASTFieldPath",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -1984,7 +2205,8 @@ const SCHEMA = {
                     "type": "LogASTFieldValue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -1998,7 +2220,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -2007,7 +2230,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2021,7 +2245,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -2030,7 +2255,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2044,7 +2270,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "rhs",
@@ -2053,7 +2280,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2067,7 +2295,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2081,7 +2310,8 @@ const SCHEMA = {
                     "type": "LogASTMessageTree",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2095,7 +2325,8 @@ const SCHEMA = {
                     "type": "LogASTMesEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "and",
@@ -2104,7 +2335,8 @@ const SCHEMA = {
                     "type": "LogASTMesAnd",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "or",
@@ -2113,7 +2345,8 @@ const SCHEMA = {
                     "type": "LogASTMesOr",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "true_value",
@@ -2122,7 +2355,8 @@ const SCHEMA = {
                     "type": "ERDASTTrue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "false_value",
@@ -2131,7 +2365,8 @@ const SCHEMA = {
                     "type": "ERDASTFalse",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "all_of",
@@ -2140,7 +2375,8 @@ const SCHEMA = {
                     "type": "LogASTMesAllOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "any_of",
@@ -2149,7 +2385,8 @@ const SCHEMA = {
                     "type": "LogASTMesAnyOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_equals",
@@ -2158,7 +2395,8 @@ const SCHEMA = {
                     "type": "LogASTFieldEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_exists",
@@ -2167,7 +2405,8 @@ const SCHEMA = {
                     "type": "LogASTFieldExists",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_contains",
@@ -2176,7 +2415,8 @@ const SCHEMA = {
                     "type": "LogASTFieldContains",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -2206,7 +2446,8 @@ const SCHEMA = {
                     "type": "ERDASTMesEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "and",
@@ -2215,7 +2456,8 @@ const SCHEMA = {
                     "type": "ERDASTMesAnd",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "or",
@@ -2224,7 +2466,8 @@ const SCHEMA = {
                     "type": "ERDASTMesOr",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "true_value",
@@ -2233,7 +2476,8 @@ const SCHEMA = {
                     "type": "ERDASTTrue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "false_value",
@@ -2242,7 +2486,8 @@ const SCHEMA = {
                     "type": "ERDASTFalse",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "all_of",
@@ -2251,7 +2496,8 @@ const SCHEMA = {
                     "type": "ERDASTMesAllOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "any_of",
@@ -2260,7 +2506,8 @@ const SCHEMA = {
                     "type": "ERDASTMesAnyOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_equals",
@@ -2269,7 +2516,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_exists",
@@ -2278,7 +2526,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldExists",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "field_contains",
@@ -2287,7 +2536,8 @@ const SCHEMA = {
                     "type": "ERDASTFieldContains",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -2317,7 +2567,8 @@ const SCHEMA = {
                     "type": "ERDASTMessageTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2331,7 +2582,8 @@ const SCHEMA = {
                     "type": "ERDASTEquals",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "and",
@@ -2340,7 +2592,8 @@ const SCHEMA = {
                     "type": "ERDASTAnd",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "or",
@@ -2349,7 +2602,8 @@ const SCHEMA = {
                     "type": "ERDASTOr",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "true_value",
@@ -2358,7 +2612,8 @@ const SCHEMA = {
                     "type": "ERDASTTrue",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "false_value",
@@ -2367,7 +2622,8 @@ const SCHEMA = {
                     "type": "ERDASTFalse",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "all_of",
@@ -2376,7 +2632,8 @@ const SCHEMA = {
                     "type": "ERDASTAllOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "any_of",
@@ -2385,7 +2642,8 @@ const SCHEMA = {
                     "type": "ERDASTAnyOf",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "endorsement",
@@ -2394,7 +2652,8 @@ const SCHEMA = {
                     "type": "ERDASTEndorsement",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -2403,7 +2662,8 @@ const SCHEMA = {
                     "type": "ERDASTMessage",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "node_type"
+                    "oneof": "node_type",
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -2432,7 +2692,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "tree",
@@ -2441,7 +2702,53 @@ const SCHEMA = {
                     "type": "ERDAbstractSyntaxTree",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
+        "FieldEncryptionFixture": {
+            "fields": [
+                {
+                    "name": "clear_text",
+                    "number": 1,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "secret_text",
+                    "number": 2,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": true
+                },
+                {
+                    "name": "secret_bytes",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "bytes",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": true
+                },
+                {
+                    "name": "note",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": false,
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2455,7 +2762,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "source",
@@ -2464,7 +2772,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "challenge_request",
@@ -2473,7 +2782,8 @@ const SCHEMA = {
                     "type": "ChallengeRequest",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "identity",
@@ -2482,7 +2792,8 @@ const SCHEMA = {
                     "type": "Identity",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "route",
@@ -2491,7 +2802,8 @@ const SCHEMA = {
                     "type": "RouteUpdate",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "error",
@@ -2500,7 +2812,8 @@ const SCHEMA = {
                     "type": "Error",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "ping_request",
@@ -2509,7 +2822,8 @@ const SCHEMA = {
                     "type": "PingRequest",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "ping_reply",
@@ -2518,7 +2832,8 @@ const SCHEMA = {
                     "type": "PingReply",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "resource_advertisement",
@@ -2527,7 +2842,8 @@ const SCHEMA = {
                     "type": "ResourceAdvertisement",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "resource_query",
@@ -2536,7 +2852,8 @@ const SCHEMA = {
                     "type": "ResourceQuery",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "nonce",
@@ -2545,7 +2862,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "endorsement_needed",
@@ -2554,7 +2872,8 @@ const SCHEMA = {
                     "type": "EndorsementNeeded",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "trace",
@@ -2563,7 +2882,8 @@ const SCHEMA = {
                     "type": "OptionalBool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "schema_request",
@@ -2572,7 +2892,8 @@ const SCHEMA = {
                     "type": "SchemaRequest",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "schema_reply",
@@ -2581,7 +2902,8 @@ const SCHEMA = {
                     "type": "SchemaReply",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "resource_query_reply",
@@ -2590,7 +2912,8 @@ const SCHEMA = {
                     "type": "ResourceQueryReply",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "log_subscribe_request",
@@ -2599,7 +2922,8 @@ const SCHEMA = {
                     "type": "LogSubscribeRequest",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "log_subscribe_reply",
@@ -2608,7 +2932,8 @@ const SCHEMA = {
                     "type": "LogSubscribeReply",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "log_unsubscribe_request",
@@ -2617,7 +2942,8 @@ const SCHEMA = {
                     "type": "LogUnsubscribeRequest",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "log_unsubscribe_reply",
@@ -2626,7 +2952,8 @@ const SCHEMA = {
                     "type": "LogUnsubscribeReply",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "log_record",
@@ -2635,7 +2962,8 @@ const SCHEMA = {
                     "type": "LogRecord",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": "core_message"
+                    "oneof": "core_message",
+                    "encrypted": false
                 },
                 {
                     "name": "signature",
@@ -2644,7 +2972,8 @@ const SCHEMA = {
                     "type": "SignatureBlock",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "endorsements",
@@ -2653,7 +2982,8 @@ const SCHEMA = {
                     "type": "Endorsement",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "identities",
@@ -2662,7 +2992,18 @@ const SCHEMA = {
                     "type": "Identity",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "encrypted_fields",
+                    "number": 102,
+                    "kind": "message",
+                    "type": "EncryptedField",
+                    "repeated": true,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "service_message",
@@ -2671,7 +3012,8 @@ const SCHEMA = {
                     "type": "Any",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": [
@@ -2708,7 +3050,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -2717,7 +3060,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "reuse_addr",
@@ -2726,7 +3070,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "source_port",
@@ -2735,7 +3080,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "timeout_ms",
@@ -2744,7 +3090,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "retries",
@@ -2753,7 +3100,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "retry_ms",
@@ -2762,7 +3110,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "async_data",
@@ -2771,7 +3120,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "use_socket",
@@ -2780,7 +3130,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "share_socket",
@@ -2789,7 +3140,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2803,7 +3155,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -2812,7 +3165,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "reuse_addr",
@@ -2821,7 +3175,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "timeout_ms",
@@ -2830,7 +3185,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "async_accept",
@@ -2839,7 +3195,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "share_listening_socket",
@@ -2848,7 +3205,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "share_child_sockets",
@@ -2857,7 +3215,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "children_use_socket",
@@ -2866,7 +3225,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "children_async_data",
@@ -2875,7 +3235,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2889,7 +3250,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "new_stream_id",
@@ -2898,7 +3260,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "timeout_ms",
@@ -2907,7 +3270,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "share_child_socket",
@@ -2916,7 +3280,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "child_use_socket",
@@ -2925,7 +3290,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "child_async_data",
@@ -2934,7 +3300,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -2948,7 +3315,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -2957,7 +3325,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_host",
@@ -2966,7 +3335,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_port",
@@ -2975,7 +3345,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_endpoint",
@@ -2984,7 +3355,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -2993,7 +3365,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "attempts",
@@ -3002,7 +3375,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3016,7 +3390,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3025,7 +3400,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_host",
@@ -3034,7 +3410,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_port",
@@ -3043,7 +3420,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "remote_endpoint",
@@ -3052,7 +3430,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3061,7 +3440,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3075,7 +3455,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3084,7 +3465,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_host",
@@ -3093,7 +3475,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_port",
@@ -3102,7 +3485,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_endpoint",
@@ -3111,7 +3495,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3120,7 +3505,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3134,7 +3520,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3143,7 +3530,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_host",
@@ -3152,7 +3540,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_port",
@@ -3161,7 +3550,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "bind_endpoint",
@@ -3170,7 +3560,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3179,7 +3570,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3193,7 +3585,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "listen_stream_id",
@@ -3202,7 +3595,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "child_stream_id",
@@ -3211,7 +3605,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3225,7 +3620,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "listen_stream_id",
@@ -3234,7 +3630,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "child_stream_id",
@@ -3243,7 +3640,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3257,7 +3655,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3266,7 +3665,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3275,7 +3675,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3289,7 +3690,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3298,7 +3700,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3307,7 +3710,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "async_mode",
@@ -3316,7 +3720,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3330,7 +3735,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3339,7 +3745,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "status",
@@ -3348,7 +3755,8 @@ const SCHEMA = {
                     "type": "STREAM_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "async_mode",
@@ -3357,7 +3765,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3371,7 +3780,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3380,7 +3790,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3394,7 +3805,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "stream_id",
@@ -3403,7 +3815,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3417,7 +3830,8 @@ const SCHEMA = {
                     "type": "StreamID",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "timeout_ms",
@@ -3426,7 +3840,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "async_data",
@@ -3435,7 +3850,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "use_socket",
@@ -3444,7 +3860,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "share_socket",
@@ -3453,7 +3870,8 @@ const SCHEMA = {
                     "type": "bool",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3467,7 +3885,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3476,7 +3895,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3485,7 +3905,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -3494,7 +3915,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "expires_at",
@@ -3503,7 +3925,8 @@ const SCHEMA = {
                     "type": "DateTime",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3517,7 +3940,8 @@ const SCHEMA = {
                     "type": "NameRecord",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3531,7 +3955,8 @@ const SCHEMA = {
                     "type": "NAME_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -3540,7 +3965,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3554,7 +3980,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3563,7 +3990,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3572,7 +4000,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3586,7 +4015,8 @@ const SCHEMA = {
                     "type": "NAME_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "records",
@@ -3595,7 +4025,8 @@ const SCHEMA = {
                     "type": "NameRecord",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3609,7 +4040,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3618,7 +4050,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3627,7 +4060,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "new_value",
@@ -3636,7 +4070,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3650,7 +4085,8 @@ const SCHEMA = {
                     "type": "NAME_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -3659,7 +4095,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3673,7 +4110,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3682,7 +4120,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3691,7 +4130,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3705,7 +4145,8 @@ const SCHEMA = {
                     "type": "NAME_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -3714,7 +4155,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3728,7 +4170,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3737,7 +4180,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3746,7 +4190,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "max_records",
@@ -3755,7 +4200,8 @@ const SCHEMA = {
                     "type": "uint32",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3769,7 +4215,8 @@ const SCHEMA = {
                     "type": "NameRecord",
                     "repeated": true,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3783,7 +4230,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "owner",
@@ -3792,7 +4240,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "type",
@@ -3801,7 +4250,8 @@ const SCHEMA = {
                     "type": "Uuid",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3815,7 +4265,8 @@ const SCHEMA = {
                     "type": "NAME_STATUS",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "message",
@@ -3824,7 +4275,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3838,7 +4290,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "tags",
@@ -3847,7 +4300,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": true,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3861,7 +4315,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "value",
@@ -3870,7 +4325,8 @@ const SCHEMA = {
                     "type": "int64",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "unit",
@@ -3879,7 +4335,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3893,7 +4350,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3907,7 +4365,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "identity",
@@ -3916,7 +4375,8 @@ const SCHEMA = {
                     "type": "Identity",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3930,7 +4390,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3944,7 +4405,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "service_type",
@@ -3953,7 +4415,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []
@@ -3967,7 +4430,8 @@ const SCHEMA = {
                     "type": "NodeId",
                     "repeated": false,
                     "has_presence": true,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 },
                 {
                     "name": "service_type",
@@ -3976,7 +4440,8 @@ const SCHEMA = {
                     "type": "string",
                     "repeated": false,
                     "has_presence": false,
-                    "oneof": null
+                    "oneof": null,
+                    "encrypted": false
                 }
             ],
             "oneofs": []

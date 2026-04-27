@@ -135,6 +135,24 @@ static void test_endorsements_deterministic() {
     CHECK(computeMessageHash(mk()) == computeMessageHash(mk()));
 }
 
+static void test_encrypted_fields_affect_hash() {
+    auto mk = [](const std::string& ciphertext) {
+        auto msg = makePingRequest();
+        auto* field = msg.add_encrypted_fields();
+        auto* path = field->mutable_path();
+        path->add_segments("service_message");
+        path->add_segments("secret_text");
+        field->set_iv(std::string(12, '\x01'));
+        field->set_ciphertext(ciphertext);
+        field->set_tag(std::string(16, '\x02'));
+        field->set_algorithm(1);
+        return msg;
+    };
+
+    CHECK(computeMessageHash(mk("cipher-a")) != computeMessageHash(mk("cipher-b")));
+    CHECK(computeMessageHash(mk("cipher-a")) == computeMessageHash(mk("cipher-a")));
+}
+
 static void test_socket_send_field_order() {
     // StreamSend has data=2 and index=3 in non-numeric proto order;
     // verify that changing either affects the hash distinctly.
@@ -235,6 +253,7 @@ int main() {
     run("different_submessage_types",     test_different_submessage_types_differ);
     run("endorsements_affect_hash",       test_endorsements_affect_hash);
     run("endorsements_deterministic",     test_endorsements_deterministic);
+    run("encrypted_fields_affect_hash",   test_encrypted_fields_affect_hash);
     run("socket_send_field_order",        test_socket_send_field_order);
     run("connect_tcp_request",            test_connect_tcp_request);
     run("route_update",                   test_route_update);

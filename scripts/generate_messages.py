@@ -77,6 +77,27 @@ def parse_enums(text):
     return enums
 
 
+def parse_field_options(option_block):
+    """Parse selected field options from a proto field option block."""
+    if not option_block:
+        return {}
+
+    compact = re.sub(r"\s+", "", option_block).lower()
+    encrypted = False
+
+    # Custom option form: (rsp.proto.encrypted)=true
+    custom_match = re.search(r"\((?:[a-z_]\w*\.)*encrypted\)=([a-z0-9_]+)", compact)
+    if custom_match:
+        encrypted = custom_match.group(1) in {"true", "1"}
+    else:
+        # Standard option form fallback: encrypted=true
+        plain_match = re.search(r"(?:^|,)(?:[a-z_]\w*\.)?encrypted=([a-z0-9_]+)(?:,|$)", compact)
+        if plain_match:
+            encrypted = plain_match.group(1) in {"true", "1"}
+
+    return {"encrypted": encrypted}
+
+
 def parse_messages(text, enums):
     """Parse all top-level message blocks. Returns ordered dict of message schemas."""
     messages = {}
@@ -113,12 +134,13 @@ def parse_messages(text, enums):
         for oneof_name, oneof_body in oneof_bodies.items():
             field_names_in_oneof = []
             for m in re.finditer(
-                r"(repeated\s+|optional\s+)?(\w+)\s+(\w+)\s*=\s*(\d+)\s*(?:\[[^\]]*\])?\s*;",
+                r"(repeated\s+|optional\s+)?(\w+)\s+(\w+)\s*=\s*(\d+)\s*(?:\[([^\]]*)\])?\s*;",
                 oneof_body,
             ):
-                _qualifier, type_name, field_name, number = (
-                    m.group(1), m.group(2), m.group(3), int(m.group(4))
+                _qualifier, type_name, field_name, number, option_block = (
+                    m.group(1), m.group(2), m.group(3), int(m.group(4)), m.group(5)
                 )
+                options = parse_field_options(option_block)
                 repeated = bool(_qualifier and _qualifier.strip() == "repeated")
                 kind = _field_kind(type_name, enums, messages)
                 field = {
@@ -129,6 +151,7 @@ def parse_messages(text, enums):
                     "repeated": repeated,
                     "has_presence": True,  # oneof fields always have presence
                     "oneof": oneof_name,
+                    "encrypted": bool(options.get("encrypted", False)),
                 }
                 fields.append(field)
                 field_names_in_oneof.append(field_name)
@@ -139,13 +162,15 @@ def parse_messages(text, enums):
 
         # Parse regular fields (not inside oneofs)
         for m in re.finditer(
-            r"(repeated\s+|optional\s+)?(\w+)\s+(\w+)\s*=\s*(\d+)\s*(?:\[[^\]]*\])?\s*;",
+            r"(repeated\s+|optional\s+)?(\w+)\s+(\w+)\s*=\s*(\d+)\s*(?:\[([^\]]*)\])?\s*;",
             body_no_oneofs,
         ):
             qualifier = m.group(1)
             type_name = m.group(2)
             field_name = m.group(3)
             number = int(m.group(4))
+            option_block = m.group(5)
+            options = parse_field_options(option_block)
 
             # Skip proto options that match the pattern (e.g. "optimize_for = LITE_RUNTIME")
             if type_name in ("syntax", "package", "option", "optimize_for"):
@@ -164,6 +189,7 @@ def parse_messages(text, enums):
                 "repeated": repeated,
                 "has_presence": has_presence,
                 "oneof": None,
+                "encrypted": bool(options.get("encrypted", False)),
             }
             fields.append(field)
 

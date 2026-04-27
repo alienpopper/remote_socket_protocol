@@ -3,6 +3,11 @@ syntax = "proto3";
 package rsp.proto;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+    bool encrypted = 50001;
+}
 
 message Uuid {
   bytes value = 1;
@@ -423,6 +428,16 @@ message ERDASTFieldPath {
     repeated string segments = 1;
 }
 
+// Field-level encrypted content container.
+// The path points to the original plaintext field that was replaced.
+message EncryptedField {
+    ERDASTFieldPath path = 1;
+    bytes iv = 2;
+    bytes ciphertext = 3;
+    bytes tag = 4;
+    uint32 algorithm = 5;
+}
+
 // A typed literal value to compare against.
 message ERDASTFieldValue {
     oneof value {
@@ -563,6 +578,14 @@ message EndorsementNeeded {
     ERDAbstractSyntaxTree tree = 2;
 }
 
+// Test-only fixture message for encrypted field annotations.
+message FieldEncryptionFixture {
+    string clear_text = 1;
+    string secret_text = 2 [(rsp.proto.encrypted) = true];
+    bytes secret_bytes = 3 [(rsp.proto.encrypted) = true];
+    string note = 4;
+}
+
 
 message RSPMessage {
   //No destination means it's for whoever is on the other side of the transport link
@@ -602,4 +625,6 @@ message RSPMessage {
   repeated Endorsement endorsements = 100; 
   //identities are valid even if the signature is wrong
   repeated Identity identities = 101;
+  // encrypted field payloads keyed by field path (optional; no crypto semantics implied here)
+  repeated EncryptedField encrypted_fields = 102;
 }

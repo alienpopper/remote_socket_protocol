@@ -3,6 +3,9 @@
 // messages.  An RS that only speaks protobuf can talk to a client that
 // only speaks JSON because the RM acts as a transcoding bridge.
 
+#include "common/service_message.hpp"
+#include "messages.pb.h"
+
 #include <google/protobuf/compiler/importer.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/dynamic_message.h>
@@ -289,12 +292,72 @@ message SensorCommand {
     std::remove(protoFile.c_str());
 }
 
+void testRSPEncryptedFieldContainerTranscoding() {
+    rsp::proto::RSPMessage outbound;
+    outbound.mutable_source()->set_value(std::string(16, '\x01'));
+    outbound.mutable_nonce()->set_value(std::string(16, '\x02'));
+
+    rsp::proto::FieldEncryptionFixture fixture;
+    fixture.set_clear_text("visible");
+    fixture.set_secret_text("placeholder");
+    fixture.set_secret_bytes(std::string("\xAA\xBB", 2));
+    fixture.set_note("test-message");
+    rsp::packServiceMessage(outbound, fixture);
+
+    auto* encryptedField = outbound.add_encrypted_fields();
+    encryptedField->mutable_path()->add_segments("service_message");
+    encryptedField->mutable_path()->add_segments("secret_text");
+    encryptedField->set_iv("123456789012");
+    encryptedField->set_ciphertext("ciphertext-payload");
+    encryptedField->set_tag("0123456789ABCDEF");
+    encryptedField->set_algorithm(1);
+
+    std::string protobufBytes;
+    require(outbound.SerializeToString(&protobufBytes),
+            "RSPMessage with encrypted_fields should serialize to protobuf");
+
+    rsp::proto::RSPMessage decodedFromProtobuf;
+    require(decodedFromProtobuf.ParseFromString(protobufBytes),
+            "RSPMessage with encrypted_fields should parse from protobuf bytes");
+    require(decodedFromProtobuf.encrypted_fields_size() == 1,
+            "RSPMessage protobuf decode should keep encrypted_fields");
+    require(decodedFromProtobuf.encrypted_fields(0).path().segments_size() == 2,
+            "encrypted_fields path should preserve all segments after protobuf decode");
+
+    std::string jsonPayload;
+    google::protobuf::util::JsonPrintOptions printOptions;
+    printOptions.preserve_proto_field_names = true;
+    const auto toJsonStatus =
+        google::protobuf::util::MessageToJsonString(decodedFromProtobuf, &jsonPayload, printOptions);
+    require(toJsonStatus.ok(),
+            "RSPMessage with encrypted_fields should convert to JSON");
+    require(jsonPayload.find("encrypted_fields") != std::string::npos,
+            "JSON output should include encrypted_fields container");
+    require(jsonPayload.find("ciphertext") != std::string::npos,
+            "JSON output should include encrypted field payload members");
+
+    rsp::proto::RSPMessage decodedFromJson;
+    const auto fromJsonStatus =
+        google::protobuf::util::JsonStringToMessage(jsonPayload, &decodedFromJson);
+    require(fromJsonStatus.ok(),
+            "RSPMessage with encrypted_fields should parse from JSON");
+    require(decodedFromJson.encrypted_fields_size() == 1,
+            "JSON decode should preserve encrypted_fields entries");
+    require(decodedFromJson.encrypted_fields(0).path().segments(1) == "secret_text",
+            "JSON decode should preserve encrypted field path values");
+    require(decodedFromJson.encrypted_fields(0).ciphertext() == "ciphertext-payload",
+            "JSON decode should preserve encrypted field ciphertext bytes");
+    require(decodedFromJson.encrypted_fields(0).algorithm() == 1,
+            "JSON decode should preserve encrypted field algorithm value");
+}
+
 }  // namespace
 
 int main() {
     std::cout << "transcoding_test: RS(protobuf) <-> RM(runtime .proto) <-> Client(JSON) ...\n";
 
     testTranscoding();
+    testRSPEncryptedFieldContainerTranscoding();
 
     std::cout << "transcoding_test: " << testsRun << " checks, "
               << (testsPassed ? "all passed" : "SOME FAILED") << "\n";
