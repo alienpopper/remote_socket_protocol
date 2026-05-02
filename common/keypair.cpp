@@ -215,6 +215,20 @@ KeyPair KeyPair::readFromDisk(const std::string& privateKeyPath, const std::stri
     return KeyPair(duplicateKey(privateKey.get()).release());
 }
 
+KeyPair KeyPair::loadOrGenerate(const std::string& privateKeyPath) {
+    if (std::filesystem::exists(privateKeyPath)) {
+        std::unique_ptr<EVP_PKEY, KeyDeleter> key(readPrivateKeyFile(privateKeyPath));
+        verifyP256(key.get());
+        return KeyPair(duplicateKey(key.get()).release());
+    }
+
+    KeyPair kp = generateP256();
+    ensureParentDirectory(privateKeyPath);
+    writePrivateKeyFile(privateKeyPath, kp.key_.get());
+    std::cerr << "[rsp] Generated new key pair, saved to: " << privateKeyPath << '\n';
+    return kp;
+}
+
 NodeID KeyPair::nodeIDFromPublicKeyFile(const std::string& publicKeyPath) {
     std::unique_ptr<EVP_PKEY, KeyDeleter> key(readPublicKeyFile(publicKeyPath));
     verifyP256(key.get());

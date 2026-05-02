@@ -234,6 +234,10 @@ void hashIdentity(MessageHasher& hasher, const rsp::proto::Identity& message) {
         hasher.tag(2);
         hashPublicKey(hasher, message.public_key());
     }
+    if (message.has_boot_id()) {
+        hasher.tag(3);
+        hashUuid(hasher, message.boot_id());
+    }
 }
 
 void hashRouteEntry(MessageHasher& hasher, const rsp::proto::RouteEntry& message) {

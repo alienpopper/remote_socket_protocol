@@ -73,6 +73,7 @@ private:
         rsp::transport::ConnectionHandle connection;
         rsp::proto::NodeId requesterNodeId;
         rsp::GUID socketId;
+        std::string remoteEndpoint;
         bool asyncData = false;
         bool shareSocket = false;
         bool traceEnabled = false;
@@ -84,6 +85,7 @@ private:
         rsp::transport::ListeningTransportHandle transport;
         rsp::proto::NodeId requesterNodeId;
         rsp::GUID socketId;
+        std::string bindEndpoint;
         bool asyncAccept = false;
         bool shareListeningSocket = false;
         bool shareChildSockets = false;

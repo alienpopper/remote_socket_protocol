@@ -178,9 +178,15 @@ int main(int argc, char** argv) {
     // Load keypair from config or generate a new one.
     // This must happen before message_rules so that macros like MY_NODEID()
     // can be expanded.
-    bool hasKeypair = false;
     rsp::KeyPair loadedKeyPair;
-    if (config.contains("keypair")) {
+    if (config.contains("key_file")) {
+        try {
+            loadedKeyPair = rsp::KeyPair::loadOrGenerate(config["key_file"].get<std::string>());
+        } catch (const std::exception& e) {
+            std::cerr << "error with key_file: " << e.what() << '\n';
+            return 1;
+        }
+    } else if (config.contains("keypair")) {
         const auto& kpArray = config["keypair"];
         if (!kpArray.is_array() || kpArray.size() != 2) {
             std::cerr << "error: \"keypair\" must be an array of [\"<public_key_path>\", \"<private_key_path>\"]\n";
@@ -190,18 +196,12 @@ int main(int argc, char** argv) {
         const std::string privateKeyPath = kpArray[1].get<std::string>();
         try {
             loadedKeyPair = rsp::KeyPair::readFromDisk(privateKeyPath, publicKeyPath);
-            hasKeypair = true;
         } catch (const std::exception& e) {
             std::cerr << "error loading keypair: " << e.what() << '\n';
             return 1;
         }
-    }
-
-    // If no keypair was loaded from config, generate one now so that
-    // MY_NODEID() is available for macro expansion in message_rules.
-    if (!hasKeypair) {
+    } else {
         loadedKeyPair = rsp::KeyPair::generateP256();
-        hasKeypair = true;
     }
 
     MacroContext macros;
@@ -260,8 +260,12 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGINT, signalHandler);
 
+    rm->emitNodeStarted();
+
     std::unique_lock<std::mutex> lock(gShutdownMutex);
     gShutdownCv.wait(lock, []() { return gShouldShutdown; });
+
+    rm->emitNodeStopping();
 
     return 0;
 }

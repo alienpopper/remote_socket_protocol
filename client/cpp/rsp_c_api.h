@@ -37,6 +37,10 @@ RSPCLIENT_API intptr_t rsp_bridge_connect_http(RspBridgeHandle handle,
                                                const char* httpd_node_id,
                                                const char* virtual_host);
 
+// Sends an RSP Ping to |node_id| through this RM connection.
+// Returns 1 when a reply is received, 0 otherwise.
+RSPCLIENT_API int rsp_bridge_ping(RspBridgeHandle handle, const char* node_id);
+
 // Stops the RSP client and releases all resources. The handle is invalid
 // after this call.
 RSPCLIENT_API void rsp_bridge_destroy(RspBridgeHandle handle);

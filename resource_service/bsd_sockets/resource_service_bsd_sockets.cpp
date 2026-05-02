@@ -301,6 +301,7 @@ bool BsdSocketsResourceService::registerConnectedSocket(
     socketState->connection = tcpResult.connection;
     socketState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     socketState->socketId = socketId;
+    socketState->remoteEndpoint = hostPort;
     socketState->asyncData = asyncData;
     socketState->shareSocket = shareSocket;
     socketState->traceEnabled = rsp::messageTraceEnabled(message);
@@ -329,6 +330,7 @@ bool BsdSocketsResourceService::registerConnectedSocket(
     }
     log.set_status(rsp::proto::SUCCESS);
     publishLogPayload(log);
+    std::cout << "bsd_sockets: TCP session started -> " << hostPort << std::endl;
 
     if (socketState->asyncData) {
         socketState->readThread = std::thread([this, socketState]() {
@@ -392,6 +394,7 @@ bool BsdSocketsResourceService::handleListenTCPRequest(const rsp::proto::RSPMess
     listenerState->transport = tcpTransport;
     listenerState->requesterNodeId = toProtoNodeId(*requesterNodeId);
     listenerState->socketId = *socketId;
+    listenerState->bindEndpoint = request.host_port();
     listenerState->asyncAccept = asyncAccept;
     listenerState->shareListeningSocket = request.has_share_listening_socket() && request.share_listening_socket();
     listenerState->shareChildSockets = request.has_share_child_sockets() && request.share_child_sockets();
@@ -775,6 +778,7 @@ bool BsdSocketsResourceService::handleStreamClose(const rsp::proto::RSPMessage& 
     *log.mutable_requester_node_id() = removedSocket->requesterNodeId;
     *log.mutable_stream_id() = toProtoStreamId(*socketId);
     publishLogPayload(log);
+    std::cout << "bsd_sockets: TCP session ended -> " << removedSocket->remoteEndpoint << std::endl;
 
     return send(makeStreamReplyMessage(message, rsp::proto::SUCCESS));
 }
@@ -792,6 +796,7 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
         std::lock_guard<std::mutex> lock(listenerState->acceptedMutex);
         listenerState->acceptedConnections.push_back(connection);
         listenerState->acceptedChanged.notify_all();
+        std::cout << "bsd_sockets: TCP session accepted on " << listenerState->bindEndpoint << std::endl;
         return;
     }
 
@@ -799,6 +804,7 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
     socketState->connection = connection;
     socketState->requesterNodeId = listenerState->requesterNodeId;
     socketState->socketId = rsp::GUID();
+    socketState->remoteEndpoint = listenerState->bindEndpoint;
     socketState->asyncData = listenerState->childrenAsyncData;
     socketState->shareSocket = listenerState->shareChildSockets;
     socketState->traceEnabled = listenerState->traceEnabled;
@@ -834,6 +840,7 @@ void BsdSocketsResourceService::handleAcceptedConnection(const std::shared_ptr<M
     *log.mutable_listen_stream_id() = toProtoStreamId(listenerState->socketId);
     *log.mutable_child_stream_id() = toProtoStreamId(socketState->socketId);
     publishLogPayload(log);
+    std::cout << "bsd_sockets: TCP session accepted on " << listenerState->bindEndpoint << std::endl;
 
     if (socketState->asyncData) {
         socketState->readThread = std::thread([this, socketState]() {
@@ -866,6 +873,7 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
                 log.set_status(rsp::proto::STREAM_ERROR);
                 log.set_async_mode(true);
                 publishLogPayload(log);
+                std::cout << "bsd_sockets: TCP session ended (recv error) -> " << socketState->remoteEndpoint << std::endl;
                 const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
                                                           rsp::proto::STREAM_ERROR,
                                                           "socket recv failed",
@@ -888,6 +896,7 @@ void BsdSocketsResourceService::runAsyncReadLoop(const std::shared_ptr<ManagedSo
                 log.set_status(rsp::proto::STREAM_CLOSED);
                 log.set_async_mode(true);
                 publishLogPayload(log);
+                std::cout << "bsd_sockets: TCP session ended (peer closed) -> " << socketState->remoteEndpoint << std::endl;
                 const auto reply = makeStreamReplyMessage(socketState->requesterNodeId,
                                                           rsp::proto::STREAM_CLOSED,
                                                           "socket closed",

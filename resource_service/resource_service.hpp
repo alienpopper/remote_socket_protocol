@@ -21,6 +21,9 @@ public:
 
     ClientConnectionID connectToResourceManager(const std::string& transportSpec, const std::string& encoding);
 
+    void publishNodeStarted(const std::string& serviceType);
+    void publishNodeStopping(const std::string& serviceType);
+
 protected:
     explicit ResourceService(KeyPair keyPair);
 

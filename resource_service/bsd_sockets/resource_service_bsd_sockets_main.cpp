@@ -82,32 +82,48 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Load keypair from config or generate a new one.
-    rsp::resource_service::BsdSocketsResourceService::Ptr resourceService;
-    if (config.contains("keypair")) {
+    // Load or generate key pair.
+    // Priority: "key_file" (load-or-generate) > "keypair" (explicit paths) > ephemeral
+    rsp::KeyPair keyPair;
+    if (config.contains("key_file")) {
+        try {
+            keyPair = rsp::KeyPair::loadOrGenerate(config["key_file"].get<std::string>());
+        } catch (const std::exception& e) {
+            std::cerr << "error with key_file: " << e.what() << '\n';
+            return 1;
+        }
+    } else if (config.contains("keypair")) {
         const auto& kpArray = config["keypair"];
         if (!kpArray.is_array() || kpArray.size() != 2) {
             std::cerr << "error: \"keypair\" must be an array of [\"<public_key_path>\", \"<private_key_path>\"]\n";
             return 1;
         }
-        const std::string publicKeyPath = kpArray[0].get<std::string>();
-        const std::string privateKeyPath = kpArray[1].get<std::string>();
         try {
-            auto keyPair = rsp::KeyPair::readFromDisk(privateKeyPath, publicKeyPath);
-            resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(keyPair));
+            keyPair = rsp::KeyPair::readFromDisk(kpArray[1].get<std::string>(), kpArray[0].get<std::string>());
         } catch (const std::exception& e) {
             std::cerr << "error loading keypair: " << e.what() << '\n';
             return 1;
         }
     } else {
-        resourceService = rsp::resource_service::BsdSocketsResourceService::create();
+        keyPair = rsp::KeyPair::generateP256();
     }
+
+    const std::string nodeIdStr = keyPair.nodeID().toString();
+    auto resourceService = rsp::resource_service::BsdSocketsResourceService::create(std::move(keyPair));
 
     try {
         resourceService->connectToResourceManager(rmTransportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
-        std::cout << "rsp_bsd_sockets: connected to " << rmTransportSpec
-                  << " using encoding " << rsp::message_queue::kAsciiHandshakeEncoding << '\n';
-        return resourceService->run();
+        std::cout << "======================================\n"
+                  << "rsp_bsd_sockets: started\n"
+                  << "  node ID: " << nodeIdStr << "\n"
+                  << "  RM: " << rmTransportSpec << "\n"
+                  << "  encoding: " << rsp::message_queue::kAsciiHandshakeEncoding << "\n"
+                  << "======================================\n";
+        std::cout.flush();
+        resourceService->publishNodeStarted("bsd_sockets");
+        const int result = resourceService->run();
+        resourceService->publishNodeStopping("bsd_sockets");
+        return result;
     } catch (const std::exception& exception) {
         std::cerr << "rsp_bsd_sockets failed: " << exception.what() << '\n';
         return 1;

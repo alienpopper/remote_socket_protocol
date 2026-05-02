@@ -1,5 +1,10 @@
 #include "resource_service/resource_service.hpp"
 
+#include "logging/logging.pb.h"
+#include "logging/logging_desc.hpp"
+#include "resource_manager/schema_registry.hpp"
+#include "common/service_message.hpp"
+
 #include <cstring>
 #include <stdexcept>
 
@@ -61,6 +66,42 @@ bool ResourceService::sendResourceAdvertisement(ClientConnectionID connectionId)
     *message.mutable_destination() = toProtoNodeId(*destinationNodeId);
     *message.mutable_resource_advertisement() = buildResourceAdvertisement();
     return sendOnConnection(connectionId, message);
+}
+
+namespace {
+
+const rsp::resource_manager::SchemaSnapshot& generalLoggingSchema() {
+    static const rsp::resource_manager::SchemaSnapshot snapshot = []() {
+        rsp::proto::ServiceSchema schema;
+        schema.set_proto_file_name("logging/logging.proto");
+        schema.set_proto_file_descriptor_set(
+            std::string(reinterpret_cast<const char*>(rsp::schema::kLoggingDescriptor),
+                        rsp::schema::kLoggingDescriptorSize));
+        return rsp::resource_manager::SchemaSnapshot({schema});
+    }();
+    return snapshot;
+}
+
+}  // namespace
+
+void ResourceService::publishNodeStarted(const std::string& serviceType) {
+    rsp::proto::NodeStartedEvent event;
+    *event.mutable_node_id() = toProtoNodeId(keyPair().nodeID());
+    event.set_service_type(serviceType);
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    const auto& snap = generalLoggingSchema();
+    publishLogRecord(record, &snap);
+}
+
+void ResourceService::publishNodeStopping(const std::string& serviceType) {
+    rsp::proto::NodeStoppingEvent event;
+    *event.mutable_node_id() = toProtoNodeId(keyPair().nodeID());
+    event.set_service_type(serviceType);
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    const auto& snap = generalLoggingSchema();
+    publishLogRecord(record, &snap);
 }
 
 }  // namespace rsp::resource_service

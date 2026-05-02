@@ -925,6 +925,24 @@ void ResourceManager::eraseResourceAdvertisement(const rsp::NodeID& nodeId) cons
     resourceAdvertisements_.erase(nodeId);
 }
 
+void ResourceManager::emitNodeStarted() {
+    rsp::proto::NodeStartedEvent event;
+    *event.mutable_node_id() = toProtoNodeId(keyPair().nodeID());
+    event.set_service_type("resource_manager");
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    publishLogRecord(record, &loggingSchemaSnapshot_);
+}
+
+void ResourceManager::emitNodeStopping() {
+    rsp::proto::NodeStoppingEvent event;
+    *event.mutable_node_id() = toProtoNodeId(keyPair().nodeID());
+    event.set_service_type("resource_manager");
+    rsp::proto::LogRecord record;
+    record.mutable_payload()->PackFrom(event, rsp::kTypeUrlPrefix);
+    publishLogRecord(record, &loggingSchemaSnapshot_);
+}
+
 void ResourceManager::addClientTransport(const rsp::transport::ListeningTransportHandle& transport) {
     registerTransportCallback(transport);
     clientTransports_.push_back(transport);

@@ -26,6 +26,9 @@ public:
     static KeyPair generateP256();
     static KeyPair fromPublicKey(const rsp::proto::PublicKey& publicKey);
     static KeyPair readFromDisk(const std::string& privateKeyPath, const std::string& publicKeyPath);
+    // Loads the private key from privateKeyPath if it exists; otherwise generates
+    // a new P-256 key pair, saves the private key to that path, and returns it.
+    static KeyPair loadOrGenerate(const std::string& privateKeyPath);
     static NodeID nodeIDFromPublicKeyFile(const std::string& publicKeyPath);
     KeyPair duplicate() const;
 

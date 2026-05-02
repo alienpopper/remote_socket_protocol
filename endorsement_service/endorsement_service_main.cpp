@@ -192,7 +192,15 @@ int main(int argc, char** argv) {
     }
 
     rsp::endorsement_service::EndorsementService::Ptr endorsementService;
-    if (config.contains("keypair")) {
+    if (config.contains("key_file")) {
+        try {
+            auto keyPair = rsp::KeyPair::loadOrGenerate(config["key_file"].get<std::string>());
+            endorsementService = rsp::endorsement_service::EndorsementService::create(std::move(keyPair));
+        } catch (const std::exception& e) {
+            std::cerr << "error with key_file: " << e.what() << '\n';
+            return 1;
+        }
+    } else if (config.contains("keypair")) {
         const auto& kpArray = config["keypair"];
         if (!kpArray.is_array() || kpArray.size() != 2) {
             std::cerr << "error: \"keypair\" must be an array of [\"<public_key_path>\", \"<private_key_path>\"]\n";

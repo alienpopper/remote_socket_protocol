@@ -78,6 +78,18 @@ intptr_t rsp_bridge_connect_http(RspBridgeHandle handle,
     }
 }
 
+int rsp_bridge_ping(RspBridgeHandle handle, const char* node_id) {
+    if (!handle || !node_id) {
+        return 0;
+    }
+
+    try {
+        return handle->client->ping(rsp::NodeID(node_id)) ? 1 : 0;
+    } catch (const std::exception&) {
+        return 0;
+    }
+}
+
 void rsp_bridge_destroy(RspBridgeHandle handle) {
     if (!handle) {
         return;

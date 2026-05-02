@@ -43,6 +43,9 @@ public:
     bool tryDequeueMessage(rsp::proto::RSPMessage& message) const;
     size_t pendingMessageCount() const;
 
+    void emitNodeStarted();
+    void emitNodeStopping();
+
 protected:
     virtual std::vector<rsp::Endorsement> getAuthorizationEndorsements(const rsp::NodeID& nodeId) const;
     virtual rsp::proto::ERDAbstractSyntaxTree authorizationTree() const;

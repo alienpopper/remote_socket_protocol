@@ -4085,6 +4085,71 @@ const SCHEMA = {
             ],
             "oneofs": []
         },
+        "ConnectHttp": {
+            "fields": [
+                {
+                    "name": "stream_id",
+                    "number": 2,
+                    "kind": "message",
+                    "type": "StreamID",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "virtual_host",
+                    "number": 3,
+                    "kind": "scalar",
+                    "type": "string",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "tls",
+                    "number": 4,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "timeout_ms",
+                    "number": 5,
+                    "kind": "scalar",
+                    "type": "uint32",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "async_data",
+                    "number": 8,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                },
+                {
+                    "name": "share_socket",
+                    "number": 10,
+                    "kind": "scalar",
+                    "type": "bool",
+                    "repeated": false,
+                    "has_presence": true,
+                    "oneof": null,
+                    "encrypted": false
+                }
+            ],
+            "oneofs": []
+        },
         "NameRecord": {
             "fields": [
                 {
@@ -4791,6 +4856,24 @@ function normalizeScalar(field, value, path) {
     }
 }
 
+function normalizeAny(value, path) {
+    if (!isPlainObject(value)) fail(path, "expected an object for Any");
+    const typeUrl = value["@type"] || "";
+    if (!typeUrl) return value;
+    const slash = typeUrl.lastIndexOf("/");
+    const fullName = slash >= 0 ? typeUrl.substring(slash + 1) : typeUrl;
+    const dot = fullName.lastIndexOf(".");
+    const typeName = dot >= 0 ? fullName.substring(dot + 1) : fullName;
+    const definition = MESSAGE_TYPES[typeName];
+    if (!definition) return value;
+    const inner = {};
+    for (const key of Object.keys(value)) {
+        if (key !== "@type") inner[key] = value[key];
+    }
+    const normalizedInner = normalizeMessage(typeName, inner, path);
+    return {"@type": typeUrl, ...normalizedInner};
+}
+
 function normalizeFieldValue(field, value, path) {
     switch (field.kind) {
     case "scalar":
@@ -4798,6 +4881,9 @@ function normalizeFieldValue(field, value, path) {
     case "enum":
         return normalizeEnum(field.type, value, path);
     case "message":
+        if (field.type === "Any") {
+            return normalizeAny(value, path);
+        }
         return normalizeMessage(field.type, value, path);
     default:
         fail(path, `unsupported field kind ${field.kind}`);
