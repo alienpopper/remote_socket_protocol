@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index 88173fb..d449127 100644
+index 88173fbd28..c19288ccff 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
-@@ -88,6 +88,11 @@
+@@ -88,6 +88,12 @@
  #define IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER 34058
  
  // Web app window commands
@@ -10,6 +10,7 @@ index 88173fb..d449127 100644
 +#define IDC_NEW_RSP_TAB                    34065
 +#define IDC_NEW_INCOGNITO_RSP_TAB          34066
 +#define IDC_CONTENT_CONTEXT_OPENLINKRSPTAB 34067
++#define IDC_NEW_RSP_WINDOW                 34068
 +
  #define IDC_COPY_URL                    34060
  #define IDC_OPEN_IN_CHROME              34061

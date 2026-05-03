@@ -1,12 +1,26 @@
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index f91ad4b..1c1c0db 100644
+index f91ad4bd46..b089194620 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -1588,6 +1588,7 @@ void BrowserCommandController::InitCommandState() {
+@@ -677,6 +677,12 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
+     case IDC_NEW_INCOGNITO_WINDOW:
+       NewIncognitoWindow(profile());
+       break;
++    case IDC_NEW_RSP_TAB:
++      NewRspTab(browser_);
++      break;
++    case IDC_NEW_RSP_WINDOW:
++      NewRspWindow(profile());
++      break;
+     case IDC_CLOSE_WINDOW:
+       base::RecordAction(base::UserMetricsAction("CloseWindowByKey"));
+       CloseWindow(browser_);
+@@ -1588,6 +1594,8 @@ void BrowserCommandController::InitCommandState() {
    command_updater_.UpdateCommandEnabled(
        IDC_NEW_TAB, !browser_->app_controller() ||
                         !browser_->app_controller()->ShouldHideNewTabButton());
 +  command_updater_.UpdateCommandEnabled(IDC_NEW_RSP_TAB, true);
++  command_updater_.UpdateCommandEnabled(IDC_NEW_RSP_WINDOW, true);
    command_updater_.UpdateCommandEnabled(IDC_CLOSE_TAB, true);
    command_updater_.UpdateCommandEnabled(
        IDC_DUPLICATE_TAB, !browser_->is_type_picture_in_picture());

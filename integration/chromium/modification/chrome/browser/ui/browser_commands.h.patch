@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index f208731640..e5ca1d58de 100644
+index f208731640..dc0a128fa6 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -114,6 +114,11 @@ void CloseWindow(BrowserWindowInterface* browser);
+@@ -114,6 +114,12 @@ void CloseWindow(BrowserWindowInterface* browser);
  content::WebContents& NewTab(BrowserWindowInterface* browser,
                               NewTabTypes context = NewTabTypes::kNewTabCommand);
  void NewTabToRight(BrowserWindowInterface* browser);
@@ -11,6 +11,7 @@ index f208731640..e5ca1d58de 100644
 +// If `url` is non-empty, navigates the new RSP tab to it.
 +void NewRspTab(BrowserWindowInterface* browser);
 +void NewRspTab(BrowserWindowInterface* browser, const GURL& url);
++void NewRspWindow(Profile* profile);
  void NewTabFromClipboardURL(BrowserWindowInterface* browser);
  void CloseTab(BrowserWindowInterface* browser);
  bool CanZoomIn(content::WebContents* contents);

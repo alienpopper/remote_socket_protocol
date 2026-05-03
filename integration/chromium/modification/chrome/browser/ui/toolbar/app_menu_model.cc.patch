@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index d9393a5b7d..068bda8ff3 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -1978,6 +1978,9 @@ void AppMenuModel::Build() {
+         kIncognitoMenuItem);
+   }
+ 
++  AddItemWithStringId(IDC_NEW_RSP_TAB, IDS_NEW_RSP_TAB);
++  AddItemWithStringId(IDC_NEW_RSP_WINDOW, IDS_NEW_RSP_WINDOW);
++
+   AddSeparator(ui::NORMAL_SEPARATOR);
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)

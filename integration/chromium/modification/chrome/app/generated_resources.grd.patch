@@ -1,0 +1,30 @@
+diff --git a/chrome/app/generated_resources.grd b/chrome/app/generated_resources.grd
+index 74e04937d5..c8b1666bc5 100644
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -1310,6 +1310,12 @@ are declared in tools/grit/grit_args.gni.
+           <message name="IDS_NEW_INCOGNITO_WINDOW" desc="The text label of a menu item for opening a new Incognito window">
+             New &amp;Incognito window
+           </message>
++          <message name="IDS_NEW_RSP_TAB" desc="The text label of a menu item for opening a new RSP tab">
++            New RSP tab
++          </message>
++          <message name="IDS_NEW_RSP_WINDOW" desc="The text label of a menu item for opening a new RSP window">
++            New RSP window
++          </message>
+           <message name="IDS_PROFILE_ROW_SIGNED_IN_MESSAGE_WITH_EMAIL" desc="Label that lets the user know what email they are signed into their profile as.">
+             Signed in as <ph name="EMAIL">$1<ex>user@gmail.com</ex></ph>
+           </message>
+@@ -1452,6 +1458,12 @@ are declared in tools/grit/grit_args.gni.
+           <message name="IDS_NEW_INCOGNITO_WINDOW" desc="In Title Case: The text label of a menu item for opening a new Incognito window">
+             New &amp;Incognito Window
+           </message>
++          <message name="IDS_NEW_RSP_TAB" desc="In Title Case: The text label of a menu item for opening a new RSP tab">
++            New RSP Tab
++          </message>
++          <message name="IDS_NEW_RSP_WINDOW" desc="In Title Case: The text label of a menu item for opening a new RSP window">
++            New RSP Window
++          </message>
+           <message name="IDS_PROFILE_ROW_SIGNED_IN_MESSAGE_WITH_EMAIL" desc="In Title Case: Label that lets the user know what email they are signed into their profile as.">
+             Signed in as <ph name="EMAIL">$1<ex>user@gmail.com</ex></ph>
+           </message>
