@@ -41,6 +41,7 @@ RSP_SSHD_TARGET := $(BIN_DIR)/rsp_sshd
 RSP_SSH_TARGET  := $(BIN_DIR)/rsp_ssh
 RSP_HTTPD_TARGET := $(BIN_DIR)/rsp_httpd
 HTTPD_RESOURCE_SERVICE_TEST_TARGET := $(BIN_DIR)/httpd_resource_service_test
+TRANSPORT_UDP_TEST_TARGET := $(BIN_DIR)/transport_udp_test
 LIB_DIR := $(BUILD_DIR)/lib
 RSPCLIENT_STATIC_TARGET := $(LIB_DIR)/librspclient.a
 RSPCLIENT_SHARED_TARGET := $(LIB_DIR)/librspclient.so
@@ -110,6 +111,7 @@ COMMON_SOURCES := \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
+	$(COMMON_TRANSPORT_UDP_SOURCE) \
 	resource_manager/resource_manager.cpp \
 	resource_manager/resource_manager_main.cpp
 
@@ -570,6 +572,13 @@ TRANSPORT_TCP_TEST_OBJECTS := \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/transport_tcp_test.o
 
+TRANSPORT_UDP_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/transport/transport.o \
+	$(OBJ_DIR)/common/transport/transport_udp.o \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOCKET_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/transport_udp_test.o
+
 RSP_ENDORSEMENT_TOOL_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(OBJ_DIR)/common/keypair.o \
@@ -592,7 +601,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-transport-udp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
 
 $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto $(GENERATE_MESSAGES_SCRIPT)
 	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
@@ -723,6 +732,9 @@ $(TRANSPORT_MEMORY_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_
 $(TRANSPORT_TCP_TEST_TARGET): directories $(TRANSPORT_TCP_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(TRANSPORT_TCP_TEST_OBJECTS) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
+$(TRANSPORT_UDP_TEST_TARGET): directories $(TRANSPORT_UDP_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(TRANSPORT_UDP_TEST_OBJECTS) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
 $(RSP_ENDORSEMENT_TOOL_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(RSP_ENDORSEMENT_TOOL_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(RSP_ENDORSEMENT_TOOL_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
@@ -829,6 +841,11 @@ test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 
 test-transport-tcp: $(TRANSPORT_TCP_TEST_TARGET)
 	$(TRANSPORT_TCP_TEST_TARGET)
+
+test-transport-udp: $(TRANSPORT_UDP_TEST_TARGET)
+	$(TRANSPORT_UDP_TEST_TARGET)
+
+test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-logging test-transport-tcp test-transport-udp
 
 test-nodejs-client: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS)
 	node test/nodejs_ping_integration.js $(NODEJS_PING_FIXTURE_TARGET)

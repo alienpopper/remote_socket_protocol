@@ -29,6 +29,7 @@ HTTPD_RESOURCE_SERVICE_TEST_TARGET = $(BIN_DIR)\httpd_resource_service_test.exe
 RSP_HTTPD_TARGET = $(BIN_DIR)\rsp_httpd.exe
 LOGGING_TEST_TARGET = $(BIN_DIR)\logging_test.exe
 TRANSPORT_TCP_TEST_TARGET = $(BIN_DIR)\transport_tcp_test.exe
+TRANSPORT_UDP_TEST_TARGET = $(BIN_DIR)\transport_udp_test.exe
 ENDORSEMENT_TEXT_TEST_TARGET = $(BIN_DIR)\endorsement_text_test.exe
 MESSAGE_HASH_TEST_TARGET = $(BIN_DIR)\message_hash_test.exe
 RUNTIME_PROTO_TEST_TARGET = $(BIN_DIR)\runtime_proto_test.exe
@@ -600,6 +601,13 @@ TRANSPORT_MEMORY_TEST_OBJECTS = \
 	$(OBJ_DIR)\os_socket.obj \
 	$(OBJ_DIR)\os_random.obj
 
+TRANSPORT_UDP_TEST_OBJECTS = \
+	$(OBJ_DIR)\transport.obj \
+	$(OBJ_DIR)\transport_udp.obj \
+	$(OBJ_DIR)\os_socket.obj \
+	$(OBJ_DIR)\os_random.obj \
+	$(OBJ_DIR)\transport_udp_test.obj
+
 KEYPAIR_TEST_OBJECTS = \
 	$(OBJ_DIR)\base_types.obj \
 	$(OBJ_DIR)\node.obj \
@@ -696,7 +704,7 @@ CLIENT_TEST_OBJECTS = \
 
 all: dirs generate-messages $(TARGET) $(ESP_RM_TARGET) $(ESP_ES_TARGET) $(RSPCLIENT_STATIC_TARGET) $(RSPCLIENT_SHARED_TARGET) $(RSPFULLCLIENT_STATIC_TARGET) $(RESOURCE_SERVICE_TARGET) $(BSD_SOCKETS_TARGET) $(NAME_SERVICE_TARGET) $(RSP_HTTPD_TARGET) $(ENDORSEMENT_SERVICE_TARGET) $(RSP_ENDORSEMENT_TOOL_TARGET) $(RSP_CLI_TOOL_TARGET)
 
-test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-signing test-node test-client test-resource-service test-httpd-resource-service test-endorsement-service test-transport-memory test-logging test-transport-tcp
+test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-signing test-node test-client test-resource-service test-httpd-resource-service test-endorsement-service test-transport-memory test-logging test-transport-tcp test-transport-udp
 
 !include third_party\Makefile.windows
 
@@ -969,6 +977,9 @@ test-logging: $(LOGGING_TEST_TARGET)
 test-transport-tcp: $(TRANSPORT_TCP_TEST_TARGET)
 	$(TRANSPORT_TCP_TEST_TARGET)
 
+test-transport-udp: $(TRANSPORT_UDP_TEST_TARGET)
+	$(TRANSPORT_UDP_TEST_TARGET)
+
 generate-messages: messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto $(GENERATE_MESSAGES_SCRIPT)
 	python $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service\bsd_sockets\bsd_sockets.proto resource_service\bsd_sockets\bsd_sockets_logging.proto resource_service\sshd\sshd.proto resource_service\httpd\httpd.proto name_service\name_service.proto logging\logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
@@ -1028,6 +1039,15 @@ $(OBJ_DIR)\transport_tcp.obj: common\transport\transport_tcp.cpp common\transpor
 
 $(OBJ_DIR)\transport_memory.obj: common\transport\transport_memory.cpp common\transport\transport_memory.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_memory.cpp /Fo$(OBJ_DIR)\transport_memory.obj
+
+$(OBJ_DIR)\transport_udp.obj: common\transport\transport_udp.cpp common\transport\transport_udp.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c common\transport\transport_udp.cpp /Fo$(OBJ_DIR)\transport_udp.obj
+
+$(TRANSPORT_UDP_TEST_TARGET): dirs $(TRANSPORT_UDP_TEST_OBJECTS)
+	cl /nologo $(CXXFLAGS) $(TRANSPORT_UDP_TEST_OBJECTS) $(OS_SYSTEM_LIBS) /Fe$(TRANSPORT_UDP_TEST_TARGET)
+
+$(OBJ_DIR)\transport_udp_test.obj: test\transport_udp_test.cpp common\transport\transport_udp.hpp common\transport\transport.hpp $(OS_SOCKET_HEADER)
+	cl $(CPPFLAGS) $(CXXFLAGS) /c test\transport_udp_test.cpp /Fo$(OBJ_DIR)\transport_udp_test.obj
 
 $(OBJ_DIR)\rsp_client_message.obj: client\cpp\rsp_client_message.cpp client\cpp\rsp_client_message.hpp client\cpp\rsp_client_export.hpp common\transport\transport_tcp.hpp common\message_queue\mq.hpp $(PROTOBUF_GENERATED_HEADER)
 	cl $(CPPFLAGS) $(CXXFLAGS) /DRSPCLIENT_STATIC /c client\cpp\rsp_client_message.cpp /Fo$(OBJ_DIR)\rsp_client_message.obj
