@@ -6,10 +6,10 @@
 'use strict';
 const { spawn } = require('child_process');
 const path = require('path');
-const RSPClient = require('./client/nodejs/rsp_client');
+const { RSPClient, decodeNodeIdField } = require('../client/nodejs/rsp_client');
 
-const BIN = path.join(__dirname, 'build', 'bin');
-const REPO = __dirname;
+const REPO = path.join(__dirname, '..');
+const BIN = path.join(REPO, 'build', 'bin');
 
 function launchProc(exe, args, label) {
   const proc = spawn(exe, args, { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -23,38 +23,35 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function main() {
   console.log('Starting RM...');
-  const rm = launchProc(path.join(BIN, 'rsp_rm.exe'), ['--config', 'rsp_rm.conf'], 'RM');
+  const rm = launchProc(path.join(REPO, 'bin', 'esp_rm.exe'), ['--config', path.join(REPO, 'bin', 'rsp_rm.conf')], 'RM');
   await sleep(1500);
 
   console.log('Starting bsd_sockets #1...');
   const bs1 = launchProc(path.join(BIN, 'rsp_bsd_sockets.exe'),
-    ['--config', path.join(__dirname, 'bin', 'rsp_bsd_sockets.conf')], 'BSD1');
+    ['--config', path.join(REPO, 'bin', 'rsp_bsd_sockets.conf')], 'BSD1');
   await sleep(1000);
 
   console.log('Starting bsd_sockets #2...');
   const bs2 = launchProc(path.join(BIN, 'rsp_bsd_sockets.exe'),
-    ['--config', path.join(__dirname, 'bin', 'rsp_bsd_sockets2.conf')], 'BSD2');
+    ['--config', path.join(REPO, 'bin', 'rsp_bsd_sockets2.conf')], 'BSD2');
   await sleep(2000);
 
   console.log('\n--- Discovering bsd_sockets nodes via RSP ---');
   const client = new RSPClient();
-  const connId = client.connectToResourceManager('127.0.0.1:3939');
-
-  // Wait for auth
-  await sleep(2000);
-  const rmNodeId = client.peerNodeID(connId);
+  await client.connect('tcp:127.0.0.1:3939');
+  const rmNodeId = client.peerNodeId;
   console.log('RM node:', rmNodeId);
 
-  const services = await new Promise(resolve => {
-    client.resourceList(rmNodeId, '', 200, (err, svcs) => {
-      if (err) { console.error('resourceList error:', err); resolve([]); }
-      else resolve(svcs);
-    });
-  });
+  const reply = await client.resourceList(rmNodeId, '', 200);
+  const services = (reply && reply.services) ? reply.services : [];
 
-  const bsdNodes = services
-    .filter(s => (s.acceptedTypeUrls || []).some(u => u.includes('ConnectTCPRequest')))
-    .map(s => s.nodeId);
+  // Filter bsd_sockets nodes (deduplicated by primary schema; each node
+  // advertises both bsd_sockets.proto and a logging schema).
+  const bsdNodes = [...new Set(
+    services
+      .filter(s => s.schema && s.schema.proto_file_name === 'bsd_sockets.proto')
+      .map(s => decodeNodeIdField(s.node_id.value))
+  )];
 
   console.log('Found bsd_sockets nodes:', bsdNodes);
 
@@ -62,24 +59,14 @@ async function main() {
     console.warn('WARNING: expected 2 bsd_sockets nodes, got', bsdNodes.length);
   }
 
-  // Subscribe to logs from all nodes
-  const logTargets = [rmNodeId, ...bsdNodes];
-  for (const nodeId of logTargets) {
-    client.subscribeToLogs(nodeId, (entry) => {
-      console.log(`[LOG:${nodeId.slice(0,8)}] ${entry.level} ${entry.message}`);
-    });
-    console.log('Subscribed to logs for', nodeId.slice(0, 8));
-  }
-
-  client.disconnect(connId);
+  await client.close().catch(() => {});
 
   console.log('\nEnvironment ready. Press Ctrl+C to stop.');
   console.log('You can now:');
-  console.log('  1. Launch Chrome: out\\Default\\chrome.exe --no-sandbox');
-  console.log('  2. Open an RSP tab via right-click -> "Open in RSP tab"');
+  console.log('  1. Launch Chrome: C:\\chromium\\src\\out\\Default\\chrome.exe --no-sandbox');
+  console.log('  2. Open an RSP window via right-click -> "Open in RSP tab"');
   console.log('  3. Click the router icon, enter RM addr, click Refresh');
   console.log('  4. Two bsd_sockets nodes should appear in the dropdown');
-  console.log('  5. Open a second RSP tab and assign a different node');
   bsdNodes.forEach((n, i) => console.log(`  bsd_sockets #${i+1}: ${n}`));
 
   process.on('SIGINT', () => {

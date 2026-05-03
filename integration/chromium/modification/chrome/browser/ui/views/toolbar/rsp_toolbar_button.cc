@@ -255,13 +255,13 @@ void RspToolbarButton::ShowBubbleForProfile(views::View* anchor_view,
   RspConfigBubble::Show(anchor_view, profile);
 }
 
-void RspToolbarButton::UpdateForWebContents(
-    content::WebContents* web_contents) {
-  Profile* profile =
-      web_contents
-          ? Profile::FromBrowserContext(web_contents->GetBrowserContext())
-          : nullptr;
-  bool should_be_visible = IsRspProfile(profile);
+void RspToolbarButton::UpdateForWebContents(content::WebContents*) {
+  // RSP tabs always live in a dedicated browser window whose profile is the
+  // RSP OTR profile. Check the window's profile rather than the active tab's
+  // browser context — individual web contents in the window share the window
+  // profile and would give the same answer, but this avoids the null case
+  // (web_contents==nullptr) hiding the button during security state updates.
+  bool should_be_visible = IsRspProfile(browser_->profile());
   if (GetVisible() != should_be_visible) {
     SetVisible(should_be_visible);
     PreferredSizeChanged();
@@ -277,13 +277,7 @@ void RspToolbarButton::ButtonPressed(const ui::Event& event) {
 }
 
 Profile* RspToolbarButton::GetActiveRspProfile() const {
-  content::WebContents* active_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
-  Profile* profile =
-      active_contents
-          ? Profile::FromBrowserContext(active_contents->GetBrowserContext())
-          : nullptr;
-  return IsRspProfile(profile) ? profile : nullptr;
+  return IsRspProfile(browser_->profile()) ? browser_->profile() : nullptr;
 }
 
 BEGIN_METADATA(RspToolbarButton)
