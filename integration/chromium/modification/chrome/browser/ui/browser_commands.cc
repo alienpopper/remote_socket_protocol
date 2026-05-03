@@ -13,6 +13,8 @@
 
 #include "base/check.h"
 #include "base/check_deref.h"
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
@@ -1171,13 +1173,22 @@ void NewRspTab(BrowserWindowInterface* browser, const GURL& url) {
                                                        rsp_conn_key, config);
 
   const GURL navigation_url = url.is_empty() ? GURL("chrome://newtab") : url;
-  // NavigateParams(profile, ...) leaves browser=nullptr; Navigate will call
-  // GetOrCreateBrowser(rsp_profile) to find or create the RSP window so the
-  // new tab's WebContents actually uses rsp_profile as its browser context.
-  NavigateParams params(rsp_profile,
-                        navigation_url,
-                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-  Navigate(&params);
+  // Post Navigate asynchronously so any open menu bubble (e.g. the app menu
+  // that triggered this command) can close via its normal deactivation path
+  // before the new RSP window takes focus. Calling Navigate() synchronously
+  // from inside a menu callback causes BubbleDialogDelegate::OnDeactivate to
+  // fire while the animation system is in an invalid state → DCHECK crash.
+  // base::Unretained is safe: rsp_profile is an OTR profile owned by the
+  // original profile; it outlives this posted task on the UI thread.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](Profile* profile, GURL nav_url) {
+            NavigateParams params(profile, nav_url,
+                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+            Navigate(&params);
+          },
+          base::Unretained(rsp_profile), navigation_url));
 }
 
 void NewRspWindow(Profile* profile) {
