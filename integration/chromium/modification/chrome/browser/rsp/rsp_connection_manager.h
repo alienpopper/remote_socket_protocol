@@ -10,7 +10,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/rsp/rsp_config.h"
 
@@ -61,6 +63,13 @@ class RspConnectionManager {
 
   // Unregisters a profile mapping (called when the OTR profile is destroyed).
   void UnregisterProfile(Profile* profile);
+
+  // Async: discovers bsd_sockets node IDs from the RM at |rm_addr| and calls
+  // |callback| on the UI thread with the results (may be empty on failure).
+  // Blocks a MayBlock thread pool thread for up to ~8 seconds.
+  using NodeListCallback = base::OnceCallback<void(std::vector<std::string>)>;
+  void ListBsdSocketsNodes(const std::string& rm_addr,
+                           NodeListCallback callback);
 
   RspConnectionManager(const RspConnectionManager&) = delete;
   RspConnectionManager& operator=(const RspConnectionManager&) = delete;

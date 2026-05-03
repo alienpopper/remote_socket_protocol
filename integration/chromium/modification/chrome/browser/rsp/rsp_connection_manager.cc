@@ -8,14 +8,20 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -248,4 +254,64 @@ void RspConnectionManager::UnregisterProfile(Profile* profile) {
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->profile_keys.erase(profile);
   impl_->profile_configs.erase(profile);
+}
+
+void RspConnectionManager::ListBsdSocketsNodes(const std::string& rm_addr,
+                                               NodeListCallback callback) {
+#if BUILDFLAG(IS_WIN)
+  using ListFn = int (*)(const char*, char***, int*);
+  using FreeFn = void (*)(char**, int);
+
+  static HMODULE s_dll = nullptr;
+  static ListFn s_list_fn = nullptr;
+  static FreeFn s_free_fn = nullptr;
+  static bool s_dll_loaded = false;
+
+  if (!s_dll_loaded) {
+    s_dll_loaded = true;
+    s_dll = ::LoadLibraryExW(L"rspclient.dll", nullptr,
+                             LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
+    if (s_dll) {
+      s_list_fn = reinterpret_cast<ListFn>(
+          ::GetProcAddress(s_dll, "rsp_list_bsd_sockets_nodes"));
+      s_free_fn = reinterpret_cast<FreeFn>(
+          ::GetProcAddress(s_dll, "rsp_free_node_ids"));
+    }
+  }
+
+  if (!s_list_fn || !s_free_fn) {
+    std::move(callback).Run({});
+    return;
+  }
+
+  ListFn list_fn = s_list_fn;
+  FreeFn free_fn = s_free_fn;
+
+  struct NodeLister {
+    static std::vector<std::string> Run(ListFn list_fn,
+                                        FreeFn free_fn,
+                                        std::string rm_addr) {
+      char** node_ids = nullptr;
+      int count = 0;
+      if (!list_fn(rm_addr.c_str(), &node_ids, &count) || count == 0) {
+        return {};
+      }
+      std::vector<std::string> result;
+      result.reserve(count);
+      for (int i = 0; i < count; ++i) {
+        result.emplace_back(node_ids[i]);
+      }
+      free_fn(node_ids, count);
+      return result;
+    }
+  };
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&NodeLister::Run, list_fn, free_fn, rm_addr),
+      std::move(callback));
+#else
+  std::move(callback).Run({});
+#endif
 }

@@ -1,0 +1,20 @@
+diff --git a/ui/views/bubble/bubble_dialog_delegate_view.h b/ui/views/bubble/bubble_dialog_delegate_view.h
+index 20bb774f47..8622e25a80 100644
+--- a/ui/views/bubble/bubble_dialog_delegate_view.h
++++ b/ui/views/bubble/bubble_dialog_delegate_view.h
+@@ -81,6 +81,7 @@ class TabHoverCardBubbleView;
+ class TestBubbleView;
+ class ToolbarActionHoverCardBubbleView;
+ class ScreenshotSurfaceTestDialog;
++class RspConfigBubble;
+ class WebBubbleView;
+ class WebUIBubbleDialogView;
+ FORWARD_DECLARE_TEST(InProcessBrowserTest,
+@@ -834,6 +835,7 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public View,
+   friend class ::TabHoverCardBubbleView;
+   friend class ::TestBubbleView;
+   friend class ::ToolbarActionHoverCardBubbleView;
++  friend class ::RspConfigBubble;
+   friend class ::ScreenshotSurfaceTestDialog;
+   friend class ::WebBubbleView;
+   friend class ::WebUIBubbleDialogView;

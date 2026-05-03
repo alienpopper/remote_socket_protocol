@@ -6,8 +6,11 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/functional/bind.h"
+#include "base/memory/weak_ptr.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/rsp/rsp_config.h"
@@ -19,12 +22,13 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/models/dialog_model.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/simple_combobox_model.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/bubble/bubble_dialog_model_host.h"
+#include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
@@ -34,66 +38,77 @@
 
 namespace {
 
+// Returns true only for OTR profiles registered with RspConnectionManager.
 bool IsRspProfile(Profile* profile) {
-  return profile && profile->IsOffTheRecord() &&
-         profile->GetOTRProfileID().IsRspTab();
+  if (!profile || !profile->IsOffTheRecord()) {
+    return false;
+  }
+  return !RspConnectionManager::GetInstance()
+              ->GetKeyForProfile(profile)
+              .empty();
 }
 
-std::u16string ToStatusText(const RspConnectionHealth& health) {
-  std::u16string status = u"RM: ";
-  status += health.rm_reachable ? u"reachable" : u"unreachable";
-  status += u"\nbsd_sockets: ";
-  if (!health.rs_configured) {
-    status += u"not selected";
-  } else {
-    status += health.rs_reachable ? u"reachable" : u"unreachable";
-  }
-  if (!health.message.empty()) {
-    status += u"\n" + base::UTF8ToUTF16(health.message);
-  }
-  return status;
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// RspConfigBubble — config bubble for an RSP tab's proxy settings.
+// ---------------------------------------------------------------------------
+RspConfigBubble::RspConfigBubble(views::View* anchor, Profile* profile)
+    : views::BubbleDialogDelegateView(anchor, views::BubbleBorder::TOP_RIGHT),
+      profile_(profile) {
+  SetShowTitle(true);
+  SetShowCloseButton(true);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
+             static_cast<int>(ui::mojom::DialogButton::kCancel));
+  SetButtonLabel(ui::mojom::DialogButton::kOk, u"Apply");
+  set_fixed_width(480);
 }
 
-bool ApplyRspConfig(Profile* profile,
-                    views::Textfield* rm_field,
-                    views::Textfield* rs_field,
-                    views::Label* status_label) {
+RspConfigBubble::~RspConfigBubble() = default;
+
+// static
+void RspConfigBubble::Show(views::View* anchor, Profile* profile) {
+  DCHECK(profile);
+  auto* bubble = new RspConfigBubble(anchor, profile);
+  views::BubbleDialogDelegate::CreateBubble(bubble)->Show();
+}
+
+std::u16string RspConfigBubble::GetWindowTitle() const {
+  return u"RSP Proxy Settings";
+}
+
+bool RspConfigBubble::Accept() {
   RspTabConfig config;
-  config.rm_addr = base::UTF16ToUTF8(std::u16string(rm_field->GetText()));
-  config.rs_node_id = base::UTF16ToUTF8(std::u16string(rs_field->GetText()));
+  config.rm_addr = base::UTF16ToUTF8(std::u16string(rm_field_->GetText()));
   if (config.rm_addr.empty()) {
     config.rm_addr = "127.0.0.1:3939";
   }
-
-  const bool applied =
-      RspConnectionManager::GetInstance()->SetConfigForProfile(profile, config);
-  if (status_label) {
-    status_label->SetText(ToStatusText(
-        RspConnectionManager::GetInstance()->GetHealthForProfile(profile)));
+  auto idx = node_combobox_->GetSelectedIndex();
+  if (idx.has_value() && idx.value() < node_ids_.size()) {
+    config.rs_node_id = node_ids_[idx.value()];
   }
-  return applied;
+  RspConnectionManager::GetInstance()->SetConfigForProfile(profile_, config);
+  return true;
 }
 
-void ShowRspConfigBubble(views::View* anchor_view, Profile* profile) {
-  auto* manager = RspConnectionManager::GetInstance();
-  RspTabConfig config = manager->GetConfigForProfile(profile);
+void RspConfigBubble::Init() {
+  RspTabConfig config =
+      RspConnectionManager::GetInstance()->GetConfigForProfile(profile_);
   if (config.rm_addr.empty()) {
     config.rm_addr = "127.0.0.1:3939";
   }
 
-  auto content = std::make_unique<views::View>();
-  auto* layout = content->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
-  layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStretch);
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(16), 8));
 
-  views::Label* status_label =
-      content->AddChildView(std::make_unique<views::Label>());
-  status_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  status_label->SetMultiLine(true);
-  status_label->SetText(ToStatusText(manager->GetHealthForProfile(profile)));
+  // Status line.
+  status_label_ = AddChildView(std::make_unique<views::Label>());
+  status_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  status_label_->SetMultiLine(true);
+  UpdateStatusText();
 
-  auto* grid = content->AddChildView(std::make_unique<views::View>());
+  // Grid: [label | field | button]
+  auto* grid = AddChildView(std::make_unique<views::View>());
   auto* table = grid->SetLayoutManager(std::make_unique<views::TableLayout>());
   table->AddColumn(views::LayoutAlignment::kStart,
                    views::LayoutAlignment::kCenter,
@@ -102,42 +117,124 @@ void ShowRspConfigBubble(views::View* anchor_view, Profile* profile) {
   table->AddPaddingColumn(views::TableLayout::kFixedSize, 8);
   table->AddColumn(views::LayoutAlignment::kStretch,
                    views::LayoutAlignment::kCenter, 1.0f,
-                   views::TableLayout::ColumnSize::kUsePreferred, 0, 320);
-  table->AddRows(2, views::TableLayout::kFixedSize);
+                   views::TableLayout::ColumnSize::kUsePreferred, 0, 0);
+  table->AddPaddingColumn(views::TableLayout::kFixedSize, 4);
+  table->AddColumn(views::LayoutAlignment::kStart,
+                   views::LayoutAlignment::kCenter,
+                   views::TableLayout::kFixedSize,
+                   views::TableLayout::ColumnSize::kUsePreferred, 0, 0);
+  table->AddRows(2, views::TableLayout::kFixedSize, 0);
 
+  // Row 1: RM server + Refresh button.
   grid->AddChildView(std::make_unique<views::Label>(u"RM server"));
-  views::Textfield* rm_field =
-      grid->AddChildView(std::make_unique<views::Textfield>());
-  rm_field->SetText(base::UTF8ToUTF16(config.rm_addr));
-  rm_field->SetPlaceholderText(u"127.0.0.1:3939");
+  rm_field_ = grid->AddChildView(std::make_unique<views::Textfield>());
+  rm_field_->SetText(base::UTF8ToUTF16(config.rm_addr));
+  rm_field_->SetPlaceholderText(u"127.0.0.1:3939");
+  grid->AddChildView(std::make_unique<views::MdTextButton>(
+      base::BindRepeating(&RspConfigBubble::OnRefreshClicked,
+                          base::Unretained(this)),
+      u"Refresh"));
 
-  grid->AddChildView(std::make_unique<views::Label>(u"bsd_sockets Node ID"));
-  views::Textfield* rs_field =
-      grid->AddChildView(std::make_unique<views::Textfield>());
-  rs_field->SetText(base::UTF8ToUTF16(config.rs_node_id));
-  rs_field->SetPlaceholderText(u"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
+  // Row 2: bsd_sockets node dropdown.
+  grid->AddChildView(std::make_unique<views::Label>(u"bsd_sockets node"));
+  combobox_model_ = std::make_unique<ui::SimpleComboboxModel>(
+      std::vector<ui::SimpleComboboxModel::Item>{});
+  node_combobox_ = grid->AddChildView(
+      std::make_unique<views::Combobox>(combobox_model_.get()));
+  grid->AddChildView(std::make_unique<views::Label>(u""));  // spacer
 
-  auto model = ui::DialogModel::Builder()
-                   .SetTitle(u"RSP tab proxy")
-                   .AddCustomField(
-                       std::make_unique<views::BubbleDialogModelHost::CustomView>(
-                           std::move(content),
-                           views::BubbleDialogModelHost::FieldType::kControl,
-                           rm_field))
-                   .AddOkButton(base::BindRepeating(&ApplyRspConfig, profile,
-                                                    rm_field, rs_field,
-                                                    status_label),
-                                ui::DialogModel::Button::Params().SetLabel(
-                                    u"Apply"))
-                   .AddCancelButton(base::DoNothing())
-                   .Build();
+  // Hint below the grid.
+  refresh_hint_ = AddChildView(std::make_unique<views::Label>());
+  refresh_hint_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  refresh_hint_->SetEnabledColor(SK_ColorGRAY);
+  refresh_hint_->SetText(
+      u"Click Refresh to discover available bsd_sockets nodes.");
 
-  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
-      std::move(model), anchor_view, views::BubbleBorder::TOP_RIGHT);
-  views::BubbleDialogDelegate::CreateBubble(std::move(bubble))->Show();
+  // Pre-populate with the current node ID if one is already configured.
+  if (!config.rs_node_id.empty()) {
+    UpdateCombobox({config.rs_node_id}, config.rs_node_id);
+  }
 }
 
-}  // namespace
+void RspConfigBubble::OnRefreshClicked() {
+  std::string rm_addr =
+      base::UTF16ToUTF8(std::u16string(rm_field_->GetText()));
+  if (rm_addr.empty()) {
+    rm_addr = "127.0.0.1:3939";
+  }
+  pending_rm_addr_ = rm_addr;
+  refresh_hint_->SetText(u"Discovering nodes\u2026");
+
+  RspConnectionManager::GetInstance()->ListBsdSocketsNodes(
+      rm_addr, base::BindOnce(&RspConfigBubble::OnNodeListReady,
+                              weak_factory_.GetWeakPtr(), rm_addr));
+}
+
+void RspConfigBubble::OnNodeListReady(std::string rm_addr,
+                                      std::vector<std::string> nodes) {
+  // Discard stale results (user changed RM addr and clicked Refresh again).
+  if (rm_addr != pending_rm_addr_) {
+    return;
+  }
+  if (nodes.empty()) {
+    refresh_hint_->SetText(
+        u"No bsd_sockets nodes found. Check the RM server address.");
+    return;
+  }
+  refresh_hint_->SetText(base::UTF8ToUTF16(base::StringPrintf(
+      "Found %d node(s).", static_cast<int>(nodes.size()))));
+
+  // Preserve the current selection if it's still in the new list.
+  std::string current;
+  auto idx = node_combobox_->GetSelectedIndex();
+  if (idx.has_value() && idx.value() < node_ids_.size()) {
+    current = node_ids_[idx.value()];
+  }
+  UpdateCombobox(nodes, current);
+}
+
+void RspConfigBubble::UpdateCombobox(const std::vector<std::string>& nodes,
+                                     const std::string& selected) {
+  node_ids_ = nodes;
+  std::vector<ui::SimpleComboboxModel::Item> items;
+  items.reserve(nodes.size());
+  size_t selected_idx = 0;
+  bool found = false;
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    items.emplace_back(base::UTF8ToUTF16(nodes[i]));
+    if (!found && nodes[i] == selected) {
+      selected_idx = i;
+      found = true;
+    }
+  }
+  combobox_model_ =
+      std::make_unique<ui::SimpleComboboxModel>(std::move(items));
+  node_combobox_->SetModel(combobox_model_.get());
+  if (!node_ids_.empty()) {
+    node_combobox_->SetSelectedIndex(selected_idx);
+  }
+}
+
+void RspConfigBubble::UpdateStatusText() {
+  auto health =
+      RspConnectionManager::GetInstance()->GetHealthForProfile(profile_);
+  std::u16string status = u"RM: ";
+  status += health.rm_reachable ? u"configured" : u"not configured";
+  status += u"   bsd_sockets: ";
+  if (!health.rs_configured) {
+    status += u"not selected";
+  } else {
+    status += health.rs_reachable ? u"reachable" : u"configured";
+  }
+  if (!health.message.empty()) {
+    status += u"\n" + base::UTF8ToUTF16(health.message);
+  }
+  status_label_->SetText(status);
+}
+
+// ---------------------------------------------------------------------------
+// RspToolbarButton
+// ---------------------------------------------------------------------------
 
 RspToolbarButton::RspToolbarButton(Browser* browser)
     : ToolbarButton(base::BindRepeating(&RspToolbarButton::ButtonPressed,
@@ -157,16 +254,20 @@ void RspToolbarButton::ShowBubbleForProfile(views::View* anchor_view,
   if (!anchor_view || !IsRspProfile(profile)) {
     return;
   }
-
-  ShowRspConfigBubble(anchor_view, profile);
+  RspConfigBubble::Show(anchor_view, profile);
 }
 
-void RspToolbarButton::UpdateForWebContents(content::WebContents* web_contents) {
-  Profile* profile = web_contents
-                         ? Profile::FromBrowserContext(
-                               web_contents->GetBrowserContext())
-                         : nullptr;
-  SetVisible(IsRspProfile(profile));
+void RspToolbarButton::UpdateForWebContents(
+    content::WebContents* web_contents) {
+  Profile* profile =
+      web_contents
+          ? Profile::FromBrowserContext(web_contents->GetBrowserContext())
+          : nullptr;
+  bool should_be_visible = IsRspProfile(profile);
+  if (GetVisible() != should_be_visible) {
+    SetVisible(should_be_visible);
+    PreferredSizeChanged();
+  }
 }
 
 void RspToolbarButton::ButtonPressed(const ui::Event& event) {
@@ -174,17 +275,16 @@ void RspToolbarButton::ButtonPressed(const ui::Event& event) {
   if (!profile) {
     return;
   }
-
   ShowBubbleForProfile(this, profile);
 }
 
 Profile* RspToolbarButton::GetActiveRspProfile() const {
   content::WebContents* active_contents =
       browser_->tab_strip_model()->GetActiveWebContents();
-  Profile* profile = active_contents
-                         ? Profile::FromBrowserContext(
-                               active_contents->GetBrowserContext())
-                         : nullptr;
+  Profile* profile =
+      active_contents
+          ? Profile::FromBrowserContext(active_contents->GetBrowserContext())
+          : nullptr;
   return IsRspProfile(profile) ? profile : nullptr;
 }
 

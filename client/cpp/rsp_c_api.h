@@ -45,6 +45,18 @@ RSPCLIENT_API int rsp_bridge_ping(RspBridgeHandle handle, const char* node_id);
 // after this call.
 RSPCLIENT_API void rsp_bridge_destroy(RspBridgeHandle handle);
 
+// Lists bsd_sockets Resource Service node IDs registered with the RM at
+// |rm_addr|. On success returns 1 and sets |*out_node_ids| to a newly
+// allocated array of |*out_count| null-terminated node ID strings. The array
+// must be freed with rsp_free_node_ids(). On failure returns 0.
+// Blocks for up to ~8 seconds (connect + query timeout).
+RSPCLIENT_API int rsp_list_bsd_sockets_nodes(const char* rm_addr,
+                                              char*** out_node_ids,
+                                              int* out_count);
+
+// Frees the array returned by rsp_list_bsd_sockets_nodes.
+RSPCLIENT_API void rsp_free_node_ids(char** node_ids, int count);
+
 #ifdef __cplusplus
 }
 #endif

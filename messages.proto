@@ -156,26 +156,11 @@ message ResourceSSHD{
 }
 
 
-
-message ResourceMessageStreamSend {
-    optional NodeId node_id = 1;
-    repeated Address destination_addresses = 2;
-    PortRange allowed_port_range = 3;
-}
-
-message ResourceMessageStreamReceive {
-    optional NodeId node_id = 1;
-    repeated Address bind_address = 2;
-    PortRange allowed_port_range = 3;
-}
-
 message ResourceRecord{
     oneof resource_type {
         ResourceTCPConnect tcp_connect = 1;
         ResourceTCPListen tcp_listen = 2;
         ResourceSSHD sshd = 3;
-        ResourceMessageStreamSend message_stream_send = 4;
-        ResourceMessageStreamReceive message_stream_receive = 5;
     }
 }
 
@@ -641,134 +626,6 @@ message FieldEncryptionFixture {
     string secret_text = 2 [(rsp.proto.encrypted) = true];
     bytes secret_bytes = 3 [(rsp.proto.encrypted) = true];
     string note = 4;
-}
-
-
-message SocketID {
-    bytes value = 1; //uuid
-}
-
-enum SOCKET_STATUS {
-  SOCKET_SUCCESS = 0;
-    SOCKET_CONNECT_REFUSED = 1;
-    SOCKET_CONNECT_TIMEOUT = 2;
-    SOCKET_CLOSED = 3;
-    SOCKET_DATA = 4;
-    SOCKET_ERROR = 5;
-    SOCKET_NEW_CONNECTION = 6;
-    SOCKET_ASYNC = 7;
-    SOCKET_NODEID_MISMATCH = 9;
-    SOCKET_INVALID_FLAGS = 10;
-    SOCKET_IN_USE = 11;
-    SOCKET_TIMED_OUT = 12;
-}
-
-message SocketReply {
-    SocketID socket_id = 1;
-    SOCKET_STATUS error = 2;
-    optional string message = 3;
-    optional string new_socket_remote_address = 4;
-    optional SocketID new_socket_id = 5;
-    optional int32 socket_error_code = 6;
-    optional bytes data = 7;
-}
-
-message ConnectTCPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional bool reuse_addr = 3;
-    optional uint32 source_port = 4;
-    optional uint32 timeout_ms = 5;
-    optional uint32 retries = 6;
-    optional uint32 retry_ms = 7;
-    optional bool async_data = 8;
-    optional bool use_socket = 9;
-    optional bool share_socket = 10;
-}
-
-message ListenTCPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional bool reuse_addr = 3;
-    optional uint32 timeout_ms = 4;
-    optional bool async_accept = 5;
-    optional bool share_listening_socket = 6;
-    optional bool share_child_sockets = 7;
-    optional bool children_use_socket = 8;
-    optional bool children_async_data = 9;
-}
-
-message AcceptTCP {
-    SocketID listen_socket_number = 1;
-    optional SocketID new_socket_number = 2;
-    optional uint32 timeout_ms = 3;
-    optional bool share_child_socket = 4;
-    optional bool child_use_socket = 5;
-    optional bool child_async_data = 6;
-}
-
-message SocketSend {
-   SocketID socket_number = 1;
-   uint64 index = 3;
-   bytes data = 2;
-}
-
-message SocketRecv {
-    SocketID socket_number = 1;
-    uint64 index = 3;
-    optional uint32 max_bytes = 2;
-    optional uint32 wait_ms = 4;
-}
-
-message SocketClose {
-    SocketID socket_number = 1;
-}
-
-message BindUDPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional bool reuse_addr = 3;
-    optional bool async_data = 4;
-    optional bool share_socket = 5;
-}
-
-message ConnectUDPRequest {
-    string host_port = 1;
-    SocketID socket_number = 2;
-    optional uint32 source_port = 3;
-    optional bool async_data = 4;
-    optional bool share_socket = 5;
-}
-
-message MessageStreamDatagram {
-    bytes data = 1;
-    optional string destination_host_port = 2;
-    optional string source_host_port = 3;
-}
-
-message MessageStreamSend {
-    SocketID socket_number = 1;
-    uint64 index = 2;
-    repeated MessageStreamDatagram messages = 3;
-    optional string source_host_port = 4;
-}
-
-message MessageStreamRecv {
-    SocketID socket_number = 1;
-    uint64 index = 2;
-    optional uint32 max_messages = 3;
-    optional uint32 max_bytes = 4;
-    optional uint32 wait_ms = 5;
-    optional string source_filter = 6;
-}
-
-message MessageStreamReply {
-    SocketID socket_id = 1;
-    SOCKET_STATUS status = 2;
-    uint64 index = 3;
-    repeated MessageStreamDatagram messages = 4;
-    optional int32 socket_error_code = 5;
-    optional string message = 6;
 }
 
 

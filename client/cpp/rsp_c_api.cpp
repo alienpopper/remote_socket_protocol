@@ -6,7 +6,9 @@
 
 #include "client/cpp/rsp_client.hpp"
 
+#include <chrono>
 #include <exception>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -110,6 +112,103 @@ void rsp_bridge_destroy(RspBridgeHandle handle) {
         handle->run_thread.join();
     }
     delete handle;
+}
+
+}  // extern "C"
+
+extern "C" {
+
+int rsp_list_bsd_sockets_nodes(const char* rm_addr,
+                                char*** out_node_ids,
+                                int* out_count) {
+    if (!rm_addr || !out_node_ids || !out_count) {
+        return 0;
+    }
+    *out_node_ids = nullptr;
+    *out_count = 0;
+
+    try {
+        auto client = rsp::client::RSPClient::create();
+        const std::string transport = std::string("tcp:") + rm_addr;
+
+        auto conn_id = client->connectToResourceManager(transport, "protobuf");
+        if (!conn_id.has_value()) {
+            return 0;
+        }
+
+        // Run the client's message loop on a background thread so RSP
+        // responses (auth, resource query reply) can be processed.
+        rsp::client::RSPClient* raw = client.get();
+        std::thread run_thread([raw]() { raw->run(); });
+
+        // Poll for the RM peer node ID (available after auth completes).
+        std::optional<rsp::NodeID> rm_node_id;
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (!rm_node_id.has_value() &&
+               std::chrono::steady_clock::now() < deadline) {
+            rm_node_id = client->peerNodeID(*conn_id);
+            if (!rm_node_id.has_value()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+        }
+
+        if (!rm_node_id.has_value()) {
+            client.reset();
+            run_thread.join();
+            return 0;
+        }
+
+        // Query the RM for all registered resource services.
+        auto result = client->resourceList(*rm_node_id, "", 200);
+
+        client.reset();
+        run_thread.join();
+
+        if (!result.has_value() || !result->success) {
+            return 1;  // success but no results
+        }
+
+        // Filter for bsd_sockets: services that accept ConnectTCPRequest.
+        std::vector<std::string> node_ids;
+        std::set<std::string> seen;
+        for (const auto& svc : result->services) {
+            for (const auto& url : svc.acceptedTypeUrls) {
+                if (url.find("ConnectTCPRequest") != std::string::npos) {
+                    const std::string id = svc.nodeId.toString();
+                    if (seen.insert(id).second) {
+                        node_ids.push_back(id);
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (node_ids.empty()) {
+            return 1;
+        }
+
+        char** arr = new char*[node_ids.size()];
+        for (size_t i = 0; i < node_ids.size(); ++i) {
+            arr[i] = new char[node_ids[i].size() + 1];
+            std::memcpy(arr[i], node_ids[i].c_str(), node_ids[i].size() + 1);
+        }
+        *out_node_ids = arr;
+        *out_count = static_cast<int>(node_ids.size());
+        return 1;
+    } catch (...) {
+        return 0;
+    }
+}
+
+void rsp_free_node_ids(char** node_ids, int count) {
+    if (!node_ids) {
+        return;
+    }
+    for (int i = 0; i < count; ++i) {
+        delete[] node_ids[i];
+    }
+    delete[] node_ids;
 }
 
 }  // extern "C"

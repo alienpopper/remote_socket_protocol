@@ -32,5 +32,3 @@ COMMON_TRANSPORT_TCP_SOURCE = common/transport/transport_tcp.cpp
 COMMON_TRANSPORT_TCP_HEADER = common/transport/transport_tcp.hpp
 COMMON_TRANSPORT_MEMORY_SOURCE = common/transport/transport_memory.cpp
 COMMON_TRANSPORT_MEMORY_HEADER = common/transport/transport_memory.hpp
-COMMON_TRANSPORT_UDP_SOURCE = common/transport/transport_udp.cpp
-COMMON_TRANSPORT_UDP_HEADER = common/transport/transport_udp.hpp
