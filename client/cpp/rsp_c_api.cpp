@@ -39,6 +39,9 @@ RspBridgeHandle rsp_bridge_create(const char* rm_addr,
     rsp::client::RSPClient* raw = bridge->client.get();
     bridge->run_thread = std::thread([raw]() { raw->run(); });
 
+    // Enable transparent reconnect so the bridge survives RM restarts.
+    bridge->client->enableReconnect(*conn_id);
+
     return bridge;
 }
 
@@ -47,15 +50,21 @@ intptr_t rsp_bridge_connect_tcp(RspBridgeHandle handle, const char* host_port) {
         return -1;
     }
 
-    const rsp::NodeID node_id(handle->rs_node_id);
-    auto socket = handle->client->connectTCPSocket(
-        node_id,
-        std::string(host_port),
-        /*timeoutMs=*/5000,
-        /*retries=*/2,
-        /*retryMs=*/1000);
+    try {
+        const rsp::NodeID node_id(handle->rs_node_id);
+        auto socket = handle->client->connectTCPSocket(
+            node_id,
+            std::string(host_port),
+            /*timeoutMs=*/5000,
+            /*retries=*/2,
+            /*retryMs=*/1000);
 
-    return socket.has_value() ? static_cast<intptr_t>(*socket) : -1;
+        return socket.has_value() ? static_cast<intptr_t>(*socket) : -1;
+    } catch (const std::exception&) {
+        return -1;
+    } catch (...) {
+        return -1;
+    }
 }
 
 intptr_t rsp_bridge_connect_http(RspBridgeHandle handle,
