@@ -38,14 +38,12 @@
 
 namespace {
 
-// Returns true only for OTR profiles registered with RspConnectionManager.
+// Returns true for OTR profiles created for RSP tabs (regardless of whether
+// a bsd_sockets node has been configured yet). The button must be visible
+// so the user can configure the node via the bubble.
 bool IsRspProfile(Profile* profile) {
-  if (!profile || !profile->IsOffTheRecord()) {
-    return false;
-  }
-  return !RspConnectionManager::GetInstance()
-              ->GetKeyForProfile(profile)
-              .empty();
+  return profile && profile->IsOffTheRecord() &&
+         profile->GetOTRProfileID().IsRspTab();
 }
 
 }  // namespace
