@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -58,6 +58,7 @@ class ExtensionsToolbarCoordinator;
+ class MediaToolbarButtonView;
+ class ReloadButton;
++class RspToolbarButton;
+ class WebUIToolbarWebView;
+ class PinnedToolbarActionsContainer;
+ class ToolbarButton;
+@@ -391,6 +392,7 @@ class ToolbarView : public AnimationDelegateViews,
+   raw_ptr<AvatarToolbarButton> avatar_ = nullptr;
+   raw_ptr<MediaToolbarButtonView> media_button_ = nullptr;
++  raw_ptr<RspToolbarButton> rsp_button_ = nullptr;
+   raw_ptr<BrowserAppMenuButton> app_menu_button_ = nullptr;
+   raw_ptr<views::View> new_tab_button_ = nullptr;
+   raw_ptr<PinnedActionToolbarButton> tab_search_button_ = nullptr;

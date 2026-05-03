@@ -9,7 +9,6 @@ index 14662e913d..f2cfa92c87 100644
 +#include "chrome/browser/rsp/rsp_config.h"
 +#include "chrome/browser/rsp/rsp_prefs.h"
 +#include "chrome/browser/rsp/rsp_connection_manager.h"
-+#include "chrome/browser/rsp/rsp_keyed_service.h"
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
  #include "chrome/browser/search/search.h"
  #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -25,9 +24,8 @@ index 14662e913d..f2cfa92c87 100644
 +  CHECK(browser);
 +  base::RecordAction(base::UserMetricsAction("NewRspTab"));
 +
-+  // TODO(rsp): Show RspTabConfigDialog to let the user choose RM/RS.
-+  // For now, use the configured defaults. Without an RS node ID, the tab still
-+  // opens and navigates normally, but HTTP requests are not routed through RSP.
++  // Seed this tab from the configured defaults. The toolbar RSP button can
++  // change these values later without changing any other RSP tab.
 +  RspTabConfig config;
 +  const std::string& default_rm =
 +      browser->GetProfile()->GetOriginalProfile()->GetPrefs()->GetString(
@@ -38,20 +36,16 @@ index 14662e913d..f2cfa92c87 100644
 +  config.rm_addr = default_rm.empty() ? "127.0.0.1:3939" : default_rm;
 +  config.rs_node_id = default_rs_node_id;
 +
-+  std::string rsp_conn_key;
-+  if (!config.rs_node_id.empty()) {
-+    rsp_conn_key = RspConnectionManager::GetInstance()->GetOrCreate(config);
-+  }
++  std::string rsp_conn_key =
++      RspConnectionManager::GetInstance()->GetOrCreate(config);
 +
 +  Profile* rsp_profile = browser->GetProfile()->GetOriginalProfile()
 +      ->GetOffTheRecordProfile(
 +          Profile::OTRProfileID::CreateUniqueForRspTab(),
 +          /*create_if_needed=*/true);
 +
-+  if (!rsp_conn_key.empty()) {
-+    RspConnectionManager::GetInstance()->RegisterProfile(
-+        rsp_profile, rsp_conn_key);
-+  }
++  RspConnectionManager::GetInstance()->RegisterProfile(rsp_profile,
++                                                       rsp_conn_key, config);
 +
 +  const GURL navigation_url = url.is_empty() ? GURL("chrome://newtab") : url;
 +  NavigateParams params(browser->GetBrowserForMigrationOnly(),

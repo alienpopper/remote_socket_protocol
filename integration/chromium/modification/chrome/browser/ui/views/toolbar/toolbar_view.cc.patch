@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -105,6 +105,7 @@
+ #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/reload_button.h"
++#include "chrome/browser/ui/views/toolbar/rsp_toolbar_button.h"
+ #include "chrome/browser/ui/views/toolbar/split_tabs_button.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_controller.h"
+@@ -573,6 +574,9 @@ void ToolbarView::Init() {
+     media_button_ = AddChildView(std::move(media_button));
+   }
++
++  rsp_button_ = AddChildView(std::make_unique<RspToolbarButton>(browser_));
++  rsp_button_->UpdateForWebContents(GetWebContents());
+ 
+   if (glic::GlicEnabling::IsProfileEligible(browser_view_->GetProfile())) {
+     if (base::FeatureList::IsEnabled(features::kAiOverlayDialog) &&
+@@ -1143,6 +1147,10 @@ void ToolbarView::AnimationProgressed(const gfx::Animation* animation) {
+ }
+ 
+ void ToolbarView::Update(WebContents* tab) {
++  if (rsp_button_) {
++    rsp_button_->UpdateForWebContents(tab);
++  }
++
+   if (location_bar_) {
+     location_bar_->Update(tab);
+   }

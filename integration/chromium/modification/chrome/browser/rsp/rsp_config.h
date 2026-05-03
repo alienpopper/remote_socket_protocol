@@ -15,8 +15,6 @@ struct RspTabConfig {
   // Node ID of the bsd_sockets Resource Service to route traffic through.
   std::string rs_node_id;
 
-  // Optional: node ID of a Name Service for resolving rsp:// names.
-  std::string ns_node_id;
 };
 
 #endif  // CHROME_BROWSER_RSP_RSP_CONFIG_H_

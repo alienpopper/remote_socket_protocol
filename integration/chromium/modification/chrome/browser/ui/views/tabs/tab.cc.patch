@@ -1,0 +1,116 @@
+diff --git a/chrome/browser/ui/views/tabs/tab.cc b/chrome/browser/ui/views/tabs/tab.cc
+index 1eed81cfd2..0fff404487 100644
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/glic/browser_ui/tab_underline_controller.h"
+ #include "chrome/browser/glic/browser_ui/tab_underline_view.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_properties.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+@@ -61,6 +62,7 @@
+ #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+ #include "chrome/browser/ui/views/tabs/tab_style_views.h"
++#include "chrome/browser/ui/views/toolbar/rsp_toolbar_button.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/grit/theme_resources.h"
+@@ -72,6 +74,7 @@
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "components/vector_icons/vector_icons.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/effects/SkGradient.h"
+ #include "third_party/skia/include/pathops/SkPathOps.h"
+@@ -168,6 +171,19 @@ bool IsLockedForOnTask(BrowserWindowInterface* browser_window_interface) {
+ }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++Profile* GetRspProfileForTab(const tabs::TabHandle& tab_handle) {
++  tabs::TabInterface* const tab_interface = tab_handle.Get();
++  content::WebContents* const contents =
++      tab_interface ? tab_interface->GetContents() : nullptr;
++  Profile* const profile = contents ? Profile::FromBrowserContext(
++                                          contents->GetBrowserContext())
++                                    : nullptr;
++  return profile && profile->IsOffTheRecord() &&
++                 profile->GetOTRProfileID().IsRspTab()
++             ? profile
++             : nullptr;
++}
++
+ class TabStyleHighlightPathGenerator : public views::HighlightPathGenerator {
+  public:
+   explicit TabStyleHighlightPathGenerator(TabStyleViews* tab_style_views)
+@@ -266,6 +282,14 @@ Tab::Tab(tabs::TabHandle handle, TabSlotController* controller)
+   alert_indicator_button_ =
+       AddChildView(std::make_unique<AlertIndicatorButton>(this));
+ 
++  rsp_proxy_button_ = AddChildView(views::ImageButton::CreateIconButton(
++      base::BindRepeating(&Tab::RspProxyButtonPressed,
++                          base::Unretained(this)),
++      vector_icons::kRouterIcon, u"RSP proxy settings",
++      views::ImageButton::MaterialIconStyle::kSmall));
++  rsp_proxy_button_->SetTooltipText(u"RSP proxy settings");
++  rsp_proxy_button_->SetVisible(false);
++
+   BrowserWindowInterface* const browser_window_interface =
+       controller_->GetBrowserWindowInterface();
+   if (browser_window_interface &&
+@@ -487,6 +511,30 @@ void Tab::Layout(PassKey) {
+   alert_indicator_button_->UpdateAlertIndicatorAnimation();
+   alert_indicator_button_->SetVisible(showing_alert_indicator_);
+ 
++  const bool showing_rsp_proxy_button = GetRspProfileForTab(tab_handle_);
++  if (showing_rsp_proxy_button) {
++    int right = contents_rect.right();
++    if (showing_alert_indicator_) {
++      right = alert_indicator_button_->x() - after_title_padding;
++    } else if (showing_close_button_) {
++      right = close_x;
++    }
++
++    const gfx::Size button_size = rsp_proxy_button_->GetPreferredSize();
++    const int visible_size =
++        GetLayoutConstant(LayoutConstant::kTabCloseButtonSize);
++    const int top = contents_rect.y() +
++                    Center(contents_rect.height(), button_size.height());
++    const int visible_left =
++        std::max(right - visible_size, Center(width(), visible_size));
++    const int non_visible_left_padding =
++        (button_size.width() - visible_size) / 2;
++    rsp_proxy_button_->SetBoundsRect(
++        {gfx::Point(visible_left - non_visible_left_padding, top),
++         button_size});
++  }
++  rsp_proxy_button_->SetVisible(showing_rsp_proxy_button);
++
+   // Size the title to fill the remaining width and use all available height.
+   bool show_title = ShouldRenderAsNormalTab();
+   if (show_title) {
+@@ -508,6 +556,9 @@ void Tab::Layout(PassKey) {
+       // Allow the title to overlay the close button's empty border padding.
+       title_right = close_x - after_title_padding;
+     }
++    if (showing_rsp_proxy_button) {
++      title_right = rsp_proxy_button_->x() - after_title_padding;
++    }
+     const int title_width = std::max(title_right - title_left, 0);
+     // The Label will automatically center the font's cap height within the
+     // provided vertical space.
+@@ -628,6 +679,11 @@ bool Tab::OnMousePressed(const ui::MouseEvent& event) {
+   return true;
+ }
+ 
++void Tab::RspProxyButtonPressed(const ui::Event& event) {
++  RspToolbarButton::ShowBubbleForProfile(rsp_proxy_button_,
++                                         GetRspProfileForTab(tab_handle_));
++}
++
+ bool Tab::OnMouseDragged(const ui::MouseEvent& event) {
+   // TODO: ensure ignoring return value is ok.
+   std::ignore = controller_->ContinueDrag(this, event);

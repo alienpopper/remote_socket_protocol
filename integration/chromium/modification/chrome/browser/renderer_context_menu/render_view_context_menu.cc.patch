@@ -72,26 +72,7 @@ index 0487fb8722..4608efd571 100644
 +    case IDC_CONTENT_CONTEXT_OPENLINKRSPTAB: {
 +      Browser* const rsp_browser = GetBrowser();
 +      if (rsp_browser) {
-+        GURL rsp_url = params_.link_url;
-+        const GURL page_url = params_.page_url.is_valid()
-+                                  ? params_.page_url
-+                                  : source_web_contents_->GetLastCommittedURL();
-+        if (page_url.SchemeIs(chrome::kRspScheme) &&
-+            !rsp_url.SchemeIs(chrome::kRspScheme)) {
-+          if (rsp_url.is_valid() && rsp_url.SchemeIsHTTPOrHTTPS() &&
-+              rsp_url.host() == page_url.host()) {
-+            GURL::Replacements replacements;
-+            replacements.SetSchemeStr(chrome::kRspScheme);
-+            rsp_url = rsp_url.ReplaceComponents(replacements);
-+          } else {
-+            const std::string raw_link =
-+                params_.unfiltered_link_url.possibly_invalid_spec();
-+            if (!raw_link.empty() && raw_link[0] == '/') {
-+              rsp_url = page_url.Resolve(raw_link);
-+            }
-+          }
-+        }
-+        chrome::NewRspTab(rsp_browser, rsp_url);
++        chrome::NewRspTab(rsp_browser, params_.link_url);
 +      }
 +      break;
 +    }
