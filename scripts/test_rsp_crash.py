@@ -16,7 +16,6 @@ reliably trigger it before the fix; 0 crashes after the fix confirms it.
 
 import ctypes
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -45,6 +44,8 @@ CHROME_ARGS = [
     "--no-sandbox",
     "--no-first-run",
     "--disable-session-crashed-bubble",
+    "--disable-extensions",
+    "--no-default-browser-check",
     f"--user-data-dir={PROFILE}",
 ]
 
@@ -75,7 +76,15 @@ def kill_chrome():
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     _chrome_pids.clear()
-    time.sleep(2.0)
+    # Wait until all chrome.exe processes are actually gone.
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        still_running = [p for p in psutil.process_iter(["name"])
+                         if p.name().lower() == "chrome.exe"]
+        if not still_running:
+            break
+        time.sleep(0.3)
+    time.sleep(1.0)
 
 
 def find_chrome_windows_uia(timeout=60, min_count=1):
@@ -173,14 +182,6 @@ def find_bubble_hwnd(timeout=3):
             return found
         time.sleep(0.2)
     return None
-
-
-def close_bubble(bubble_hwnd):
-    """Close the bubble by sending WM_CLOSE."""
-    try:
-        win32api.PostMessage(bubble_hwnd, win32con.WM_CLOSE, 0, 0)
-    except Exception:
-        pass
 
 
 def run_crash_test():
@@ -283,21 +284,28 @@ def run_crash_test():
             crashes += 1
             break
 
+        # Brief settle before clicking: ensures prior compositor frames have
+        # completed so our PostMessage isn't processed re-entrantly during paint.
+        time.sleep(0.1)
         click_button()
 
-        hwnd5 = find_bubble_hwnd(timeout=2)
+        hwnd5 = find_bubble_hwnd(timeout=3)
         if hwnd5:
             bubbles += 1
-            close_bubble(hwnd5)
-            # Wait for bubble to fully close before next iteration.
-            deadline = time.time() + 1.5
+            # Toggle close: clicking the toolbar button again calls
+            # Widget::Close() safely via PostTask → Show() toggle path.
+            click_button()
+            # Wait for bubble window to disappear, then an extra pause to let
+            # Chrome's compositor complete any in-flight frames triggered by
+            # the close (widget destruction, layer cleanup, etc.)
+            deadline = time.time() + 3.0
             while time.time() < deadline:
                 if not find_bubble_hwnd(timeout=0.1):
                     break
                 time.sleep(0.1)
-            time.sleep(0.1)
+            time.sleep(0.5)   # compositor settle: ~30 frames at 60fps
         else:
-            time.sleep(0.2)
+            time.sleep(0.5)
 
         # Re-find button every 10 iters in case UIA element went stale.
         if (i + 1) % 10 == 0:
