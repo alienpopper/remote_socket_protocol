@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/gfx/scoped_animation_duration_scale_mode.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 class Browser;
@@ -61,6 +62,15 @@ class RspConfigBubble : public views::BubbleDialogDelegateView {
   std::unique_ptr<ui::SimpleComboboxModel> combobox_model_;
   std::vector<std::string> node_ids_;
   std::string pending_rm_addr_;
+
+  // Disable layer animations for the bubble's entire lifetime. Any focus
+  // change inside the bubble (button click, combobox, textfield) or between
+  // the bubble and browser window during activation can trigger a focus-ring
+  // layer animation from inside a cc::LayerTreeHost commit, which hits
+  // DCHECK(IsPropertyChangeAllowed()). ZERO_DURATION makes these animations
+  // complete synchronously so the compositor never sees them mid-commit.
+  gfx::ScopedAnimationDurationScaleMode zero_animation_duration_{
+      gfx::ScopedAnimationDurationScaleMode::ZERO_DURATION};
 
   base::WeakPtrFactory<RspConfigBubble> weak_factory_{this};
 };

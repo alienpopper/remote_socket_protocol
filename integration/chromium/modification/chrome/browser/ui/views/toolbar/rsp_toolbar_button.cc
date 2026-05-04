@@ -12,6 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "ui/gfx/scoped_animation_duration_scale_mode.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/rsp/rsp_config.h"
 #include "chrome/browser/rsp/rsp_connection_manager.h"
@@ -60,6 +62,11 @@ RspConfigBubble::RspConfigBubble(views::View* anchor, Profile* profile)
              static_cast<int>(ui::mojom::DialogButton::kCancel));
   SetButtonLabel(ui::mojom::DialogButton::kOk, u"Apply");
   set_fixed_width(480);
+  // Do not close on deactivation. The combobox dropdown creates a child widget
+  // that briefly takes focus, which would otherwise trigger OnDeactivate →
+  // animated close → layer DCHECK (IsPropertyChangeAllowed). Config dialogs
+  // also benefit from staying open while the user reads another window.
+  set_close_on_deactivate(false);
 }
 
 RspConfigBubble::~RspConfigBubble() = default;
@@ -128,10 +135,14 @@ void RspConfigBubble::Init() {
   rm_field_ = grid->AddChildView(std::make_unique<views::Textfield>());
   rm_field_->SetText(base::UTF8ToUTF16(config.rm_addr));
   rm_field_->SetPlaceholderText(u"127.0.0.1:3939");
-  grid->AddChildView(std::make_unique<views::MdTextButton>(
+  auto* refresh_button = grid->AddChildView(std::make_unique<views::MdTextButton>(
       base::BindRepeating(&RspConfigBubble::OnRefreshClicked,
                           base::Unretained(this)),
       u"Refresh"));
+  // NEVER focus: RequestFocusFromEvent() during NotifyClick would blur the
+  // textfield and trigger a focus-ring layer animation that can DCHECK
+  // (IsPropertyChangeAllowed()) during a compositor BeginFrame commit.
+  refresh_button->SetFocusBehavior(views::View::FocusBehavior::NEVER);
 
   // Row 2: bsd_sockets node dropdown.
   grid->AddChildView(std::make_unique<views::Label>(u"bsd_sockets node"));
@@ -152,6 +163,11 @@ void RspConfigBubble::Init() {
   if (!config.rs_node_id.empty()) {
     UpdateCombobox({config.rs_node_id}, config.rs_node_id);
   }
+
+  // Kick off auto-discovery. Init() runs before the first render (inside
+  // Widget::Init, before Show()), so there is no active compositor commit
+  // and no risk of the SetHideLayerAndSubtree DCHECK.
+  OnRefreshClicked();
 }
 
 void RspConfigBubble::OnRefreshClicked() {
@@ -273,7 +289,16 @@ void RspToolbarButton::ButtonPressed(const ui::Event& event) {
   if (!profile) {
     return;
   }
-  ShowBubbleForProfile(this, profile);
+  // PostTask so the button-press event fully unwinds before the bubble widget
+  // is created and activates.  Showing the bubble synchronously from inside an
+  // event handler triggers a DCHECK(IsPropertyChangeAllowed()) in
+  // cc::Layer::SetHideLayerAndSubtree via the focus-ring visibility update on
+  // the browser window that is being deactivated.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&RspToolbarButton::ShowBubbleForProfile,
+                     base::Unretained(this),
+                     base::Unretained(profile)));
 }
 
 Profile* RspToolbarButton::GetActiveRspProfile() const {
