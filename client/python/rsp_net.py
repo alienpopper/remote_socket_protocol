@@ -1,9 +1,27 @@
 """Async RSP socket abstraction — Python equivalent of client/nodejs/rsp_net.js."""
 
 import asyncio
-from typing import Callable
+import base64
 
-from rsp_client import RSPClient, SUCCESS, SOCKET_DATA, SOCKET_CLOSED, SOCKET_ERROR, NEW_CONNECTION
+from rsp_client import RSPClient, SUCCESS, STREAM_DATA, STREAM_CLOSED, STREAM_ERROR, NEW_CONNECTION
+
+
+def _stream_id_value(reply: dict | None) -> str | None:
+    if not isinstance(reply, dict):
+        return None
+    return (
+        (reply.get("stream_id") or {}).get("value")
+        or (reply.get("socket_id") or {}).get("value")
+    )
+
+
+def _new_stream_id_value(reply: dict | None) -> str | None:
+    if not isinstance(reply, dict):
+        return None
+    return (
+        (reply.get("new_stream_id") or {}).get("value")
+        or (reply.get("new_socket_id") or {}).get("value")
+    )
 
 
 class RSPSocket:
@@ -22,11 +40,11 @@ class RSPSocket:
 
     def _on_socket_reply(self, reply: dict) -> None:
         status = reply.get("error") or 0
-        if status == SOCKET_DATA:
-            data_hex = reply.get("data") or ""
-            data = bytes.fromhex(data_hex) if data_hex else b""
+        if status == STREAM_DATA:
+            data_b64 = reply.get("data") or ""
+            data = base64.b64decode(data_b64) if data_b64 else b""
             self._recv_queue.put_nowait(data)
-        elif status in (SOCKET_CLOSED, SOCKET_ERROR):
+        elif status in (STREAM_CLOSED, STREAM_ERROR):
             self._closed = True
             self._client.detach_socket_handler(self._socket_id)
             self._recv_queue.put_nowait(None)
@@ -85,11 +103,11 @@ class RSPServer:
     def _on_listen_reply(self, reply: dict) -> None:
         status = reply.get("error") or 0
         if status == NEW_CONNECTION:
-            new_socket_id = (reply.get("new_socket_id") or {}).get("value")
-            if new_socket_id:
-                socket = RSPSocket(self._client, new_socket_id)
+            new_stream_id = _new_stream_id_value(reply)
+            if new_stream_id:
+                socket = RSPSocket(self._client, new_stream_id)
                 self._accept_queue.put_nowait(socket)
-        elif status in (SOCKET_CLOSED, SOCKET_ERROR):
+        elif status in (STREAM_CLOSED, STREAM_ERROR):
             if not self._closed:
                 self._closed = True
                 self._client.detach_socket_handler(self._listen_socket_id)
@@ -133,9 +151,10 @@ async def create_connection(
     """Connect to host_port via the RSP node and return an RSPSocket."""
     reply = await client.connect_tcp_ex(node_id, host_port, async_data=True, **options)
     status = (reply.get("error") if reply else None) or SUCCESS
-    if status != SUCCESS or not (reply or {}).get("socket_id", {}).get("value"):
+    stream_id = _stream_id_value(reply)
+    if status != SUCCESS or not stream_id:
         raise ConnectionError(f"RSP connect failed (status={status})")
-    return RSPSocket(client, reply["socket_id"]["value"])
+    return RSPSocket(client, stream_id)
 
 
 async def create_server(
@@ -149,6 +168,7 @@ async def create_server(
         **options,
     )
     status = (reply.get("error") if reply else None) or SUCCESS
-    if status != SUCCESS or not (reply or {}).get("socket_id", {}).get("value"):
+    stream_id = _stream_id_value(reply)
+    if status != SUCCESS or not stream_id:
         raise ConnectionError(f"RSP listen failed (status={status})")
-    return RSPServer(client, node_id, reply["socket_id"]["value"])
+    return RSPServer(client, node_id, stream_id)

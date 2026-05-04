@@ -20,16 +20,23 @@ HANDSHAKE_TERMINATOR = b"\r\n\r\n"
 P256_ALGORITHM = 100
 DEFAULT_TIMEOUT_S = 5.0
 
-SUCCESS = _messages.SOCKET_STATUS.SUCCESS
-CONNECT_REFUSED = _messages.SOCKET_STATUS.CONNECT_REFUSED
-CONNECT_TIMEOUT = _messages.SOCKET_STATUS.CONNECT_TIMEOUT
-SOCKET_CLOSED = _messages.SOCKET_STATUS.SOCKET_CLOSED
-SOCKET_DATA = _messages.SOCKET_STATUS.SOCKET_DATA
-SOCKET_ERROR = _messages.SOCKET_STATUS.SOCKET_ERROR
-NEW_CONNECTION = _messages.SOCKET_STATUS.NEW_CONNECTION
-ASYNC_SOCKET = _messages.SOCKET_STATUS.ASYNC_SOCKET
-INVALID_FLAGS = _messages.SOCKET_STATUS.INVALID_FLAGS
-SOCKET_IN_USE = _messages.SOCKET_STATUS.SOCKET_IN_USE
+SUCCESS = _messages.STREAM_STATUS.SUCCESS
+CONNECT_REFUSED = _messages.STREAM_STATUS.CONNECT_REFUSED
+CONNECT_TIMEOUT = _messages.STREAM_STATUS.CONNECT_TIMEOUT
+STREAM_CLOSED = _messages.STREAM_STATUS.STREAM_CLOSED
+STREAM_DATA = _messages.STREAM_STATUS.STREAM_DATA
+STREAM_ERROR = _messages.STREAM_STATUS.STREAM_ERROR
+NEW_CONNECTION = _messages.STREAM_STATUS.NEW_CONNECTION
+ASYNC_STREAM = _messages.STREAM_STATUS.ASYNC_STREAM
+INVALID_FLAGS = _messages.STREAM_STATUS.INVALID_FLAGS
+STREAM_IN_USE = _messages.STREAM_STATUS.STREAM_IN_USE
+
+# Backward-compatible aliases.
+SOCKET_CLOSED = STREAM_CLOSED
+SOCKET_DATA = STREAM_DATA
+SOCKET_ERROR = STREAM_ERROR
+ASYNC_SOCKET = ASYNC_STREAM
+SOCKET_IN_USE = STREAM_IN_USE
 
 ENDORSEMENT_SUCCESS = _messages.ENSDORSMENT_STATUS.ENDORSEMENT_SUCCESS
 ENDORSEMENT_UNKNOWN_IDENTITY = _messages.ENSDORSMENT_STATUS.ENDORSEMENT_UNKNOWN_IDENTITY
@@ -240,6 +247,31 @@ def _unpack_service_message(msg: dict) -> dict | None:
     copy = dict(msg["service_message"])
     copy.pop("@type", None)
     return copy
+
+
+def _stream_id_value(payload: dict | None) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    return (
+        (payload.get("stream_id") or {}).get("value")
+        or (payload.get("socket_id") or {}).get("value")
+    )
+
+
+def _new_stream_id_value(payload: dict | None) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    return (
+        (payload.get("new_stream_id") or {}).get("value")
+        or (payload.get("new_socket_id") or {}).get("value")
+    )
+
+
+def _set_id_field(payload: dict, field_name: str, value: str) -> None:
+    existing = payload.get(field_name)
+    if not isinstance(existing, dict):
+        payload[field_name] = {}
+    payload[field_name]["value"] = value
 
 
 # ---------------------------------------------------------------------------
@@ -458,8 +490,8 @@ class RSPClient:
             self._handle_ping_reply(msg)
         elif _has_field(msg, "service_message"):
             type_name = _service_message_type_name(msg)
-            if type_name == "rsp.proto.SocketReply":
-                self._handle_socket_reply(msg, _unpack_service_message(msg))
+            if type_name in ("rsp.proto.StreamReply", "rsp.proto.SocketReply"):
+                self._handle_stream_reply(msg, _unpack_service_message(msg))
             elif type_name == "rsp.proto.EndorsementDone":
                 self._handle_endorsement_done(msg)
             elif type_name and type_name.startswith("rsp.proto.Name") and type_name.endswith("Reply"):
@@ -486,56 +518,56 @@ class RSPClient:
         if not fut.done():
             fut.set_result(True)
 
-    def _handle_socket_reply(self, msg: dict, socket_reply: dict) -> None:
-        socket_id_hex = (socket_reply.get("socket_id") or {}).get("value")
+    def _handle_stream_reply(self, msg: dict, stream_reply: dict) -> None:
+        stream_id_hex = _stream_id_value(stream_reply)
 
-        if socket_id_hex:
-            connect_fut = self._pending_connects.get(socket_id_hex)
+        if stream_id_hex:
+            connect_fut = self._pending_connects.get(stream_id_hex)
             if connect_fut:
-                status = socket_reply.get("error") or 0
+                status = stream_reply.get("error") or 0
                 if status in (SUCCESS, CONNECT_REFUSED, CONNECT_TIMEOUT,
-                              SOCKET_ERROR, SOCKET_IN_USE, INVALID_FLAGS):
-                    self._pending_connects.pop(socket_id_hex, None)
+                              STREAM_ERROR, STREAM_IN_USE, INVALID_FLAGS):
+                    self._pending_connects.pop(stream_id_hex, None)
                     if not connect_fut.done():
-                        connect_fut.set_result(socket_reply)
+                        connect_fut.set_result(stream_reply)
                     return
 
-            listen_fut = self._pending_listens.get(socket_id_hex)
+            listen_fut = self._pending_listens.get(stream_id_hex)
             if listen_fut:
-                status = socket_reply.get("error") or 0
-                if status in (SUCCESS, SOCKET_ERROR, SOCKET_IN_USE, INVALID_FLAGS):
-                    self._pending_listens.pop(socket_id_hex, None)
+                status = stream_reply.get("error") or 0
+                if status in (SUCCESS, STREAM_ERROR, STREAM_IN_USE, INVALID_FLAGS):
+                    self._pending_listens.pop(stream_id_hex, None)
                     if not listen_fut.done():
-                        listen_fut.set_result(socket_reply)
+                        listen_fut.set_result(stream_reply)
                     return
 
-            new_socket_id = (socket_reply.get("new_socket_id") or {}).get("value")
-            if new_socket_id:
+            new_stream_id = _new_stream_id_value(stream_reply)
+            if new_stream_id:
                 source_node_id = self._decode_source_node_id(msg)
                 if not source_node_id:
-                    source_node_id = self._socket_routes.get(socket_id_hex)
+                    source_node_id = self._socket_routes.get(stream_id_hex)
                 if source_node_id:
-                    self._socket_routes[_normalize_guid(new_socket_id)] = source_node_id
+                    self._socket_routes[_normalize_guid(new_stream_id)] = source_node_id
 
-            handler = self._socket_handlers.get(socket_id_hex)
+            handler = self._socket_handlers.get(stream_id_hex)
             if handler:
-                handler(socket_reply)
+                handler(stream_reply)
                 return
 
-            queue = self._socket_reply_queues.setdefault(socket_id_hex, [])
-            queue.append(socket_reply)
+            queue = self._socket_reply_queues.setdefault(stream_id_hex, [])
+            queue.append(stream_reply)
 
-            awaited = self._awaited_socket_replies.get(socket_id_hex)
+            awaited = self._awaited_socket_replies.get(stream_id_hex)
             if awaited:
-                self._awaited_socket_replies.pop(socket_id_hex, None)
+                self._awaited_socket_replies.pop(stream_id_hex, None)
                 queue.pop()
                 if not queue:
-                    self._socket_reply_queues.pop(socket_id_hex, None)
+                    self._socket_reply_queues.pop(stream_id_hex, None)
                 if not awaited.done():
-                    awaited.set_result(socket_reply)
+                    awaited.set_result(stream_reply)
                 return
 
-        self._pending_socket_replies.append(socket_reply)
+        self._pending_socket_replies.append(stream_reply)
 
     def _handle_endorsement_done(self, msg: dict) -> None:
         source_node_id = self._decode_source_node_id(msg)
@@ -679,10 +711,10 @@ class RSPClient:
         timeout_ms: int = 0, retries: int = 0, retry_ms: int = 0,
         async_data: bool = False, share_socket: bool = False, use_socket: bool = False,
     ) -> dict | None:
-        socket_id = _random_uuid_hex()
+        stream_id = _random_uuid_hex()
         tcp: dict = {
             "host_port": host_port,
-            "socket_number": {"value": socket_id},
+            "stream_id": {"value": stream_id},
         }
         if use_socket:
             tcp["use_socket"] = True
@@ -706,24 +738,24 @@ class RSPClient:
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
-        self._pending_connects[socket_id] = fut
+        self._pending_connects[stream_id] = fut
 
         try:
             await self._send_signed_message(request)
         except Exception:
-            self._pending_connects.pop(socket_id, None)
+            self._pending_connects.pop(stream_id, None)
             return None
 
         try:
             reply = await asyncio.wait_for(asyncio.shield(fut), timeout=wait_s)
         except (asyncio.TimeoutError, TimeoutError):
-            self._pending_connects.pop(socket_id, None)
+            self._pending_connects.pop(stream_id, None)
             return None
 
         if reply and (reply.get("error") or 0) == SUCCESS:
-            confirmed_id = (reply.get("socket_id") or {}).get("value") or socket_id
-            if not (reply.get("socket_id") or {}).get("value"):
-                reply.setdefault("socket_id", {})["value"] = socket_id
+            confirmed_id = _stream_id_value(reply) or stream_id
+            _set_id_field(reply, "stream_id", confirmed_id)
+            _set_id_field(reply, "socket_id", confirmed_id)
             self._socket_routes[confirmed_id] = node_id
         return reply
 
@@ -734,7 +766,7 @@ class RSPClient:
             return None
         if not reply or (reply.get("error") or 0) != SUCCESS:
             return None
-        return (reply.get("socket_id") or {}).get("value")
+        return _stream_id_value(reply)
 
     # --- Listen ---
 
@@ -744,10 +776,10 @@ class RSPClient:
         share_listening_socket: bool = False, share_child_sockets: bool = False,
         children_use_socket: bool = False, children_async_data: bool = False,
     ) -> dict | None:
-        socket_id = _random_uuid_hex()
+        stream_id = _random_uuid_hex()
         tcp: dict = {
             "host_port": host_port,
-            "socket_number": {"value": socket_id},
+            "stream_id": {"value": stream_id},
         }
         if timeout_ms > 0:
             tcp["timeout_ms"] = timeout_ms
@@ -771,24 +803,24 @@ class RSPClient:
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
-        self._pending_listens[socket_id] = fut
+        self._pending_listens[stream_id] = fut
 
         try:
             await self._send_signed_message(request)
         except Exception:
-            self._pending_listens.pop(socket_id, None)
+            self._pending_listens.pop(stream_id, None)
             return None
 
         try:
             reply = await asyncio.wait_for(asyncio.shield(fut), timeout=wait_s)
         except (asyncio.TimeoutError, TimeoutError):
-            self._pending_listens.pop(socket_id, None)
+            self._pending_listens.pop(stream_id, None)
             return None
 
         if reply and (reply.get("error") or 0) == SUCCESS:
-            confirmed_id = (reply.get("socket_id") or {}).get("value") or socket_id
-            if not (reply.get("socket_id") or {}).get("value"):
-                reply.setdefault("socket_id", {})["value"] = socket_id
+            confirmed_id = _stream_id_value(reply) or stream_id
+            _set_id_field(reply, "stream_id", confirmed_id)
+            _set_id_field(reply, "socket_id", confirmed_id)
             self._socket_routes[confirmed_id] = node_id
         return reply
 
@@ -799,13 +831,13 @@ class RSPClient:
             return None
         if not reply or (reply.get("error") or 0) != SUCCESS:
             return None
-        return (reply.get("socket_id") or {}).get("value")
+        return _stream_id_value(reply)
 
     # --- Accept ---
 
     async def accept_tcp_ex(
         self, listen_socket_id: str, *,
-        new_socket_id: str | None = None, timeout_ms: int = 0,
+        new_socket_id: str | None = None, new_stream_id: str | None = None, timeout_ms: int = 0,
         share_child_socket: bool = False, child_use_socket: bool = False,
         child_async_data: bool = False,
     ) -> dict | None:
@@ -815,11 +847,12 @@ class RSPClient:
 
         request: dict = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "service_message": _pack_service_message("AcceptTCP", {"listen_socket_number": {"value": listen_socket_id}}),
+            "service_message": _pack_service_message("AcceptTCP", {"listen_stream_id": {"value": listen_socket_id}}),
         }
         tcp = request["service_message"]
-        if new_socket_id:
-            tcp["new_socket_number"] = {"value": _normalize_guid(new_socket_id)}
+        requested_stream_id = new_stream_id or new_socket_id
+        if requested_stream_id:
+            tcp["new_stream_id"] = {"value": _normalize_guid(requested_stream_id)}
         if timeout_ms > 0:
             tcp["timeout_ms"] = timeout_ms
         if share_child_socket:
@@ -841,8 +874,10 @@ class RSPClient:
             return None
 
         if reply and (reply.get("error") in (SUCCESS, NEW_CONNECTION)):
-            new_sid = (reply.get("new_socket_id") or {}).get("value")
+            new_sid = _new_stream_id_value(reply)
             if new_sid:
+                _set_id_field(reply, "new_stream_id", new_sid)
+                _set_id_field(reply, "new_socket_id", new_sid)
                 self._socket_routes[new_sid] = node_id
         return reply
 
@@ -853,7 +888,7 @@ class RSPClient:
             return None
         if not reply or reply.get("error") not in (SUCCESS, NEW_CONNECTION):
             return None
-        return (reply.get("new_socket_id") or {}).get("value")
+        return _new_stream_id_value(reply)
 
     # --- Socket send / recv / close ---
 
@@ -865,7 +900,7 @@ class RSPClient:
         data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "service_message": _pack_service_message("SocketSend", {"socket_number": {"value": socket_id}, "data": data_b64}),
+            "service_message": _pack_service_message("StreamSend", {"stream_id": {"value": socket_id}, "data": data_b64}),
         }
         try:
             await self._send_signed_message(request)
@@ -884,9 +919,9 @@ class RSPClient:
             status = (reply.get("error") if reply else None) or 0
             if status == SUCCESS:
                 return True
-            if status in (SOCKET_DATA, NEW_CONNECTION, ASYNC_SOCKET):
+            if status in (STREAM_DATA, NEW_CONNECTION, ASYNC_STREAM):
                 continue
-            if status in (SOCKET_CLOSED, SOCKET_ERROR, INVALID_FLAGS):
+            if status in (STREAM_CLOSED, STREAM_ERROR, INVALID_FLAGS):
                 return False
 
         return False
@@ -899,7 +934,7 @@ class RSPClient:
             return None
         request: dict = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "service_message": _pack_service_message("SocketRecv", {"socket_number": {"value": socket_id}, "max_bytes": max_bytes}),
+            "service_message": _pack_service_message("StreamRecv", {"stream_id": {"value": socket_id}, "max_bytes": max_bytes}),
         }
         if wait_ms > 0:
             request["service_message"]["wait_ms"] = wait_ms
@@ -917,7 +952,7 @@ class RSPClient:
         self, socket_id: str, max_bytes: int = 4096, wait_ms: int = 0
     ) -> bytes | None:
         reply = await self.socket_recv_ex(socket_id, max_bytes, wait_ms)
-        if not reply or reply.get("error") not in (SOCKET_DATA, SUCCESS):
+        if not reply or reply.get("error") not in (STREAM_DATA, SUCCESS):
             return None
         data_b64 = reply.get("data") or ""
         return base64.b64decode(data_b64) if data_b64 else b""
@@ -928,7 +963,7 @@ class RSPClient:
             return False
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "service_message": _pack_service_message("SocketClose", {"socket_number": {"value": socket_id}}),
+            "service_message": _pack_service_message("StreamClose", {"stream_id": {"value": socket_id}}),
         }
         try:
             await self._send_signed_message(request)
@@ -946,10 +981,10 @@ class RSPClient:
                 break
             if not reply:
                 break
-            if reply.get("error") in (SUCCESS, SOCKET_CLOSED):
+            if reply.get("error") in (SUCCESS, STREAM_CLOSED):
                 self._socket_routes.pop(socket_id, None)
                 return True
-            if reply.get("error") not in (SOCKET_DATA, ASYNC_SOCKET, NEW_CONNECTION):
+            if reply.get("error") not in (STREAM_DATA, ASYNC_STREAM, NEW_CONNECTION):
                 return False
 
         self._socket_routes.pop(socket_id, None)
@@ -1000,7 +1035,7 @@ class RSPClient:
         data_b64 = base64.b64encode(data if isinstance(data, (bytes, bytearray)) else bytes(data)).decode("ascii")
         request = {
             "destination": {"value": _encode_node_id_for_field(node_id)},
-            "service_message": _pack_service_message("SocketSend", {"socket_number": {"value": socket_id}, "data": data_b64}),
+            "service_message": _pack_service_message("StreamSend", {"stream_id": {"value": socket_id}, "data": data_b64}),
         }
         try:
             await self._send_signed_message(request)
