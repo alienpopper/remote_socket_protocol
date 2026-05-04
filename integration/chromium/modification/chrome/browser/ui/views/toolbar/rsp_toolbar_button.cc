@@ -67,6 +67,10 @@ RspConfigBubble::RspConfigBubble(views::View* anchor, Profile* profile)
   // animated close → layer DCHECK (IsPropertyChangeAllowed). Config dialogs
   // also benefit from staying open while the user reads another window.
   set_close_on_deactivate(false);
+  // Non-activatable: prevents ShowWindow() from sending WM_ACTIVATE, which
+  // Chrome handles synchronously and can trigger focus-ring layer updates
+  // re-entrantly during the compositor's PaintLayerContents phase → DCHECK.
+  SetCanActivate(false);
 }
 
 RspConfigBubble::~RspConfigBubble() = default;
