@@ -1,0 +1,66 @@
+diff --git a/net/socket/connect_job_params_factory.cc b/net/socket/connect_job_params_factory.cc
+index e975e09a16..686ce86c1c 100644
+--- a/net/socket/connect_job_params_factory.cc
++++ b/net/socket/connect_job_params_factory.cc
+@@ -24,6 +24,7 @@
+ #include "net/http/http_proxy_connect_job.h"
+ #include "net/socket/connect_job_params.h"
+ #include "net/socket/next_proto.h"
++#include "net/socket/rsp_connect_job.h"
+ #include "net/socket/socket_tag.h"
+ #include "net/socket/socks_connect_job.h"
+ #include "net/socket/ssl_connect_job.h"
+@@ -211,6 +212,24 @@ ConnectJobParams CreateProxyParams(
+   // will be made.
+   ConnectJobParams params;
+ 
++  // For RSP, decode the actual RM host from the encoded proxy hostname.
++  // RSP proxy hostname format: "<node-id>--<rm-host-dots-as-hyphens>"
++  // e.g. "77c344c4-b564-ddcc-05f2-7be7310f5cfa--127-0-0-1"
++  std::string rsp_node_id;
++  HostPortPair rsp_rm_host_port;
++  if (proxy_server.is_rsp()) {
++    std::string encoded_host = proxy_server.GetHost();
++    size_t sep = encoded_host.find("--");
++    if (sep != std::string::npos) {
++      rsp_node_id = encoded_host.substr(0, sep);
++      std::string rm_host = encoded_host.substr(sep + 2);
++      for (char& c : rm_host) {
++        if (c == '-') c = '.';
++      }
++      rsp_rm_host_port = HostPortPair(rm_host, proxy_server.GetPort());
++    }
++  }
++
+   if (proxy_server.is_quic()) {
+     // If this and all proxies earlier in the chain are QUIC, then we can hand
+     // off the remainder of the proxy connecting work to the QuicSocketPool, so
+@@ -231,8 +250,12 @@ ConnectJobParams CreateProxyParams(
+     // TODO(crbug.com/40181080): For an http-like proxy, should this pass a
+     // `SchemeHostPort`, so proxies can participate in ECH? Note doing so
+     // with `SCHEME_HTTP` requires handling the HTTPS record upgrade.
++    // For RSP, use the decoded RM host rather than the encoded proxy hostname.
++    HostPortPair transport_host = proxy_server.is_rsp()
++                                      ? rsp_rm_host_port
++                                      : proxy_server.host_port_pair();
+     params = ConnectJobParams(base::MakeRefCounted<TransportSocketParams>(
+-        proxy_server.host_port_pair(), proxy_dns_network_anonymization_key,
++        transport_host, proxy_dns_network_anonymization_key,
+         secure_dns_policy, resolution_callback,
+         SupportedProtocolsFromSSLConfig(proxy_server_ssl_config)));
+   } else {
+@@ -259,6 +282,14 @@ ConnectJobParams CreateProxyParams(
+         std::move(params), host_port_pair, proxy_chain, proxy_chain_index,
+         should_tunnel, *proxy_annotation_tag, network_anonymization_key,
+         secure_dns_policy));
++  } else if (proxy_server.is_rsp()) {
++    DCHECK_EQ(1u, proxy_chain.length());
++    // The DLL (rspclient.dll) handles the TCP connection to the RM internally,
++    // so no nested TransportSocketParams are needed here.
++    params = ConnectJobParams(base::MakeRefCounted<RspSocketParams>(
++        rsp_node_id, rsp_rm_host_port,
++        ToHostPortPair(endpoint), network_anonymization_key,
++        *proxy_annotation_tag));
+   } else {
+     DCHECK(proxy_server.is_socks());
+     DCHECK_EQ(1u, proxy_chain.length());

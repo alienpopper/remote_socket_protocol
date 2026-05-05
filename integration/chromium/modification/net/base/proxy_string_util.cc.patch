@@ -1,0 +1,35 @@
+diff --git a/net/base/proxy_string_util.cc b/net/base/proxy_string_util.cc
+index 75d1d6ce61..26a8724912 100644
+--- a/net/base/proxy_string_util.cc
++++ b/net/base/proxy_string_util.cc
+@@ -127,6 +127,9 @@ std::string ProxyServerToPacResultElement(const ProxyServer& proxy_server) {
+       return std::string("QUIC ") +
+              ConstructHostPortString(proxy_server.GetHost(),
+                                      proxy_server.GetPort());
++    case ProxyServer::SCHEME_RSP:
++      // RSP is not a PAC scheme.
++      NOTREACHED();
+     default:
+       // Got called with an invalid scheme.
+       NOTREACHED();
+@@ -193,6 +196,10 @@ std::string ProxyServerToProxyUri(const ProxyServer& proxy_server) {
+       return std::string("quic://") +
+              ConstructHostPortString(proxy_server.GetHost(),
+                                      proxy_server.GetPort());
++    case ProxyServer::SCHEME_RSP:
++      return std::string("rsp://") +
++             ConstructHostPortString(proxy_server.GetHost(),
++                                     proxy_server.GetPort());
+     default:
+       // Got called with an invalid scheme.
+       NOTREACHED();
+@@ -261,6 +268,9 @@ ProxyServer::Scheme GetSchemeFromUriScheme(std::string_view scheme,
+     return ProxyServer::SCHEME_QUIC;
+   }
+ #endif  // BUILDFLAG(ENABLE_QUIC_PROXY_SUPPORT)
++  if (base::EqualsCaseInsensitiveASCII(scheme, "rsp")) {
++    return ProxyServer::SCHEME_RSP;
++  }
+   return ProxyServer::SCHEME_INVALID;
+ }
+ 

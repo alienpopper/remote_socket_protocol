@@ -30,39 +30,38 @@ std::string MakeConnectionKey(const RspTabConfig& config) {
                             config.rs_node_id.c_str());
 }
 
-std::string MakeProxyHostLabel(const std::string& value) {
-  std::string label;
-  for (char ch : value) {
-    const unsigned char uch = static_cast<unsigned char>(ch);
-    if (std::isalnum(uch)) {
-      label.push_back(static_cast<char>(std::tolower(uch)));
-    } else if (ch == '-' && !label.empty() && label.back() != '-') {
-      label.push_back(ch);
-    }
-  }
-
-  while (!label.empty() && label.back() == '-') {
-    label.pop_back();
-  }
-  if (label.empty()) {
-    label = "unconfigured";
-  }
-  if (label.size() > 63) {
-    label.resize(63);
-    while (!label.empty() && label.back() == '-') {
-      label.pop_back();
-    }
-  }
-  return label.empty() ? "unconfigured" : label;
-}
-
+// Builds the RSP proxy server URI understood by Chromium's net layer.
+//
+// Format: rsp://<node-id>--<rm-host-dots-as-hyphens>:<rm-port>
+// Example: rsp://77c344c4-b564-ddcc-05f2-7be7310f5cfa--127-0-0-1:3939
+//
+// connect_job_params_factory.cc decodes this by splitting on "--" to recover
+// the node ID and RM host:port.  Using dots-as-hyphens avoids embedding bare
+// dots in a hostname while keeping the value URL-safe.
 std::string MakeRspProxyServer(const RspTabConfig& config) {
-  if (config.rs_node_id.empty()) {
+  if (config.rs_node_id.empty() || config.rm_addr.empty()) {
     return std::string();
   }
 
-  return base::StringPrintf("socks5://%s.rsp-proxy.invalid:1080",
-                            MakeProxyHostLabel(config.rs_node_id).c_str());
+  // Split rm_addr into host and port (format: "host:port").
+  std::string rm_host;
+  std::string rm_port = "3939";
+  size_t colon = config.rm_addr.rfind(':');
+  if (colon != std::string::npos) {
+    rm_host = config.rm_addr.substr(0, colon);
+    rm_port = config.rm_addr.substr(colon + 1);
+  } else {
+    rm_host = config.rm_addr;
+  }
+
+  // Replace dots with hyphens so the combined hostname is a valid DNS label.
+  std::string rm_host_hyphened = rm_host;
+  for (char& c : rm_host_hyphened) {
+    if (c == '.') c = '-';
+  }
+
+  return base::StringPrintf("rsp://%s--%s:%s", config.rs_node_id.c_str(),
+                            rm_host_hyphened.c_str(), rm_port.c_str());
 }
 
 void ApplyProxyConfigForProfile(Profile* profile, const RspTabConfig& config) {

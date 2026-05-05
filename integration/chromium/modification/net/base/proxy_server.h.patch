@@ -1,0 +1,23 @@
+diff --git a/net/base/proxy_server.h b/net/base/proxy_server.h
+index 2a1ff51155..e36717e5fa 100644
+--- a/net/base/proxy_server.h
++++ b/net/base/proxy_server.h
+@@ -39,6 +39,8 @@ class NET_EXPORT ProxyServer {
+     // A QUIC proxy is an HTTP proxy in which QUIC is used as the transport,
+     // instead of TCP.
+     SCHEME_QUIC = 1 << 6,
++    // An RSP proxy speaks the Remote Socket Protocol directly.
++    SCHEME_RSP = 1 << 7,
+   };
+ 
+   // Default copy-constructor and assignment operator are OK!
+@@ -97,6 +99,9 @@ class NET_EXPORT ProxyServer {
+   // Returns true if this ProxyServer is a QUIC proxy.
+   bool is_quic() const { return scheme_ == SCHEME_QUIC; }
+ 
++  // Returns true if this ProxyServer is an RSP proxy.
++  bool is_rsp() const { return scheme_ == SCHEME_RSP; }
++
+   // Returns true if the ProxyServer's scheme is HTTP compatible (uses HTTP
+   // headers, has a CONNECT method for establishing tunnels).
+   bool is_http_like() const { return is_http() || is_https() || is_quic(); }

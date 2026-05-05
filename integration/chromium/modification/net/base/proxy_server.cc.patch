@@ -1,0 +1,21 @@
+diff --git a/net/base/proxy_server.cc b/net/base/proxy_server.cc
+index 42554e1332..e878334a65 100644
+--- a/net/base/proxy_server.cc
++++ b/net/base/proxy_server.cc
+@@ -34,6 +34,7 @@ bool IsValidSchemeInt(int scheme_int) {
+     case ProxyServer::SCHEME_SOCKS5:
+     case ProxyServer::SCHEME_HTTPS:
+     case ProxyServer::SCHEME_QUIC:
++    case ProxyServer::SCHEME_RSP:
+       return true;
+     default:
+       return false;
+@@ -165,6 +166,8 @@ int ProxyServer::GetDefaultPortForScheme(Scheme scheme) {
+     case SCHEME_HTTPS:
+     case SCHEME_QUIC:
+       return 443;
++    case SCHEME_RSP:
++      return 3939;
+     case SCHEME_INVALID:
+       break;
+   }

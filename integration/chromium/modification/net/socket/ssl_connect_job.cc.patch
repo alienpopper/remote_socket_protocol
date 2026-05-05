@@ -1,0 +1,76 @@
+diff --git a/net/socket/ssl_connect_job.cc b/net/socket/ssl_connect_job.cc
+index 67757935f8..e945af92b9 100644
+--- a/net/socket/ssl_connect_job.cc
++++ b/net/socket/ssl_connect_job.cc
+@@ -28,6 +28,7 @@
+ #include "net/socket/client_socket_factory.h"
+ #include "net/socket/client_socket_handle.h"
+ #include "net/socket/socks_connect_job.h"
++#include "net/socket/rsp_connect_job.h"
+ #include "net/socket/ssl_client_socket.h"
+ #include "net/socket/tcp_connect_job.h"
+ #include "net/socket/transport_connect_job.h"
+@@ -67,6 +68,9 @@ SSLSocketParams::ConnectionType SSLSocketParams::GetConnectionType() const {
+   if (nested_params_.is_http_proxy()) {
+     return HTTP_PROXY;
+   }
++  if (nested_params_.is_rsp()) {
++    return RSP_PROXY;
++  }
+   return DIRECT;
+ }
+ 
+@@ -224,6 +228,13 @@ int SSLConnectJob::DoLoop(int result) {
+       case STATE_TUNNEL_CONNECT_COMPLETE:
+         rv = DoTunnelConnectComplete(rv);
+         break;
++      case STATE_RSP_CONNECT:
++        DCHECK_EQ(OK, rv);
++        rv = DoRspConnect();
++        break;
++      case STATE_RSP_CONNECT_COMPLETE:
++        rv = DoRspConnectComplete(rv);
++        break;
+       case STATE_SSL_CONNECT:
+         DCHECK_EQ(OK, rv);
+         rv = DoSSLConnect();
+@@ -363,6 +374,30 @@ int SSLConnectJob::DoTunnelConnectComplete(int result) {
+   return result;
+ }
+ 
++int SSLConnectJob::DoRspConnect() {
++  DCHECK(!nested_connect_job_);
++  DCHECK(params_->GetRspConnectionParams());
++  DCHECK(!TimerIsRunning());
++
++  next_state_ = STATE_RSP_CONNECT_COMPLETE;
++  nested_connect_job_ = std::make_unique<RspConnectJob>(
++      priority(), socket_tag(), common_connect_job_params(),
++      params_->GetRspConnectionParams(), this, &net_log());
++  return nested_connect_job_->Connect();
++}
++
++int SSLConnectJob::DoRspConnectComplete(int result) {
++  resolve_error_info_ = nested_connect_job_->GetResolveErrorInfo();
++  nested_socket_ = nested_connect_job_->PassSocket();
++
++  if (result < 0) {
++    return result;
++  }
++
++  next_state_ = STATE_SSL_CONNECT;
++  return result;
++}
++
+ int SSLConnectJob::DoSSLConnect() {
+   TRACE_EVENT0(NetTracingCategory(), "SSLConnectJob::DoSSLConnect");
+   DCHECK(!TimerIsRunning());
+@@ -593,6 +628,8 @@ SSLConnectJob::State SSLConnectJob::GetInitialState(
+       return STATE_TUNNEL_CONNECT;
+     case SSLSocketParams::SOCKS_PROXY:
+       return STATE_SOCKS_CONNECT;
++    case SSLSocketParams::RSP_PROXY:
++      return STATE_RSP_CONNECT;
+   }
+   NOTREACHED();
+ }

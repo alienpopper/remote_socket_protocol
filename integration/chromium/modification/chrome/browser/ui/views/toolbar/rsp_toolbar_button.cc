@@ -13,7 +13,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "ui/gfx/scoped_animation_duration_scale_mode.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/rsp/rsp_config.h"
 #include "chrome/browser/rsp/rsp_connection_manager.h"
@@ -64,21 +63,30 @@ RspConfigBubble::RspConfigBubble(views::View* anchor, Profile* profile)
   set_fixed_width(480);
   // Do not close on deactivation. The combobox dropdown creates a child widget
   // that briefly takes focus, which would otherwise trigger OnDeactivate →
-  // animated close → layer DCHECK (IsPropertyChangeAllowed). Config dialogs
-  // also benefit from staying open while the user reads another window.
+  // animated close. Config dialogs also benefit from staying open while the
+  // user reads another window.
   set_close_on_deactivate(false);
-  // Non-activatable: prevents ShowWindow() from sending WM_ACTIVATE, which
-  // Chrome handles synchronously and can trigger focus-ring layer updates
-  // re-entrantly during the compositor's PaintLayerContents phase → DCHECK.
-  SetCanActivate(false);
 }
 
-RspConfigBubble::~RspConfigBubble() = default;
+RspConfigBubble::~RspConfigBubble() {
+  if (current_bubble_ == this) {
+    current_bubble_ = nullptr;
+  }
+}
+
+// static
+RspConfigBubble* RspConfigBubble::current_bubble_ = nullptr;
 
 // static
 void RspConfigBubble::Show(views::View* anchor, Profile* profile) {
   DCHECK(profile);
+  // Toggle: if the bubble is already showing, close it and return.
+  if (current_bubble_) {
+    current_bubble_->GetWidget()->Close();
+    return;
+  }
   auto* bubble = new RspConfigBubble(anchor, profile);
+  current_bubble_ = bubble;
   views::BubbleDialogDelegate::CreateBubble(bubble)->Show();
 }
 
@@ -154,6 +162,7 @@ void RspConfigBubble::Init() {
       std::vector<ui::SimpleComboboxModel::Item>{});
   node_combobox_ = grid->AddChildView(
       std::make_unique<views::Combobox>(combobox_model_.get()));
+  node_combobox_->SetTooltipTextAndAccessibleName(u"bsd_sockets node");
   grid->AddChildView(std::make_unique<views::Label>(u""));  // spacer
 
   // Hint below the grid.

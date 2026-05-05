@@ -1,0 +1,51 @@
+diff --git a/net/socket/ssl_connect_job.h b/net/socket/ssl_connect_job.h
+index 9127f27101..ef89e7163a 100644
+--- a/net/socket/ssl_connect_job.h
++++ b/net/socket/ssl_connect_job.h
+@@ -34,6 +34,7 @@ namespace net {
+ 
+ class HostPortPair;
+ class HttpProxySocketParams;
++class RspSocketParams;
+ class SocketTag;
+ class SOCKSSocketParams;
+ class TcpConnectJob;
+@@ -42,7 +43,7 @@ class TransportSocketParams;
+ class NET_EXPORT_PRIVATE SSLSocketParams
+     : public base::RefCounted<SSLSocketParams> {
+  public:
+-  enum ConnectionType { DIRECT, SOCKS_PROXY, HTTP_PROXY };
++  enum ConnectionType { DIRECT, SOCKS_PROXY, HTTP_PROXY, RSP_PROXY };
+ 
+   // Exactly one of |direct_params|, |socks_proxy_params|, and
+   // |http_proxy_params| must be non-NULL.
+@@ -75,6 +76,11 @@ class NET_EXPORT_PRIVATE SSLSocketParams
+     return nested_params_.http_proxy();
+   }
+ 
++  // Must be called only when GetConnectionType() returns RSP_PROXY.
++  const scoped_refptr<RspSocketParams>& GetRspConnectionParams() const {
++    return nested_params_.rsp();
++  }
++
+   const HostPortPair& host_and_port() const { return host_and_port_; }
+   const SSLConfig& ssl_config() const { return ssl_config_; }
+   const NetworkAnonymizationKey& network_anonymization_key() const {
+@@ -150,6 +156,8 @@ class NET_EXPORT_PRIVATE SSLConnectJob : public ConnectJob,
+     STATE_SOCKS_CONNECT_COMPLETE,
+     STATE_TUNNEL_CONNECT,
+     STATE_TUNNEL_CONNECT_COMPLETE,
++    STATE_RSP_CONNECT,
++    STATE_RSP_CONNECT_COMPLETE,
+     STATE_SSL_CONNECT,
+     STATE_SSL_CONNECT_COMPLETE,
+     STATE_NONE,
+@@ -166,6 +174,8 @@ class NET_EXPORT_PRIVATE SSLConnectJob : public ConnectJob,
+   int DoSOCKSConnectComplete(int result);
+   int DoTunnelConnect();
+   int DoTunnelConnectComplete(int result);
++  int DoRspConnect();
++  int DoRspConnectComplete(int result);
+   int DoSSLConnect();
+   int DoSSLConnectComplete(int result);
+ 

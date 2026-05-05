@@ -1,0 +1,39 @@
+diff --git a/net/socket/connect_job_factory.cc b/net/socket/connect_job_factory.cc
+index 516d932b30..0c8907e998 100644
+--- a/net/socket/connect_job_factory.cc
++++ b/net/socket/connect_job_factory.cc
+@@ -21,6 +21,7 @@
+ #include "net/http/http_proxy_connect_job.h"
+ #include "net/socket/connect_job.h"
+ #include "net/socket/connect_job_params_factory.h"
++#include "net/socket/rsp_connect_job.h"
+ #include "net/socket/socket_tag.h"
+ #include "net/socket/socks_connect_job.h"
+ #include "net/socket/ssl_connect_job.h"
+@@ -48,9 +49,12 @@ ConnectJobFactory::ConnectJobFactory(
+         http_proxy_connect_job_factory,
+     std::unique_ptr<SOCKSConnectJob::Factory> socks_connect_job_factory,
+     std::unique_ptr<SSLConnectJob::Factory> ssl_connect_job_factory,
+-    std::unique_ptr<TransportConnectJob::Factory> transport_connect_job_factory)
++    std::unique_ptr<TransportConnectJob::Factory> transport_connect_job_factory,
++    std::unique_ptr<RspConnectJob::Factory> rsp_connect_job_factory)
+     : http_proxy_connect_job_factory_(
+           CreateFactoryIfNull(std::move(http_proxy_connect_job_factory))),
++      rsp_connect_job_factory_(
++          CreateFactoryIfNull(std::move(rsp_connect_job_factory))),
+       socks_connect_job_factory_(
+           CreateFactoryIfNull(std::move(socks_connect_job_factory))),
+       ssl_connect_job_factory_(
+@@ -150,6 +154,12 @@ std::unique_ptr<ConnectJob> ConnectJobFactory::CreateConnectJob(
+         /*net_log=*/nullptr);
+   }
+ 
++  if (connect_job_params.is_rsp()) {
++    return rsp_connect_job_factory_->Create(
++        request_priority, socket_tag, common_connect_job_params,
++        connect_job_params.take_rsp(), delegate, /*net_log=*/nullptr);
++  }
++
+   CHECK(connect_job_params.is_socks());
+   return socks_connect_job_factory_->Create(
+       request_priority, socket_tag, common_connect_job_params,
