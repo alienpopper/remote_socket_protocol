@@ -50,6 +50,16 @@ Serve a Python HTTP server over RSP sockets using the Python client.
 
 See [integration/python_http_server/modification/README.md](integration/python_http_server/modification/README.md).
 
+### Rust Client
+
+The Rust client lives in `client/rust` and is generated/build-time schema driven (no protobuf runtime dependency).
+
+```bash
+cd client/rust
+cargo test
+cargo run --bin ping -- tcp:127.0.0.1:9000 <destination-node-id>
+```
+
 ## Building
 
 Dependencies: cmake 3.22+, protobuf, boringssl (fetched via `third_party/`).
@@ -69,6 +79,7 @@ make test-nodejs-client-reconnect
 make test-nodejs-express
 make test-nodejs-express-stress
 make test-python-http-server
+make test-rust-client
 ```
 
 ## License

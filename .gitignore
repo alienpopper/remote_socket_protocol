@@ -7,6 +7,8 @@ __pycache__/
 *.pyc
 client/nodejs/messages.js
 client/python/messages.py
+client/rust/target/
+client/rust/Cargo.lock
 integration/nodejs_express/working/node_modules/
 integration/nodejs_express/working/
 integration/openssh/working/
@@ -23,3 +25,5 @@ bin/rsp_bsd_sockets
 bin/rsp_bsd_sockets.exe
 **/.DS_Store
 bin/
+!client/rust/src/bin/
+!client/rust/src/bin/ping.rs
