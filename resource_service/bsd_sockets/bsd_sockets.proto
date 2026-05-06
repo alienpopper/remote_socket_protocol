@@ -14,7 +14,7 @@ message ConnectTCPRequest {
     optional uint32 retries = 6; //maximum 5
     optional uint32 retry_ms = 7; //maximum 5 seconds
     optional bool async_data = 8;
-    optional bool use_socket = 9;
+    optional bool use_socket = 9; //means establish a socket outside of RSP.  Not yet implemented.
     optional bool share_socket = 10; //different nodeIDs are allowed to use this socket
 }
 
