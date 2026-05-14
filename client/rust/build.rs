@@ -22,7 +22,7 @@ fn main() {
         "resource_service/bsd_sockets/bsd_sockets_logging.proto",
         "resource_service/sshd/sshd.proto",
         "resource_service/endorsement/endorsement.proto",
-        "name_service/name_service.proto",
+        "resource_service/name/name.proto",
         "logging/logging.proto",
     ]
     .into_iter()

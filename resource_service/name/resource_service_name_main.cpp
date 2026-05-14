@@ -1,4 +1,4 @@
-#include "name_service/name_service.hpp"
+#include "resource_service/name/resource_service_name.hpp"
 
 #include "common/keypair.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     }
 
     // Load keypair from config or generate a new one.
-    rsp::name_service::NameService::Ptr nameService;
+    rsp::resource_service::name::NameService::Ptr nameService;
     if (config.contains("keypair")) {
         const auto& kpArray = config["keypair"];
         if (!kpArray.is_array() || kpArray.size() != 2) {
@@ -94,13 +94,13 @@ int main(int argc, char** argv) {
         const std::string privateKeyPath = kpArray[1].get<std::string>();
         try {
             auto keyPair = rsp::KeyPair::readFromDisk(privateKeyPath, publicKeyPath);
-            nameService = rsp::name_service::NameService::create(std::move(keyPair));
+            nameService = rsp::resource_service::name::NameService::create(std::move(keyPair));
         } catch (const std::exception& e) {
             std::cerr << "error loading keypair: " << e.what() << '\n';
             return 1;
         }
     } else {
-        nameService = rsp::name_service::NameService::create();
+        nameService = rsp::resource_service::name::NameService::create();
     }
 
     try {

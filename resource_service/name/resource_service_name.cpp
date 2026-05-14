@@ -1,18 +1,18 @@
-#include "name_service/name_service.hpp"
+#include "resource_service/name/resource_service_name.hpp"
 
 #include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
 #include "resource_service/schema_helpers.hpp"
 
-#include "name_service/name_service.pb.h"
-#include "name_service/name_service_desc.hpp"
+#include "resource_service/name/name.pb.h"
+#include "resource_service/name/name_desc.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <utility>
 
-namespace rsp::name_service {
+namespace rsp::resource_service::name {
 
 static constexpr double kRecordTtlSeconds = 300.0; // 5 minutes
 
@@ -443,4 +443,4 @@ void NameService::runPingCheckThread() {
     }
 }
 
-}  // namespace rsp::name_service
+}  // namespace rsp::resource_service::name

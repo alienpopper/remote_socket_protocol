@@ -14,7 +14,7 @@
 #include <tuple>
 #include <vector>
 
-namespace rsp::name_service {
+namespace rsp::resource_service::name {
 
 class NameService : public rsp::resource_service::ResourceService {
 public:
@@ -79,4 +79,4 @@ private:
     void runPingCheckThread();
 };
 
-}  // namespace rsp::name_service
+}  // namespace rsp::resource_service::name

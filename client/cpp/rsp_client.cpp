@@ -11,7 +11,7 @@
 #include "resource_service/sshd/sshd.pb.h"
 #include "resource_service/httpd/httpd.pb.h"
 #include "resource_service/endorsement/endorsement.pb.h"
-#include "name_service/name_service.pb.h"
+#include "resource_service/name/name.pb.h"
 
 #include <chrono>
 #include <cstring>

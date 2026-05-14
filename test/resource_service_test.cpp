@@ -4,7 +4,7 @@
 #include "client/cpp/rsp_client_message.hpp"
 #include "common/service_message.hpp"
 #include "logging/logging.pb.h"
-#include "name_service/name_service.hpp"
+#include "resource_service/name/resource_service_name.hpp"
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 #include "resource_service/bsd_sockets/bsd_sockets_logging.pb.h"
 #include "resource_service/endorsement/endorsement.pb.h"
@@ -862,7 +862,7 @@ void testClientDiscoversResourceServiceThroughResourceQuery() {
         require(serverTransport->listen(memoryChannel), "memory transport listener should start");
         const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto nameService = rsp::name_service::NameService::create(std::move(nameServiceKeyPair));
+        auto nameService = rsp::resource_service::name::NameService::create(std::move(nameServiceKeyPair));
         auto client = rsp::client::RSPClient::create();
 
         const auto nameServiceConnectionId =
@@ -1759,7 +1759,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(serverTransport->listen(memoryChannel), "memory transport listener should start");
         const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto nameService = rsp::name_service::NameService::create();
+        auto nameService = rsp::resource_service::name::NameService::create();
         rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID ownerNodeId = clientKeyPair.nodeID();
         auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
@@ -1802,7 +1802,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(serverTransport->listen(memoryChannel), "memory transport listener should start");
         const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto nameService = rsp::name_service::NameService::create();
+        auto nameService = rsp::resource_service::name::NameService::create();
         rsp::KeyPair serviceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID serviceNodeId = serviceKeyPair.nodeID();
         auto serviceClient = rsp::client::RSPClient::create(std::move(serviceKeyPair));
@@ -1844,7 +1844,7 @@ void testClientExchangesTcpDataThroughNativeSocketBridge() {
         require(serverTransport->listen(memoryChannel), "memory transport listener should start");
         const std::string transportSpec = "memory:" + memoryChannel;
 
-        auto nameService = rsp::name_service::NameService::create();
+        auto nameService = rsp::resource_service::name::NameService::create();
         rsp::KeyPair clientKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID realNodeId = clientKeyPair.nodeID();
         auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
