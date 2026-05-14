@@ -316,37 +316,11 @@ message LogRecord {
 }
 
 
-/****Endorsement Server Messages ****/
-enum ENSDORSMENT_STATUS {
-    ENDORSEMENT_SUCCESS = 0;
-    ENDORSEMENT_FAILED = 1;
-    ENDORSEMENT_CHALLENGE = 2;
-    ENDORSEMENT_INVALID_SIGNATURE = 3;
-    ENDORSEMENT_UNKNOWN_IDENTITY = 4;
-}
+/****Endorsement Server Messages — moved to
+     resource_service/endorsement/endorsement.proto. They are still in
+     package rsp.proto with the same message/enum names so wire format
+     and Any type_urls are unchanged. ****/
 
-
-message BeginEndorsementRequest {
-    Endorsement requested_values = 1; // requestor fills out values wanted
-                                      // ES is allowed to change any field
-                                      // Must be signed by the requestor
-    optional bytes auth_data = 2;
-}
-
-message EndorsementChallenge {
-    optional uint32 stage = 1;
-    optional bytes challenge = 2;
-}
-
-message EndorsementChallengeReply {
-    optional uint32 stage = 1;
-    optional bytes challenge_reply = 2;
-}
-
-message EndorsementDone {
-    ENSDORSMENT_STATUS status = 1;
-    Endorsement new_endorsement = 2;
-}
 
 /***Endorsement AST Nodes ***/
 

@@ -5,7 +5,8 @@
 #include "common/endorsement/well_known_endorsements.h"
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/service_message.hpp"
-#include "endorsement_service/endorsement_service.hpp"
+#include "resource_service/endorsement/resource_service_endorsement.hpp"
+#include "resource_service/endorsement/endorsement.pb.h"
 
 #include "common/transport/transport_memory.hpp"
 #include "resource_manager/resource_manager.hpp"
@@ -86,7 +87,7 @@ private:
     std::map<rsp::NodeID, std::shared_ptr<rsp::KeyPair>> endorsementServiceKeys_;
 };
 
-class TestEndorsementService : public rsp::endorsement_service::EndorsementService {
+class TestEndorsementService : public rsp::resource_service::endorsement::EndorsementService {
 public:
     using Ptr = std::shared_ptr<TestEndorsementService>;
 
@@ -112,7 +113,7 @@ public:
 
 protected:
     explicit TestEndorsementService(rsp::KeyPair keyPair)
-        : rsp::endorsement_service::EndorsementService(std::move(keyPair)) {
+        : rsp::resource_service::endorsement::EndorsementService(std::move(keyPair)) {
     }
 
     bool handleNodeSpecificMessage(const rsp::proto::RSPMessage& message) override {
@@ -122,7 +123,7 @@ protected:
             return true;
         }
 
-        return rsp::endorsement_service::EndorsementService::handleNodeSpecificMessage(message);
+        return rsp::resource_service::endorsement::EndorsementService::handleNodeSpecificMessage(message);
     }
 
 private:
@@ -198,7 +199,7 @@ void testEndorsementServiceConnectsToResourceManager() {
     serverTransport->listen("rm-test");
     const std::string transportSpec = "memory:rm-test";
 
-    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto es = rsp::resource_service::endorsement::EndorsementService::create(std::move(esKeyPair));
     const auto connectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
 
     require(es->hasConnections(), "endorsement service should track created connections");
@@ -246,7 +247,7 @@ void testClientPingsEndorsementService() {
     serverTransport->listen("rm-test");
     const std::string transportSpec = "memory:rm-test";
 
-    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto es = rsp::resource_service::endorsement::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create();
 
     const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
@@ -284,10 +285,10 @@ void testClientRequestsNetworkAccessEndorsementFromConfig() {
     serverTransport->listen("rm-test");
     const std::string transportSpec = "memory:rm-test";
 
-    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto es = rsp::resource_service::endorsement::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::RSPClient::create(std::move(clientKeyPair));
 
-    rsp::endorsement_service::EndorsementService::ConfiguredEndorsement configuredEndorsement;
+    rsp::resource_service::endorsement::EndorsementService::ConfiguredEndorsement configuredEndorsement;
     configuredEndorsement.requestor = clientNodeId;
     configuredEndorsement.endorsementType = ETYPE_ACCESS;
     configuredEndorsement.endorsementValue = stringToBuffer(EVALUE_ACCESS_NETWORK.toString());
@@ -358,7 +359,7 @@ void testClientRequestsNetworkAccessEndorsementFromConfig() {
         serverTransport->listen("rm-test");
     const std::string transportSpec = "memory:rm-test";
 
-        auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+        auto es = rsp::resource_service::endorsement::EndorsementService::create(std::move(esKeyPair));
         auto client = rsp::client::RSPClientMessage::create(std::move(clientKeyPair));
 
         const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);
@@ -420,7 +421,7 @@ void testForwardedIdentityMessagesPopulateResourceManagerAndEndorsementServiceCa
     serverTransport->listen("rm-test");
     const std::string transportSpec = "memory:rm-test";
 
-    auto es = rsp::endorsement_service::EndorsementService::create(std::move(esKeyPair));
+    auto es = rsp::resource_service::endorsement::EndorsementService::create(std::move(esKeyPair));
     auto client = rsp::client::full::RSPClient::create(std::move(clientKeyPair));
 
     const auto esConnectionId = es->connectToResourceManager(transportSpec, rsp::message_queue::kAsciiHandshakeEncoding);

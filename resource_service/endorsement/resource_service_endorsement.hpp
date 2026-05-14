@@ -8,7 +8,7 @@
 #include <optional>
 #include <vector>
 
-namespace rsp::endorsement_service {
+namespace rsp::resource_service::endorsement {
 
 class EndorsementService : public rsp::client::full::RSPClient {
 public:
@@ -55,4 +55,4 @@ private:
     std::vector<ConfiguredEndorsement> configuredEndorsements_;
 };
 
-}  // namespace rsp::endorsement_service
+}  // namespace rsp::resource_service::endorsement

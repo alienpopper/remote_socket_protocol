@@ -3,6 +3,7 @@
 
 #include "logging/logging.pb.h"
 #include "resource_service/bsd_sockets/bsd_sockets.pb.h"
+#include "resource_service/endorsement/endorsement.pb.h"
 
 #include <iostream>
 #include <stdexcept>

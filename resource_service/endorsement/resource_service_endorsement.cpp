@@ -1,9 +1,10 @@
-#include "endorsement_service/endorsement_service.hpp"
+#include "resource_service/endorsement/resource_service_endorsement.hpp"
 
 #include "common/endorsement/endorsement.hpp"
 #include "common/endorsement/well_known_endorsements.h"
 #include "common/message_queue/mq_signing.hpp"
 #include "common/service_message.hpp"
+#include "resource_service/endorsement/endorsement.pb.h"
 
 #include <cstring>
 
@@ -44,7 +45,7 @@ bool buffersEqual(const rsp::Buffer& lhs, const rsp::Buffer& rhs) {
 
 }  // namespace
 
-namespace rsp::endorsement_service {
+namespace rsp::resource_service::endorsement {
 
 EndorsementService::Ptr EndorsementService::create() {
     return Ptr(new EndorsementService(KeyPair::generateP256()));
@@ -197,4 +198,4 @@ bool EndorsementService::handleBeginEndorsementRequest(const rsp::proto::RSPMess
     return send(reply);
 }
 
-}  // namespace rsp::endorsement_service
+}  // namespace rsp::resource_service::endorsement

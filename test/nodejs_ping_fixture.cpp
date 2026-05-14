@@ -3,7 +3,7 @@
 #include "client/cpp_full/rsp_client.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_tcp.hpp"
-#include "endorsement_service/endorsement_service.hpp"
+#include "resource_service/endorsement/resource_service_endorsement.hpp"
 #include "resource_manager/resource_manager.hpp"
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 
@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 
         rsp::KeyPair endorsementServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID endorsementServiceNodeId = endorsementServiceKeyPair.nodeID();
-        auto endorsementService = rsp::endorsement_service::EndorsementService::create(std::move(endorsementServiceKeyPair));
+        auto endorsementService = rsp::resource_service::endorsement::EndorsementService::create(std::move(endorsementServiceKeyPair));
 
         rsp::KeyPair clientServiceKeyPair = rsp::KeyPair::generateP256();
         const rsp::NodeID clientServiceNodeId = clientServiceKeyPair.nodeID();

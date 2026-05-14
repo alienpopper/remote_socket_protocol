@@ -1,4 +1,4 @@
-#include "endorsement_service/endorsement_service.hpp"
+#include "resource_service/endorsement/resource_service_endorsement.hpp"
 
 #include "common/keypair.hpp"
 #include "common/message_queue/mq_ascii_handshake.hpp"
@@ -101,9 +101,9 @@ static double parseConfiguredValiditySeconds(const nlohmann::json& entry) {
     return DAYS(1);
 }
 
-static std::vector<rsp::endorsement_service::EndorsementService::ConfiguredEndorsement>
+static std::vector<rsp::resource_service::endorsement::EndorsementService::ConfiguredEndorsement>
 parseConfiguredEndorsements(const nlohmann::json& config) {
-    std::vector<rsp::endorsement_service::EndorsementService::ConfiguredEndorsement> endorsements;
+    std::vector<rsp::resource_service::endorsement::EndorsementService::ConfiguredEndorsement> endorsements;
 
     if (!config.contains("endorsements")) {
         return endorsements;
@@ -130,7 +130,7 @@ parseConfiguredEndorsements(const nlohmann::json& config) {
             endorsementValue = entry["endorsement_value"].get<std::string>();
         }
 
-        rsp::endorsement_service::EndorsementService::ConfiguredEndorsement configuredEndorsement;
+        rsp::resource_service::endorsement::EndorsementService::ConfiguredEndorsement configuredEndorsement;
         configuredEndorsement.requestor = parseConfiguredRequestor(entry);
         configuredEndorsement.endorsementType = rsp::GUID(entry["endorsement_type"].get<std::string>());
         configuredEndorsement.endorsementValue = stringToBuffer(endorsementValue);
@@ -191,11 +191,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    rsp::endorsement_service::EndorsementService::Ptr endorsementService;
+    rsp::resource_service::endorsement::EndorsementService::Ptr endorsementService;
     if (config.contains("key_file")) {
         try {
             auto keyPair = rsp::KeyPair::loadOrGenerate(config["key_file"].get<std::string>());
-            endorsementService = rsp::endorsement_service::EndorsementService::create(std::move(keyPair));
+            endorsementService = rsp::resource_service::endorsement::EndorsementService::create(std::move(keyPair));
         } catch (const std::exception& e) {
             std::cerr << "error with key_file: " << e.what() << '\n';
             return 1;
@@ -210,13 +210,13 @@ int main(int argc, char** argv) {
         const std::string privateKeyPath = kpArray[1].get<std::string>();
         try {
             auto keyPair = rsp::KeyPair::readFromDisk(privateKeyPath, publicKeyPath);
-            endorsementService = rsp::endorsement_service::EndorsementService::create(std::move(keyPair));
+            endorsementService = rsp::resource_service::endorsement::EndorsementService::create(std::move(keyPair));
         } catch (const std::exception& e) {
             std::cerr << "error loading keypair: " << e.what() << '\n';
             return 1;
         }
     } else {
-        endorsementService = rsp::endorsement_service::EndorsementService::create();
+        endorsementService = rsp::resource_service::endorsement::EndorsementService::create();
     }
 
     try {

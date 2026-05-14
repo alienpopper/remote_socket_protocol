@@ -7,6 +7,7 @@
 #include "name_service/name_service.hpp"
 #include "resource_service/bsd_sockets/resource_service_bsd_sockets.hpp"
 #include "resource_service/bsd_sockets/bsd_sockets_logging.pb.h"
+#include "resource_service/endorsement/endorsement.pb.h"
 
 #include "common/message_queue/mq_ascii_handshake.hpp"
 #include "common/transport/transport_memory.hpp"
