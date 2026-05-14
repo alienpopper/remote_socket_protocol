@@ -1,5 +1,6 @@
 #include "resource_manager/resource_manager.hpp"
 
+#include "common/config/message_rules.hpp"
 #include "common/endorsement/endorsement_text.hpp"
 #include "common/keypair.hpp"
 #include "common/transport/transport_tcp.hpp"
@@ -45,65 +46,10 @@ static nlohmann::json mergeConfigs(const std::vector<std::string>& paths) {
     return merged;
 }
 
-static rsp::proto::ERDAbstractSyntaxTree buildMessageRulesTree(const nlohmann::json& rules) {
-    if (rules.empty()) {
-        rsp::proto::ERDAbstractSyntaxTree tree;
-        tree.mutable_true_value();
-        return tree;
-    }
-
-    if (rules.size() == 1) {
-        return rsp::erd_text::fromString(rules[0].get<std::string>());
-    }
-
-    rsp::proto::ERDAbstractSyntaxTree combined = rsp::erd_text::fromString(rules[0].get<std::string>());
-    for (size_t i = 1; i < rules.size(); ++i) {
-        rsp::proto::ERDAbstractSyntaxTree next;
-        *next.mutable_and_()->mutable_lhs() = std::move(combined);
-        *next.mutable_and_()->mutable_rhs() = rsp::erd_text::fromString(rules[i].get<std::string>());
-        combined = std::move(next);
-    }
-    return combined;
-}
-
 // ---------------------------------------------------------------------------
-// Macro expansion – evaluated at config-load time, before rule parsing.
+// Macro expansion and message_rules parsing live in
+// common/config/message_rules.{hpp,cpp}.
 // ---------------------------------------------------------------------------
-
-struct MacroContext {
-    std::string nodeId;   // hex string from KeyPair::nodeID().toString()
-};
-
-static std::string expandMacros(const std::string& input,
-                                const MacroContext& ctx) {
-    std::string result = input;
-
-    // MY_NODEID() — expands to this node's nodeID hex string.
-    const std::string myNodeId = "MY_NODEID()";
-    size_t pos = 0;
-    while ((pos = result.find(myNodeId, pos)) != std::string::npos) {
-        result.replace(pos, myNodeId.size(), ctx.nodeId);
-        pos += ctx.nodeId.size();
-    }
-
-    // NODEID_FROM_FILE(<path>) — reads a public key PEM file, derives its nodeID.
-    const std::string fromFilePrefix = "NODEID_FROM_FILE(";
-    pos = 0;
-    while ((pos = result.find(fromFilePrefix, pos)) != std::string::npos) {
-        size_t argStart = pos + fromFilePrefix.size();
-        size_t argEnd = result.find(')', argStart);
-        if (argEnd == std::string::npos) {
-            throw std::runtime_error("NODEID_FROM_FILE( missing closing ')'");
-        }
-        std::string path = result.substr(argStart, argEnd - argStart);
-        rsp::NodeID id = rsp::KeyPair::nodeIDFromPublicKeyFile(path);
-        std::string replacement = id.toString();
-        result.replace(pos, (argEnd + 1) - pos, replacement);
-        pos += replacement.size();
-    }
-
-    return result;
-}
 
 static void printUsage(const char* progName) {
     std::cerr << "Usage: " << progName << " [--config <file>]...\n"
@@ -204,19 +150,14 @@ int main(int argc, char** argv) {
         loadedKeyPair = rsp::KeyPair::generateP256();
     }
 
-    MacroContext macros;
+    rsp::config::MacroContext macros;
     macros.nodeId = loadedKeyPair.nodeID().toString();
 
     // Build authorization tree from "message_rules" array.
     rsp::proto::ERDAbstractSyntaxTree authzTree;
     if (config.contains("message_rules")) {
         try {
-            // Expand macros in each rule string before parsing.
-            nlohmann::json expandedRules = nlohmann::json::array();
-            for (const auto& rule : config["message_rules"]) {
-                expandedRules.push_back(expandMacros(rule.get<std::string>(), macros));
-            }
-            authzTree = buildMessageRulesTree(expandedRules);
+            authzTree = rsp::config::buildMessageRulesTree(config["message_rules"], macros);
         } catch (const std::exception& e) {
             std::cerr << "error parsing message_rules: " << e.what() << '\n';
             return 1;

@@ -2,10 +2,18 @@
 
 #include "messages.pb.h"
 
+#include <functional>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
 namespace rsp::erd_text {
+
+// Resolver callback consulted by the parser whenever a ${name} atom is
+// encountered. Return an unset optional to signal that the name is undeclared
+// (the parser will throw with a message identifying the offending variable).
+using VariableResolver = std::function<
+    std::optional<rsp::proto::ERDAbstractSyntaxTree>(const std::string& name)>;
 
 // Serialize a proto ERDAbstractSyntaxTree to human-readable text.
 // Returns an empty string for an unset (NODE_TYPE_NOT_SET) tree.
@@ -35,5 +43,12 @@ std::string toString(const rsp::proto::ERDAbstractSyntaxTree& tree);
 // Returns an unset tree for an empty or all-whitespace string.
 // Throws std::runtime_error if the text is malformed.
 rsp::proto::ERDAbstractSyntaxTree fromString(const std::string& text);
+
+// Same as fromString(text) but additionally recognizes ${name} as an atom.
+// When ${name} appears, the parser invokes 'resolver(name)' and splices the
+// returned subtree into the parse output (deep copy). If 'resolver' returns
+// nullopt the parser throws a "${name}: undeclared variable" error.
+rsp::proto::ERDAbstractSyntaxTree fromString(const std::string& text,
+                                             const VariableResolver& resolver);
 
 }  // namespace rsp::erd_text

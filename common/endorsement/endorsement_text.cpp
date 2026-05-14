@@ -328,10 +328,13 @@ void appendTree(const rsp::proto::ERDAbstractSyntaxTree& tree, std::string& out)
 // ---- Recursive descent parser ----
 
 struct Parser {
-    explicit Parser(const std::string& t) : text(t), pos(0) {}
+    explicit Parser(const std::string& t) : text(t), pos(0), resolver(nullptr) {}
+    Parser(const std::string& t, const rsp::erd_text::VariableResolver* r)
+        : text(t), pos(0), resolver(r) {}
 
     const std::string& text;
     std::size_t pos;
+    const rsp::erd_text::VariableResolver* resolver;
 
     void skipWhitespace() {
         while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
@@ -809,6 +812,50 @@ struct Parser {
         skipWhitespace();
         rsp::proto::ERDAbstractSyntaxTree tree;
 
+        if (startsWith("${", 2)) {
+            const std::size_t startPos = pos;
+            pos += 2;
+            const std::size_t nameStart = pos;
+            while (pos < text.size() && text[pos] != '}') {
+                ++pos;
+            }
+            if (pos >= text.size()) {
+                throw std::runtime_error(
+                    "unterminated ${ at position " + std::to_string(startPos));
+            }
+            const std::string name = text.substr(nameStart, pos - nameStart);
+            ++pos;  // consume '}'
+            if (name.empty()) {
+                throw std::runtime_error(
+                    "empty variable name in ${} at position " + std::to_string(startPos));
+            }
+            auto isIdChar = [](char c, bool first) {
+                if (c == '_') return true;
+                if (c >= 'A' && c <= 'Z') return true;
+                if (c >= 'a' && c <= 'z') return true;
+                if (!first && c >= '0' && c <= '9') return true;
+                return false;
+            };
+            for (std::size_t i = 0; i < name.size(); ++i) {
+                if (!isIdChar(name[i], i == 0)) {
+                    throw std::runtime_error(
+                        "invalid variable name '" + name + "' in ${} at position "
+                        + std::to_string(startPos));
+                }
+            }
+            if (resolver == nullptr || !*resolver) {
+                throw std::runtime_error(
+                    "${" + name + "}: variable references are not allowed in this context");
+            }
+            std::optional<rsp::proto::ERDAbstractSyntaxTree> resolved = (*resolver)(name);
+            if (!resolved.has_value()) {
+                throw std::runtime_error(
+                    "${" + name + "}: undeclared variable");
+            }
+            tree = std::move(*resolved);
+            return tree;
+        }
+
         if (startsWith("AND(", 4)) {
             pos += 3;  // skip "AND", leave '(' for parseBinaryArgs
             parseBinaryArgs(tree.mutable_and_()->mutable_lhs(),
@@ -933,6 +980,22 @@ std::string toString(const rsp::proto::ERDAbstractSyntaxTree& tree) {
 
 rsp::proto::ERDAbstractSyntaxTree fromString(const std::string& text) {
     Parser parser(text);
+    parser.skipWhitespace();
+    if (parser.pos >= text.size()) {
+        return rsp::proto::ERDAbstractSyntaxTree();
+    }
+    rsp::proto::ERDAbstractSyntaxTree tree = parser.parseTree();
+    parser.skipWhitespace();
+    if (parser.pos < text.size()) {
+        throw std::runtime_error(
+            "unexpected content after ERD expression at position " + std::to_string(parser.pos));
+    }
+    return tree;
+}
+
+rsp::proto::ERDAbstractSyntaxTree fromString(const std::string& text,
+                                             const VariableResolver& resolver) {
+    Parser parser(text, &resolver);
     parser.skipWhitespace();
     if (parser.pos >= text.size()) {
         return rsp::proto::ERDAbstractSyntaxTree();

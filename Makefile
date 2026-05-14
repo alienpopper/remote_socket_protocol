@@ -15,6 +15,7 @@ BASE_TYPES_TEST_TARGET := $(BIN_DIR)/base_types_test
 CLIENT_TEST_TARGET := $(BIN_DIR)/client_test
 ENDORSEMENT_TEST_TARGET := $(BIN_DIR)/endorsement_test
 ENDORSEMENT_TEXT_TEST_TARGET := $(BIN_DIR)/endorsement_text_test
+MESSAGE_RULES_TEST_TARGET := $(BIN_DIR)/message_rules_test
 MESSAGE_QUEUE_TEST_TARGET := $(BIN_DIR)/message_queue_test
 MQ_ASCII_HANDSHAKE_TEST_TARGET := $(BIN_DIR)/mq_ascii_handshake_test
 MQ_SIGNING_TEST_TARGET := $(BIN_DIR)/mq_signing_test
@@ -109,6 +110,7 @@ COMMON_SOURCES := \
 	$(COMMON_FIELD_RESOLVER_SOURCE) \
 	$(COMMON_LOGGING_SOURCE) \
 	common/endorsement/endorsement_text.cpp \
+	common/config/message_rules.cpp \
 	$(COMMON_TRANSPORT_SOURCE) \
 	$(COMMON_TRANSPORT_TCP_SOURCE) \
 	$(COMMON_TRANSPORT_MEMORY_SOURCE) \
@@ -246,6 +248,19 @@ ENDORSEMENT_TEXT_TEST_OBJECTS := \
 	$(PROTOBUF_GENERATED_OBJECT) \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
 	$(OBJ_DIR)/test/endorsement_text_test.o
+MESSAGE_RULES_TEST_OBJECTS := \
+	$(OBJ_DIR)/common/base_types.o \
+	$(OBJ_DIR)/common/node.o \
+	$(OBJ_DIR)/common/endorsement/field_resolver.o \
+	$(OBJ_DIR)/common/logging/logging.o \
+	$(OBJ_DIR)/common/keypair.o \
+	$(OBJ_DIR)/common/message_queue/mq_signing.o \
+	$(OBJ_DIR)/common/endorsement/endorsement_text.o \
+	$(OBJ_DIR)/common/config/message_rules.o \
+	$(PROTOBUF_GENERATED_OBJECT) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_COMMON_SOURCE)) \
+	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
+	$(OBJ_DIR)/test/message_rules_test.o
 BASE_TYPES_TEST_OBJECTS := \
 	$(OBJ_DIR)/common/base_types.o \
 	$(patsubst %.cpp,$(OBJ_DIR)/%.o,$(OS_SOURCE)) \
@@ -594,7 +609,7 @@ CXXFLAGS += $(THREAD_FLAGS)
 LDFLAGS += $(THREAD_FLAGS)
 SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
-.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-rust-client test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
+.PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-message-rules test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-rust-client test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
 
 $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto $(GENERATE_MESSAGES_SCRIPT)
 	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
@@ -667,6 +682,9 @@ $(ENDORSEMENT_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_
 
 $(ENDORSEMENT_TEXT_TEST_TARGET): directories $(PROTOBUF_LITE_LIB) $(ENDORSEMENT_TEXT_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(ENDORSEMENT_TEXT_TEST_OBJECTS) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
+
+$(MESSAGE_RULES_TEST_TARGET): directories $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(MESSAGE_RULES_TEST_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(MESSAGE_RULES_TEST_OBJECTS) $(BORINGSSL_CRYPTO_LIB) $(PROTOBUF_LITE_LIB) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
 
 $(BASE_TYPES_TEST_TARGET): directories $(BASE_TYPES_TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS) $(BASE_TYPES_TEST_OBJECTS) $(OS_SYSTEM_LIBS) $(LDFLAGS) -o $@
@@ -826,6 +844,9 @@ test-endorsement: $(ENDORSEMENT_TEST_TARGET)
 test-endorsement-text: $(ENDORSEMENT_TEXT_TEST_TARGET)
 	$(ENDORSEMENT_TEXT_TEST_TARGET)
 
+test-message-rules: $(MESSAGE_RULES_TEST_TARGET)
+	$(MESSAGE_RULES_TEST_TARGET)
+
 test-transport-memory: $(TRANSPORT_MEMORY_TEST_TARGET)
 	$(TRANSPORT_MEMORY_TEST_TARGET)
 
@@ -876,7 +897,7 @@ test-bsd-sockets-web-service: $(NODEJS_PING_FIXTURE_TARGET) $(NODEJS_MESSAGES_JS
 test-chromium-rsp-e2e: $(NODEJS_PING_FIXTURE_TARGET)
 	ssh oldgame "bash ~/remote_socket_protocol/integration/chromium/test_rsp_e2e.sh ~/remote_socket_protocol/bin/nodejs_ping_fixture"
 
-test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-httpd-resource-service test-logging
+test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-rules test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-httpd-resource-service test-logging
 
 $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/httpd/httpd.proto name_service/name_service.proto logging/logging.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
@@ -1019,7 +1040,11 @@ $(OBJ_DIR)/test/endorsement_test.o: $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
 $(OBJ_DIR)/common/endorsement/endorsement_text.o: $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
+$(OBJ_DIR)/common/config/message_rules.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_MESSAGE_REBUILD_DEPS)
+
 $(OBJ_DIR)/test/endorsement_text_test.o: $(PROTOBUF_MESSAGE_REBUILD_DEPS)
+
+$(OBJ_DIR)/test/message_rules_test.o: $(BORINGSSL_INCLUDE_HEADER) $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
 $(OBJ_DIR)/common/encoding/encoding.o: common/message_queue/mq.hpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
