@@ -3,6 +3,7 @@ BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
 OBJ_DIR := $(BUILD_DIR)/obj
 PROTOBUF_GENERATED_DIR := $(BUILD_DIR)/gen
+.DEFAULT_GOAL := all
 
 include common/Makefile
 include os/Makefile
@@ -61,17 +62,14 @@ SSHD_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/sshd/sshd.pb.o
 HTTPD_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/httpd/httpd.pb.cc
 HTTPD_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/httpd/httpd.pb.h
 HTTPD_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/httpd/httpd.pb.o
-ENDORSEMENT_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/resource_service/endorsement/endorsement.pb.cc
-ENDORSEMENT_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/endorsement/endorsement.pb.h
-ENDORSEMENT_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/resource_service/endorsement/endorsement.pb.o
 NAME_SERVICE_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.pb.cc
 NAME_SERVICE_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.pb.h
 NAME_SERVICE_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/name_service/name_service.pb.o
 LOGGING_GENERATED_SOURCE := $(PROTOBUF_GENERATED_DIR)/logging/logging.pb.cc
 LOGGING_GENERATED_HEADER := $(PROTOBUF_GENERATED_DIR)/logging/logging.pb.h
 LOGGING_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/logging/logging.pb.o
-PROTOBUF_ALL_GENERATED_SOURCE := $(PROTOBUF_GENERATED_SOURCE) $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_LOGGING_GENERATED_SOURCE) $(SSHD_GENERATED_SOURCE) $(HTTPD_GENERATED_SOURCE) $(ENDORSEMENT_GENERATED_SOURCE) $(NAME_SERVICE_GENERATED_SOURCE) $(LOGGING_GENERATED_SOURCE)
-PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(BSD_SOCKETS_LOGGING_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT) $(HTTPD_GENERATED_OBJECT) $(ENDORSEMENT_GENERATED_OBJECT) $(NAME_SERVICE_GENERATED_OBJECT) $(LOGGING_GENERATED_OBJECT)
+PROTOBUF_ALL_GENERATED_SOURCE := $(PROTOBUF_GENERATED_SOURCE) $(BSD_SOCKETS_GENERATED_SOURCE) $(BSD_SOCKETS_LOGGING_GENERATED_SOURCE) $(SSHD_GENERATED_SOURCE) $(HTTPD_GENERATED_SOURCE) $(NAME_SERVICE_GENERATED_SOURCE) $(LOGGING_GENERATED_SOURCE)
+PROTOBUF_GENERATED_OBJECT := $(OBJ_DIR)/build/gen/messages.pb.o $(BSD_SOCKETS_GENERATED_OBJECT) $(BSD_SOCKETS_LOGGING_GENERATED_OBJECT) $(SSHD_GENERATED_OBJECT) $(HTTPD_GENERATED_OBJECT) $(NAME_SERVICE_GENERATED_OBJECT) $(LOGGING_GENERATED_OBJECT)
 EMBED_DESCRIPTOR_SCRIPT := scripts/embed_descriptor.py
 BSD_SOCKETS_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets.desc
 BSD_SOCKETS_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/bsd_sockets/bsd_sockets_desc.hpp
@@ -81,8 +79,6 @@ SSHD_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd.desc
 SSHD_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/sshd/sshd_desc.hpp
 HTTPD_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/httpd/httpd.desc
 HTTPD_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/httpd/httpd_desc.hpp
-ENDORSEMENT_DESC := $(PROTOBUF_GENERATED_DIR)/resource_service/endorsement/endorsement.desc
-ENDORSEMENT_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/resource_service/endorsement/endorsement_desc.hpp
 NAME_SERVICE_DESC := $(PROTOBUF_GENERATED_DIR)/name_service/name_service.desc
 NAME_SERVICE_DESC_HEADER := $(PROTOBUF_GENERATED_DIR)/name_service/name_service_desc.hpp
 LOGGING_DESC := $(PROTOBUF_GENERATED_DIR)/logging/logging.desc
@@ -176,8 +172,8 @@ BSD_SOCKETS_SOURCES := \
 ENDORSEMENT_SERVICE_SOURCES := \
 	$(COMMON_ENDORSEMENT_SOURCE) \
 	$(FULL_CLIENT_LIBRARY_SOURCES) \
-	resource_service/endorsement/resource_service_endorsement.cpp \
-	resource_service/endorsement/resource_service_endorsement_main.cpp
+	endorsement_service/endorsement_service.cpp \
+	endorsement_service/endorsement_service_main.cpp
 
 NAME_SERVICE_SOURCES := \
 	$(FULL_CLIENT_LIBRARY_SOURCES) \
@@ -521,7 +517,7 @@ ENDORSEMENT_SERVICE_TEST_OBJECTS := \
 	$(OBJ_DIR)/client/cpp/rsp_client_message.o \
 	$(OBJ_DIR)/client/cpp/rsp_client.o \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
-	$(OBJ_DIR)/resource_service/endorsement/resource_service_endorsement.o \
+	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/endorsement_service_test.o
 
 NODEJS_PING_FIXTURE_OBJECTS := \
@@ -550,7 +546,7 @@ NODEJS_PING_FIXTURE_OBJECTS := \
 	$(OBJ_DIR)/client/cpp_full/rsp_client.o \
 	$(OBJ_DIR)/resource_service/resource_service.o \
 	$(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets.o \
-	$(OBJ_DIR)/resource_service/endorsement/resource_service_endorsement.o \
+	$(OBJ_DIR)/endorsement_service/endorsement_service.o \
 	$(OBJ_DIR)/test/nodejs_ping_fixture.o
 
 TRANSPORT_MEMORY_TEST_OBJECTS := \
@@ -616,8 +612,8 @@ SHARED_CXXFLAGS := $(CXXFLAGS) -fPIC
 
 .PHONY: all clean directories test test-base-types test-client test-endorsement test-endorsement-text test-message-rules test-keypair test-message-queue test-mq-ascii-handshake test-mq-signing test-mq-authn test-mq-authz test-node test-resource-service test-resource-service-json test-httpd-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-logging test-nodejs-client test-nodejs-client-reconnect test-nodejs-express test-nodejs-express-stress test-nodejs-encrypted-proto test-python-encrypted-proto test-python-http-server test-rust-client test-openssh-stress test-remote-sshd generate-messages rsp-sshd rsp-ssh rsp-httpd
 
-$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/endorsement/endorsement.proto name_service/name_service.proto logging/logging.proto $(GENERATE_MESSAGES_SCRIPT)
-	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/endorsement/endorsement.proto name_service/name_service.proto logging/logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
+$(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto $(GENERATE_MESSAGES_SCRIPT)
+	python3 $(GENERATE_MESSAGES_SCRIPT) --proto messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto name_service/name_service.proto logging/logging.proto --nodejs $(NODEJS_MESSAGES_JS) --python $(PYTHON_MESSAGES_PY)
 
 generate-messages: $(NODEJS_MESSAGES_JS) $(PYTHON_MESSAGES_PY)
 
@@ -631,7 +627,7 @@ $(OBJ_DIR)/resource_manager/resource_manager_main.o \
 $(OBJ_DIR)/resource_service/bsd_sockets/resource_service_bsd_sockets_main.o \
 $(OBJ_DIR)/resource_service/httpd/resource_service_httpd.o \
 $(OBJ_DIR)/resource_service/sshd/resource_service_sshd.o \
-$(OBJ_DIR)/resource_service/endorsement/resource_service_endorsement_main.o \
+$(OBJ_DIR)/endorsement_service/endorsement_service_main.o \
 $(OBJ_DIR)/name_service/name_service_main.o \
 $(OBJ_DIR)/integration/openssh/modification/rsp_ssh.o \
 $(OBJ_DIR)/integration/openssh/modification/rsp_sshd.o: $(NLOHMANN_JSON_INCLUDE_HEADER)
@@ -904,9 +900,9 @@ test-chromium-rsp-e2e: $(NODEJS_PING_FIXTURE_TARGET)
 
 test: test-base-types test-keypair test-endorsement test-endorsement-text test-message-rules test-message-hash test-message-queue test-mq-ascii-handshake test-mq-signing test-node test-client test-resource-service test-endorsement-service test-transport-memory test-transport-tcp test-httpd-resource-service test-logging
 
-$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/httpd/httpd.proto resource_service/endorsement/endorsement.proto name_service/name_service.proto logging/logging.proto $(PROTOBUF_PROTOC)
+$(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/httpd/httpd.proto name_service/name_service.proto logging/logging.proto $(PROTOBUF_PROTOC)
 	@mkdir -p $(PROTOBUF_GENERATED_DIR)
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/httpd/httpd.proto resource_service/endorsement/endorsement.proto name_service/name_service.proto logging/logging.proto
+	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --cpp_out=$(PROTOBUF_GENERATED_DIR) messages.proto resource_service/bsd_sockets/bsd_sockets.proto resource_service/bsd_sockets/bsd_sockets_logging.proto resource_service/sshd/sshd.proto resource_service/httpd/httpd.proto name_service/name_service.proto logging/logging.proto
 	@mkdir -p $(dir $(BSD_SOCKETS_DESC))
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(BSD_SOCKETS_DESC) --include_imports resource_service/bsd_sockets/bsd_sockets.proto
 	@mkdir -p $(dir $(BSD_SOCKETS_LOGGING_DESC))
@@ -914,8 +910,6 @@ $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_so
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(SSHD_DESC) --include_imports resource_service/sshd/sshd.proto
 	@mkdir -p $(dir $(HTTPD_DESC))
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(HTTPD_DESC) --include_imports resource_service/httpd/httpd.proto
-	@mkdir -p $(dir $(ENDORSEMENT_DESC))
-	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(ENDORSEMENT_DESC) --include_imports resource_service/endorsement/endorsement.proto
 	@mkdir -p $(dir $(NAME_SERVICE_DESC))
 	$(PROTOBUF_PROTOC) --proto_path=$(PROJECT_ROOT) --proto_path=$(PROTOBUF_INCLUDE_DIR) --descriptor_set_out=$(NAME_SERVICE_DESC) --include_imports name_service/name_service.proto
 	@mkdir -p $(dir $(LOGGING_DESC))
@@ -924,7 +918,6 @@ $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_so
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(BSD_SOCKETS_LOGGING_DESC) $(BSD_SOCKETS_LOGGING_DESC_HEADER) --name kBsdSocketsLoggingDescriptor
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(SSHD_DESC) $(SSHD_DESC_HEADER) --name kSshdDescriptor
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(HTTPD_DESC) $(HTTPD_DESC_HEADER) --name kHttpdDescriptor
-	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(ENDORSEMENT_DESC) $(ENDORSEMENT_DESC_HEADER) --name kEndorsementDescriptor
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(NAME_SERVICE_DESC) $(NAME_SERVICE_DESC_HEADER) --name kNameServiceDescriptor
 	python3 $(EMBED_DESCRIPTOR_SCRIPT) $(LOGGING_DESC) $(LOGGING_DESC_HEADER) --name kLoggingDescriptor
 	# Keep generated header mtimes in sync with proto regeneration so incremental
@@ -935,14 +928,12 @@ $(PROTOBUF_GENERATED_SOURCE): messages.proto resource_service/bsd_sockets/bsd_so
 		$(BSD_SOCKETS_LOGGING_GENERATED_HEADER) \
 		$(SSHD_GENERATED_HEADER) \
 		$(HTTPD_GENERATED_HEADER) \
-		$(ENDORSEMENT_GENERATED_HEADER) \
 		$(NAME_SERVICE_GENERATED_HEADER) \
 		$(LOGGING_GENERATED_HEADER) \
 		$(BSD_SOCKETS_DESC_HEADER) \
 		$(BSD_SOCKETS_LOGGING_DESC_HEADER) \
 		$(SSHD_DESC_HEADER) \
 		$(HTTPD_DESC_HEADER) \
-		$(ENDORSEMENT_DESC_HEADER) \
 		$(NAME_SERVICE_DESC_HEADER) \
 		$(LOGGING_DESC_HEADER)
 
@@ -999,18 +990,6 @@ $(SSHD_GENERATED_OBJECT): $(SSHD_GENERATED_SOURCE) $(SSHD_GENERATED_HEADER)
 $(HTTPD_GENERATED_OBJECT): $(HTTPD_GENERATED_SOURCE) $(HTTPD_GENERATED_HEADER)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(HTTPD_GENERATED_SOURCE) -o $@
-
-$(ENDORSEMENT_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
-
-$(ENDORSEMENT_GENERATED_HEADER): $(ENDORSEMENT_GENERATED_SOURCE)
-
-$(ENDORSEMENT_DESC): $(PROTOBUF_GENERATED_SOURCE)
-
-$(ENDORSEMENT_DESC_HEADER): $(ENDORSEMENT_DESC)
-
-$(ENDORSEMENT_GENERATED_OBJECT): $(ENDORSEMENT_GENERATED_SOURCE) $(ENDORSEMENT_GENERATED_HEADER)
-	@mkdir -p $(dir $@)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(ENDORSEMENT_GENERATED_SOURCE) -o $@
 
 $(NAME_SERVICE_GENERATED_SOURCE): $(PROTOBUF_GENERATED_SOURCE)
 
@@ -1130,9 +1109,9 @@ $(OBJ_DIR)/test/nodejs_ping_fixture.o: common/message_queue/mq.hpp $(PROTOBUF_ME
 
 $(OBJ_DIR)/test/transport_memory_test.o: common/message_queue/mq.hpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
-$(OBJ_DIR)/resource_service/endorsement/resource_service_endorsement.o: common/message_queue/mq.hpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
+$(OBJ_DIR)/endorsement_service/endorsement_service.o: common/message_queue/mq.hpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
-$(OBJ_DIR)/%.o: %.cpp
+$(OBJ_DIR)/%.o: %.cpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
