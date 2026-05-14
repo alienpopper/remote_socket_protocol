@@ -3,6 +3,7 @@ BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
 OBJ_DIR := $(BUILD_DIR)/obj
 PROTOBUF_GENERATED_DIR := $(BUILD_DIR)/gen
+.DEFAULT_GOAL := all
 
 include common/Makefile
 include os/Makefile
@@ -1132,7 +1133,7 @@ $(OBJ_DIR)/test/transport_memory_test.o: common/message_queue/mq.hpp $(PROTOBUF_
 
 $(OBJ_DIR)/resource_service/endorsement/resource_service_endorsement.o: common/message_queue/mq.hpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 
-$(OBJ_DIR)/%.o: %.cpp
+$(OBJ_DIR)/%.o: %.cpp $(PROTOBUF_MESSAGE_REBUILD_DEPS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
