@@ -21,6 +21,7 @@ fn main() {
         "resource_service/bsd_sockets/bsd_sockets.proto",
         "resource_service/bsd_sockets/bsd_sockets_logging.proto",
         "resource_service/sshd/sshd.proto",
+        "resource_service/endorsement/endorsement.proto",
         "name_service/name_service.proto",
         "logging/logging.proto",
     ]
